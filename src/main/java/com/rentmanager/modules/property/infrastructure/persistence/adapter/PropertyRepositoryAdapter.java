@@ -150,10 +150,12 @@ public class PropertyRepositoryAdapter implements PropertyRepository {
 
         if (p == null) return null;
 
+        UUID tenantId = null;
         PropertyJpaEntity e = new PropertyJpaEntity();
 
         e.setId(p.getId());
-        e.setTenantId(p.getTenantId());
+        // correct place to set tenant (if BaseEntity supports it internally)
+        e.assignTenant(tenantId);
         e.setName(p.getName());
         e.setReferenceCode(p.getReferenceCode());
         e.setPropertyType(p.getPropertyType());

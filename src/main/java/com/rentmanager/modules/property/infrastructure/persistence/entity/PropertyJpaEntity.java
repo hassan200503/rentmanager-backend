@@ -1,6 +1,5 @@
 package com.rentmanager.modules.property.infrastructure.persistence.entity;
 
-import com.rentmanager.domain.base.BaseEntity;
 import com.rentmanager.domain.base.BaseTenantEntity;
 import com.rentmanager.modules.property.domain.enums.OccupancyStatus;
 import com.rentmanager.modules.property.domain.enums.PropertyStatus;
@@ -24,8 +23,6 @@ import java.util.UUID;
 @Setter
 public class PropertyJpaEntity extends BaseTenantEntity {
 
-
-
     @Column(name = "reference_code", nullable = false, unique = true)
     private String referenceCode;
 
@@ -39,10 +36,17 @@ public class PropertyJpaEntity extends BaseTenantEntity {
     @Column(nullable = false)
     private PropertyStatus status;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "property_type", nullable = false)
+    private PropertyType propertyType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "occupancy_status", nullable = false)
+    private OccupancyStatus occupancyStatus;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id")
     private PropertyCategoryJpaEntity category;
-
 
     @Column(name = "owner_id")
     private UUID ownerId;
@@ -50,27 +54,41 @@ public class PropertyJpaEntity extends BaseTenantEntity {
     @Embedded
     private PropertyAddressJpaEntity address;
 
+    // =====================================================
+    // SAFE FACTORY (no null returns)
+    // =====================================================
     public static PropertyJpaEntity create(UUID tenantId) {
-        return null;
+        PropertyJpaEntity entity = new PropertyJpaEntity();
+        entity.restoreTenantId(tenantId);
+
+        entity.status = PropertyStatus.DRAFT;
+        entity.occupancyStatus = OccupancyStatus.VACANT;
+
+        return entity;
     }
 
-    public void setTenantId(UUID tenantId) {
-
-    }
-
+    // =====================================================
+    // TENANT SAFE OVERRIDE (BaseTenantEntity compatibility)
+    //
+    // =====================================================
+    // DOMAIN SAFE SETTERS (no-op removed)
+    // =====================================================
     public void setPropertyType(PropertyType propertyType) {
+        this.propertyType = propertyType;
     }
 
     public void setOccupancyStatus(OccupancyStatus occupancyStatus) {
+        this.occupancyStatus = occupancyStatus;
     }
 
+    // =====================================================
+    // SAFE GETTERS (NO RECURSION)
+    // =====================================================
     public PropertyType getPropertyType() {
-        PropertyType PropertyType = getPropertyType();
-        return PropertyType;
+        return this.propertyType;
     }
 
     public OccupancyStatus getOccupancyStatus() {
-        OccupancyStatus OccupancyStatus = getOccupancyStatus();
-        return OccupancyStatus;
+        return this.occupancyStatus;
     }
 }
