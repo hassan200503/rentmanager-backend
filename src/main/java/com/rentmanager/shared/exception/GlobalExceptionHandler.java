@@ -1,0 +1,212 @@
+package com.rentmanager.shared.exception;
+
+import com.rentmanager.contract.common.ApiResponse;
+import com.rentmanager.shared.error.ErrorTrackingService;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    private final ErrorTrackingService errorTrackingService;
+
+    public GlobalExceptionHandler(ErrorTrackingService errorTrackingService) {
+        this.errorTrackingService = errorTrackingService;
+    }
+
+    // =========================================================
+    // BUSINESS EXCEPTION
+    // =========================================================
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ApiResponse<Object>> handleBusiness(
+            BusinessException ex,
+            HttpServletRequest request
+    ) {
+
+        errorTrackingService.capture(
+                ex,
+                "BUSINESS",
+                ex.getErrorCode().name(),
+                resolveModule(request),
+                request,
+                Map.of()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.fail(ex.getMessage(), ex.getErrorCode().name()));
+    }
+
+    // =========================================================
+    // NOT FOUND
+    // =========================================================
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ApiResponse<Object>> handleNotFound(
+            ResourceNotFoundException ex,
+            HttpServletRequest request
+    ) {
+
+        errorTrackingService.capture(
+                ex,
+                "NOT_FOUND",
+                ex.getErrorCode().name(),
+                resolveModule(request),
+                request,
+                Map.of()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.fail(ex.getMessage(), ex.getErrorCode().name()));
+    }
+
+    // =========================================================
+    // VALIDATION
+    // =========================================================
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiResponse<Object>> handleValidation(
+            MethodArgumentNotValidException ex,
+            HttpServletRequest request
+    ) {
+
+        String message = ex.getBindingResult()
+                .getFieldErrors()
+                .stream()
+                .map(err -> err.getField() + ": " + err.getDefaultMessage())
+                .collect(Collectors.joining(", "));
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.fail(message, "VALIDATION_ERROR"));
+    }
+
+    // =========================================================
+    // INVALID JSON
+    // =========================================================
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Object>> handleBadJson(
+            HttpMessageNotReadableException ex,
+            HttpServletRequest request
+    ) {
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.fail("Malformed JSON request", "INVALID_JSON"));
+    }
+
+    // =========================================================
+    // ❗ FIX: DUPLICATE / CONFLICT HANDLING (CRITICAL FOR YOUR TESTS)
+    // =========================================================
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<Object>> handleIllegalArgument(
+            IllegalArgumentException ex,
+            HttpServletRequest request
+    ) {
+
+        errorTrackingService.capture(
+                ex,
+                "BUSINESS",
+                "ILLEGAL_ARGUMENT",
+                resolveModule(request),
+                request,
+                Map.of()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.fail(ex.getMessage(), "CONFLICT"));
+    }
+
+    // =========================================================
+    // STATE CONFLICT
+    // =========================================================
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ApiResponse<Object>> handleIllegalState(
+            IllegalStateException ex,
+            HttpServletRequest request
+    ) {
+
+        errorTrackingService.capture(
+                ex,
+                "BUSINESS",
+                "INVALID_STATE",
+                resolveModule(request),
+                request,
+                Map.of("type", "IllegalStateException")
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.fail(ex.getMessage(), "INVALID_STATE"));
+    }
+
+    // =========================================================
+    // ACCESS DENIED
+    // =========================================================
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Object>> handleAccessDenied(
+            AccessDeniedException ex,
+            HttpServletRequest request
+    ) {
+
+        errorTrackingService.capture(
+                ex,
+                "SECURITY",
+                "ACCESS_DENIED",
+                resolveModule(request),
+                request,
+                Map.of()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.fail("Access denied", "ACCESS_DENIED"));
+    }
+
+    // =========================================================
+    // FALLBACK (KEEP LAST)
+    // =========================================================
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiResponse<Object>> handleGeneric(
+            Exception ex,
+            HttpServletRequest request
+    ) {
+
+        errorTrackingService.capture(
+                ex,
+                "SYSTEM",
+                "INTERNAL_ERROR",
+                resolveModule(request),
+                request,
+                Map.of("type", ex.getClass().getSimpleName())
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.fail("Internal server error", "INTERNAL_ERROR"));
+    }
+
+    // =========================================================
+    // SaaS MODULE RESOLUTION (FIX: REMOVE HARDCODED LEASE)
+    // =========================================================
+    private String resolveModule(HttpServletRequest request) {
+
+        String uri = request.getRequestURI();
+
+        if (uri.contains("/properties")) return "PROPERTY";
+        if (uri.contains("/leases")) return "LEASE";
+        if (uri.contains("/tenants")) return "TENANT";
+
+        return "SYSTEM";
+    }
+
+}
