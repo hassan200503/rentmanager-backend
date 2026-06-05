@@ -19,7 +19,7 @@ spring:
       ddl-auto: none   # IMPORTANT: Flyway owns schema (prevents your crash)
     properties:
       hibernate:
-        format_sql: false
+        format_sql: true
         jdbc:
           time_zone: UTC
     open-in-view: false
