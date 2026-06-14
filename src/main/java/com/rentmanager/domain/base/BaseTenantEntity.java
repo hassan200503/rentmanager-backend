@@ -14,7 +14,7 @@ public abstract class BaseTenantEntity extends BaseEntity {
     /**
      * Assign tenant once only (enforces tenant isolation safety).
      */
-    protected void assignTenant(UUID tenantId) {
+    public void assignTenant(UUID tenantId) {
         if (this.tenantId != null) {
             throw new IllegalStateException("Tenant already assigned");
         }

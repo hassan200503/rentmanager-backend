@@ -1,6 +1,6 @@
 package com.rentmanager.modules.lease.application.command.usecase;
 
-import com.rentmanager.contract.lease.request.LeaseActionRequest;
+import com.rentmanager.modules.lease.application.dto.request.LeaseActionRequest;
 import com.rentmanager.modules.lease.application.command.handler.LeaseActionHandler;
 import com.rentmanager.modules.lease.application.command.validator.LeaseActionValidator;
 import org.springframework.stereotype.Service;

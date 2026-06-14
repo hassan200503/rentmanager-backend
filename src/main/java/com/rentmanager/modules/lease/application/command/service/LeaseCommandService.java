@@ -1,6 +1,7 @@
 package com.rentmanager.modules.lease.application.command.service;
 
-import com.rentmanager.contract.lease.request.LeaseActionRequest;
+
+import com.rentmanager.modules.lease.application.dto.request.LeaseActionRequest;
 
 import java.util.UUID;
 

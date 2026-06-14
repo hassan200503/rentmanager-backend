@@ -45,6 +45,9 @@ public class Unit extends AggregateRoot {
                 .description(description)
                 .build();
 
+        // ✅ FIX 1: ensure aggregate root ID exists
+        unit.setId(UUID.randomUUID());
+
         unit.registerEvent(new UnitCreatedEvent(
                 tenantId,
                 unit.getId(),
@@ -149,7 +152,6 @@ public class Unit extends AggregateRoot {
         ));
     }
 
-
     public static Unit rehydrate(
             UUID id,
             UUID tenantId,
@@ -172,10 +174,9 @@ public class Unit extends AggregateRoot {
                 .description(description)
                 .build();
 
+        unit.setId(id);
         return unit;
     }
-
-
 
     public Integer getFloor() {
         return null;
@@ -183,9 +184,5 @@ public class Unit extends AggregateRoot {
 
     public String getStatusAsString() {
         return this.status != null ? this.status.name() : null;
-
-
     }
 }
-
-

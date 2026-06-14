@@ -14,10 +14,19 @@ import java.util.UUID;
 @AllArgsConstructor
 @Builder
 @Entity
-@Table(name = "units")
+@Table(
+        name = "units",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_units_tenant_unit_number",
+                        columnNames = {"tenantId", "unitNumber"}
+                )
+        }
+)
 public class UnitJpaEntity {
 
     @Id
+    @Column(nullable = false, updatable = false)
     private UUID id;
 
     @Column(nullable = false)

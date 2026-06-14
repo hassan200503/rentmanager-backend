@@ -1,16 +1,15 @@
 package com.rentmanager.modules.tenant.application.command.service;
 
-import com.rentmanager.modules.tenant.application.command.service.TenantCommandService;
 import com.rentmanager.modules.tenant.application.dto.request.*;
 import com.rentmanager.modules.tenant.application.dto.response.TenantResponse;
 import com.rentmanager.modules.tenant.application.mapper.TenantMapper;
 import com.rentmanager.modules.tenant.domain.model.Tenant;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
-import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;
-import com.rentmanager.modules.tenant.domain.enums.TenantStatus;
+import org.springframework.stereotype.Service;
 
 import java.util.UUID;
 
+@Service
 public class TenantCommandServiceImpl implements TenantCommandService {
 
     private final TenantRepository tenantRepository;
@@ -65,6 +64,7 @@ public class TenantCommandServiceImpl implements TenantCommandService {
     public TenantResponse suspendTenant(UUID tenantId, UUID targetTenantId, SuspendTenantRequest request) {
 
         Tenant tenant = findTenant(targetTenantId);
+        validateTenantAccess(tenantId, tenant);
 
         tenant.suspend();
 
@@ -78,6 +78,7 @@ public class TenantCommandServiceImpl implements TenantCommandService {
     public TenantResponse activateTenant(UUID tenantId, UUID targetTenantId) {
 
         Tenant tenant = findTenant(targetTenantId);
+        validateTenantAccess(tenantId, tenant);
 
         tenant.activate();
 
@@ -91,6 +92,7 @@ public class TenantCommandServiceImpl implements TenantCommandService {
     public TenantResponse updateTenantStatus(UUID tenantId, UUID targetTenantId, UpdateTenantStatusRequest request) {
 
         Tenant tenant = findTenant(targetTenantId);
+        validateTenantAccess(tenantId, tenant);
 
         tenant.updateStatus(request.getStatus());
 
@@ -104,6 +106,7 @@ public class TenantCommandServiceImpl implements TenantCommandService {
     public TenantResponse updateTenantSubscription(UUID tenantId, UUID targetTenantId, UpdateTenantSubscriptionRequest request) {
 
         Tenant tenant = findTenant(targetTenantId);
+        validateTenantAccess(tenantId, tenant);
 
         tenant.updateSubscription(request.getSubscriptionStatus());
 
@@ -117,6 +120,7 @@ public class TenantCommandServiceImpl implements TenantCommandService {
     public TenantResponse updateTenantBranding(UUID tenantId, UUID targetTenantId, UpdateTenantBrandingRequest request) {
 
         Tenant tenant = findTenant(targetTenantId);
+        validateTenantAccess(tenantId, tenant);
 
         tenant.updateBranding(request.getBrandingSettings());
 
@@ -130,6 +134,7 @@ public class TenantCommandServiceImpl implements TenantCommandService {
     public TenantResponse assignTenantOwner(UUID tenantId, UUID targetTenantId, AssignTenantOwnerRequest request) {
 
         Tenant tenant = findTenant(targetTenantId);
+        validateTenantAccess(tenantId, tenant);
 
         tenant.assignOwner(
                 request.getName(),
@@ -148,6 +153,7 @@ public class TenantCommandServiceImpl implements TenantCommandService {
     public TenantResponse changeTenantOwner(UUID tenantId, UUID targetTenantId, ChangeTenantOwnerRequest request) {
 
         Tenant tenant = findTenant(targetTenantId);
+        validateTenantAccess(tenantId, tenant);
 
         tenant.changeOwner(
                 request.getName(),
@@ -166,15 +172,26 @@ public class TenantCommandServiceImpl implements TenantCommandService {
     public TenantResponse getTenant(UUID tenantId, UUID targetTenantId) {
 
         Tenant tenant = findTenant(targetTenantId);
+        validateTenantAccess(tenantId, tenant);
 
         return tenantMapper.toResponse(tenant);
     }
 
     // ------------------------------------------------------------
-    // HELPER
+    // HELPERS
     // ------------------------------------------------------------
-    private Tenant findTenant(UUID tenantId) {
-        return tenantRepository.findById(tenantId)
+    private Tenant findTenant(UUID targetTenantId) {
+        return tenantRepository.findById(targetTenantId)
                 .orElseThrow(() -> new IllegalArgumentException("Tenant not found"));
+    }
+
+    private void validateTenantAccess(UUID actorTenantId, Tenant tenant) {
+        if (actorTenantId == null) {
+            throw new IllegalArgumentException("Actor tenant cannot be null");
+        }
+
+        if (tenant.getOrganizationId() == null || !tenant.getOrganizationId().equals(actorTenantId)) {
+            throw new SecurityException("Cross-tenant access denied");
+        }
     }
 }

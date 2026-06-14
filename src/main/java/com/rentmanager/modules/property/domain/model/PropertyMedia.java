@@ -5,6 +5,8 @@ import com.rentmanager.modules.property.domain.enums.MediaType;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.util.UUID;
+
 @Entity
 @Table(name = "property_media")
 @Getter
@@ -13,9 +15,9 @@ import lombok.*;
 @Builder
 public class PropertyMedia extends BaseTenantEntity {
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "property_id", nullable = false)
-    private Property property;
+
+    @Column(name = "property_id", nullable = false)
+    private UUID propertyId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "media_type", nullable = false)

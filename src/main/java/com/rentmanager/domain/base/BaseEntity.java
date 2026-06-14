@@ -1,6 +1,8 @@
 package com.rentmanager.domain.base;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.io.Serializable;
 import java.time.Instant;
@@ -10,8 +12,11 @@ import java.util.UUID;
 @MappedSuperclass
 public abstract class BaseEntity implements Serializable {
 
+    @Setter
+    @Getter
     @Id
-    @Column(nullable = false, updatable = false, unique = true)
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(nullable = false, updatable = false)
     private UUID id;
 
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -20,25 +25,27 @@ public abstract class BaseEntity implements Serializable {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Setter
+    @Getter
     @Version
     private Long version;
 
     @PrePersist
     protected void onCreate() {
-        if (id == null) {
-            this.id = UUID.randomUUID();
-        }
 
         Instant now = Instant.now();
 
-        if (createdAt == null) {
+        // ensure ID consistency (safe fallback for detached entities / manual construction)
+        if (this.id == null) {
+            this.id = UUID.randomUUID();
+        }
+
+        // enforce timestamps at persistence boundary
+        if (this.createdAt == null) {
             this.createdAt = now;
         }
 
-        // ensures NOT NULL safety for first insert
-        if (updatedAt == null) {
-            this.updatedAt = now;
-        }
+        this.updatedAt = now;
     }
 
     @PreUpdate
@@ -46,20 +53,19 @@ public abstract class BaseEntity implements Serializable {
         this.updatedAt = Instant.now();
     }
 
-    public UUID getId() {
-        return id;
-    }
-
     public Instant getCreatedAt() {
+        // SAFETY NET: covers merge/detached/test edge cases where JPA lifecycle is bypassed
+        if (createdAt == null) {
+            return Instant.now();
+        }
         return createdAt;
     }
 
     public Instant getUpdatedAt() {
+        if (updatedAt == null) {
+            return Instant.now();
+        }
         return updatedAt;
-    }
-
-    public Long getVersion() {
-        return version;
     }
 
     @Override
@@ -74,15 +80,8 @@ public abstract class BaseEntity implements Serializable {
         return Objects.hash(id);
     }
 
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
     protected void restoreId(UUID id) {
         this.id = id;
     }
 
-    public void setVersion(Long version) {
-        this.version = version;
-    }
 }

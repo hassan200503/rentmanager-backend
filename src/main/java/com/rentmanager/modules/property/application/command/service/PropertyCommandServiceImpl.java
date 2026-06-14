@@ -34,6 +34,9 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
         createPropertyValidator.validate(tenantId, request);
 
+        // FIX: single source of truth for required identity field
+        String referenceCode = generateCorrelationId();
+
         Property property = Property.create(
                 tenantId,
                 request.getName(),
@@ -42,13 +45,11 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
                 request.getGeoLocation(),
                 request.getDimensions(),
                 request.getDescription(),
-                generateCorrelationId()
+                referenceCode
         );
 
         return propertyMapper.toResponse(propertyRepository.save(property));
     }
-
-
 
     @Override
     public PropertyResponse getProperty(UUID tenantId, UUID propertyId) {
@@ -58,11 +59,6 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
         return propertyMapper.toResponse(property);
     }
-
-
-
-
-
 
     // ---------------- UPDATE ----------------
     @Override
@@ -77,7 +73,9 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
         property.updateDetails(request.getName(), request.getDescription());
 
-        return propertyMapper.toResponse(propertyRepository.save(property));
+        Property saved = propertyRepository.save(property);
+
+        return propertyMapper.toResponse(saved);
     }
 
     // ---------------- ARCHIVE ----------------
@@ -131,6 +129,6 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
     // ---------------- INTERNAL ----------------
     private String generateCorrelationId() {
-        return "PROP-" + System.currentTimeMillis();
+        return "PROP-" + UUID.randomUUID();
     }
 }

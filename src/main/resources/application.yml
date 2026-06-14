@@ -44,3 +44,8 @@ application:
     bcryptStrength: ${BCRYPT_STRENGTH:12}
     enableHttpsOnlyCookies: true
     enableSecureHeaders: true
+
+
+    spring:
+      profiles:
+        active: dev

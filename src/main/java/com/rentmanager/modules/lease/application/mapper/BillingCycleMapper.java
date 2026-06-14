@@ -1,6 +1,6 @@
 package com.rentmanager.modules.lease.application.mapper;
 
-import com.rentmanager.contract.lease.dto.BillingCycleDTO;
+import com.rentmanager.modules.lease.application.dto.request.BillingCycleDTO;
 import com.rentmanager.modules.lease.domain.enums.BillingCycle;
 
 import java.util.Arrays;

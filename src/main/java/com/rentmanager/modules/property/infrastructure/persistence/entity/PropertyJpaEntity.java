@@ -11,6 +11,7 @@ import lombok.Setter;
 import java.util.UUID;
 
 @Entity
+@Access(AccessType.FIELD)
 @Table(
         name = "properties",
         indexes = {
@@ -61,6 +62,8 @@ public class PropertyJpaEntity extends BaseTenantEntity {
         PropertyJpaEntity entity = new PropertyJpaEntity();
         entity.restoreTenantId(tenantId);
 
+        // FIX: required fields must always be initialized
+        entity.referenceCode = null; // MUST be set by service layer before save
         entity.status = PropertyStatus.DRAFT;
         entity.occupancyStatus = OccupancyStatus.VACANT;
 
@@ -68,10 +71,7 @@ public class PropertyJpaEntity extends BaseTenantEntity {
     }
 
     // =====================================================
-    // TENANT SAFE OVERRIDE (BaseTenantEntity compatibility)
-    //
-    // =====================================================
-    // DOMAIN SAFE SETTERS (no-op removed)
+    // DOMAIN SAFE SETTERS
     // =====================================================
     public void setPropertyType(PropertyType propertyType) {
         this.propertyType = propertyType;
@@ -82,7 +82,7 @@ public class PropertyJpaEntity extends BaseTenantEntity {
     }
 
     // =====================================================
-    // SAFE GETTERS (NO RECURSION)
+    // SAFE GETTERS
     // =====================================================
     public PropertyType getPropertyType() {
         return this.propertyType;

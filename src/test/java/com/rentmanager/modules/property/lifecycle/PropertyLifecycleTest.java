@@ -32,17 +32,22 @@ class PropertyLifecycleTest {
 
     @Mock
     private PropertyRepository repository;
+
     @Mock
     private PropertyMapper mapper;
 
     @Mock
     private CreatePropertyValidator createPropertyValidator;
+
     @Mock
     private UpdatePropertyValidator updatePropertyValidator;
+
     @Mock
     private ActivatePropertyValidator activatePropertyValidator;
+
     @Mock
     private MarkFullyOccupiedValidator markFullyOccupiedValidator;
+
     @Mock
     private PropertyMarkVacantValidator propertyMarkVacantValidator;
 
@@ -50,9 +55,6 @@ class PropertyLifecycleTest {
     private final UUID PROPERTY_ID = UUID.randomUUID();
 
     private Property property;
-
-
-
 
     @BeforeEach
     void setup() {
@@ -79,13 +81,16 @@ class PropertyLifecycleTest {
         );
     }
 
-
-
-
     @Test
     void shouldCreateAndActivateProperty_correctLifecycleTransition() {
 
-        CreatePropertyRequest request = mock(CreatePropertyRequest.class);
+        CreatePropertyRequest request = new CreatePropertyRequest();
+        request.setName("Green Heights");
+        request.setPropertyType(PropertyType.BEDSITTER);
+        request.setDescription("Nice property");
+        request.setAddress(mock(Address.class));
+        request.setGeoLocation(mock(GeoLocation.class));
+        request.setDimensions(mock(PropertyDimensions.class));
 
         when(repository.save(any(Property.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -109,9 +114,6 @@ class PropertyLifecycleTest {
 
         assertEquals(PropertyStatus.ACTIVE, property.getStatus());
     }
-
-
-
 
     @Test
     void shouldHandleOccupancyLifecycleCorrectly() {
@@ -139,8 +141,6 @@ class PropertyLifecycleTest {
         assertEquals(OccupancyStatus.VACANT, property.getOccupancyStatus());
     }
 
-
-
     @Test
     void shouldPreserveStateDuringUpdateLifecycle() {
 
@@ -162,8 +162,6 @@ class PropertyLifecycleTest {
         assertNotNull(property.getName());
     }
 
-
-
     @Test
     void shouldArchiveProperty_andLockLifecycle() {
 
@@ -182,6 +180,7 @@ class PropertyLifecycleTest {
         assertTrue(property.isArchived());
     }
 }
+
 
 
 

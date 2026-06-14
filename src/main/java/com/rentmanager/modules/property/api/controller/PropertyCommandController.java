@@ -7,6 +7,7 @@ import com.rentmanager.modules.property.application.dto.request.CreatePropertyRe
 import com.rentmanager.modules.property.application.dto.request.UpdatePropertyRequest;
 import com.rentmanager.modules.property.application.dto.response.PropertyResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -24,9 +25,15 @@ public class PropertyCommandController {
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestBody CreatePropertyRequest request
     ) {
-        return ApiResponse.ok(
-                propertyCommandService.createProperty(tenantId, request)
-        );
+        try {
+            return ApiResponse.ok(
+                    propertyCommandService.createProperty(tenantId, request)
+            );
+        } catch (DataIntegrityViolationException ex) {
+            return ApiResponse.fail("Property constraint violation", "CONFLICT");
+        } catch (IllegalArgumentException ex) {
+            return ApiResponse.fail(ex.getMessage(), "BAD_REQUEST");
+        }
     }
 
     // ---------------- UPDATE ----------------
@@ -36,9 +43,13 @@ public class PropertyCommandController {
             @PathVariable UUID propertyId,
             @RequestBody UpdatePropertyRequest request
     ) {
-        return ApiResponse.ok(
-                propertyCommandService.updateProperty(tenantId, propertyId, request)
-        );
+        try {
+            return ApiResponse.ok(
+                    propertyCommandService.updateProperty(tenantId, propertyId, request)
+            );
+        } catch (IllegalArgumentException ex) {
+            return ApiResponse.fail(ex.getMessage(), "BAD_REQUEST");
+        }
     }
 
     // ---------------- ACTIVATE ----------------

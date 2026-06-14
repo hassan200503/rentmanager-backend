@@ -2,7 +2,9 @@ package com.rentmanager.modules.tenant.application.mapper;
 
 import com.rentmanager.modules.tenant.application.dto.response.TenantResponse;
 import com.rentmanager.modules.tenant.domain.model.Tenant;
+import org.springframework.stereotype.Component;
 
+@Component
 public class TenantMapper {
 
     private TenantMapper() {

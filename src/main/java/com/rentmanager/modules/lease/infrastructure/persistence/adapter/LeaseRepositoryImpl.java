@@ -35,14 +35,14 @@ public class LeaseRepositoryImpl implements LeaseRepository {
     @Override
     @Transactional
     public Lease save(Lease lease) {
-
         LeaseEntity entity;
 
-        if (lease.getId() != null) {
+        if (lease.getId() != null && jpaRepository.existsById(lease.getId())) {
             entity = jpaRepository.findById(lease.getId())
                     .orElse(new LeaseEntity());
         } else {
             entity = new LeaseEntity();
+            entity.setVersion(0L);
         }
 
         mapper.updateEntity(entity, lease);
@@ -51,7 +51,6 @@ public class LeaseRepositoryImpl implements LeaseRepository {
 
         return mapper.toDomain(saved);
     }
-
 
 
     @Override

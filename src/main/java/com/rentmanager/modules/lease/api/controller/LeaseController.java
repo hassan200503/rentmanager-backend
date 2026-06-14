@@ -2,8 +2,8 @@ package com.rentmanager.modules.lease.api.controller;
 
 import com.rentmanager.contract.common.ApiResponse;
 import com.rentmanager.contract.common.PageResponse;
-import com.rentmanager.contract.lease.request.*;
-import com.rentmanager.contract.lease.response.*;
+import com.rentmanager.modules.lease.application.dto.request.*;
+import com.rentmanager.modules.lease.application.dto.response.*;
 import com.rentmanager.modules.lease.application.service.LeaseApplicationService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;

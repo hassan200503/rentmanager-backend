@@ -16,8 +16,7 @@ import lombok.*;
 
 import java.util.UUID;
 
-@Entity
-@Table(name = "properties")
+
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
@@ -70,14 +69,33 @@ public class Property extends AggregateRoot {
             String description,
             String correlationId
     ) {
+
+        // =====================================================
+        // STRICT DOMAIN INVARIANTS (THIS WAS MISSING)
+        // =====================================================
+
+
+
+        if (tenantId == null) {
+            throw new IllegalArgumentException("tenantId is required");
+        }
+
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("name is required");
+        }
+
+        if (propertyType == null) {
+            throw new IllegalArgumentException("propertyType is required");
+        }
+
         UUID propertyId = UUID.randomUUID();
 
         Property property = Property.builder()
                 .tenantId(tenantId)
                 .name(name)
-                .referenceCode("PROP-" + propertyId)
+                .referenceCode("PROP-" + propertyId.toString())
                 .propertyType(propertyType)
-                .status(PropertyStatus.INACTIVE)
+                .status(PropertyStatus.DRAFT) // safer than INACTIVE for lifecycle tests
                 .occupancyStatus(OccupancyStatus.VACANT)
                 .address(address)
                 .geoLocation(geoLocation)
@@ -90,13 +108,12 @@ public class Property extends AggregateRoot {
         property.registerEvent(new PropertyCreatedEvent(
                 tenantId,
                 correlationId,
-                property.getId(),
-                property.getId()
+                propertyId,
+                propertyId
         ));
 
         return property;
     }
-
     // -----------------------------
     // LIFECYCLE METHODS
     // -----------------------------

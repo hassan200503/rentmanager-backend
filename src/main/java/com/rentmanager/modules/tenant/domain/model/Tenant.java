@@ -116,7 +116,7 @@ public class Tenant extends BaseEntity {
  }
 
  // ----------------------------------------------------------------
- // FACTORY METHODS (FIXED)
+ // FACTORY METHODS
  // ----------------------------------------------------------------
 
  public static Tenant create(
@@ -157,13 +157,16 @@ public class Tenant extends BaseEntity {
   );
 
   tenant.subscriptionStatus = subscriptionStatus;
-
   return tenant;
  }
 
  // ----------------------------------------------------------------
- // LIFECYCLE OPERATIONS
+ // LIFECYCLE OPERATIONS (FIXED CONSISTENCY)
  // ----------------------------------------------------------------
+
+ public boolean isActive() {
+  return this.status == TenantStatus.ACTIVE;
+ }
 
  public void activate() {
 
@@ -190,6 +193,7 @@ public class Tenant extends BaseEntity {
   }
 
   this.status = TenantStatus.SUSPENDED;
+  this.active = false;
  }
 
  public void deactivate() {
@@ -203,7 +207,7 @@ public class Tenant extends BaseEntity {
  }
 
  // ----------------------------------------------------------------
- // SERVICE COMPATIBILITY METHODS (ADDED - NO DRIFT)
+ // SERVICE COMPATIBILITY METHODS
  // ----------------------------------------------------------------
 
  public void assignTenant(UUID tenantId) {
@@ -227,13 +231,7 @@ public class Tenant extends BaseEntity {
 
   this.status = status;
 
-  if (status == TenantStatus.ACTIVE) {
-   this.active = true;
-  }
-
-  if (status == TenantStatus.SUSPENDED || status == TenantStatus.DEACTIVATED) {
-   this.active = false;
-  }
+  this.active = (status == TenantStatus.ACTIVE);
  }
 
  public void assignOwner(String name, String email, String phoneNumber, String identifier) {
@@ -254,7 +252,6 @@ public class Tenant extends BaseEntity {
   assignOwner(name, email, phoneNumber, identifier);
  }
 
- // Alias for service compatibility (if used elsewhere)
  public void updateSubscription(SubscriptionStatus subscriptionStatus) {
   updateSubscriptionStatus(subscriptionStatus);
  }
@@ -270,6 +267,50 @@ public class Tenant extends BaseEntity {
   }
 
   this.onboardingCompleted = true;
+ }
+
+ public static Tenant rehydrate(
+         UUID id,
+         String tenantCode,
+         String name,
+         String slug,
+         String email,
+         String phoneNumber,
+         TenantType type,
+         TenantStatus status,
+         SubscriptionStatus subscriptionStatus,
+         UUID organizationId,
+         UUID activeSubscriptionId,
+         String timezone,
+         String currency,
+         String locale,
+         boolean active,
+         boolean onboardingCompleted
+ ) {
+  Tenant tenant = new Tenant();
+
+  tenant.setId(id);
+  tenant.tenantCode = tenantCode;
+  tenant.name = name;
+  tenant.slug = slug;
+  tenant.email = email;
+  tenant.phoneNumber = phoneNumber;
+
+  tenant.type = type;
+  tenant.status = status;
+  tenant.subscriptionStatus = subscriptionStatus;
+
+  tenant.organizationId = organizationId;
+  tenant.activeSubscriptionId = activeSubscriptionId;
+
+  tenant.timezone = timezone;
+  tenant.currency = currency;
+  tenant.locale = locale;
+
+  tenant.active = active;
+  tenant.onboardingCompleted = onboardingCompleted;
+
+  return tenant;
  }
 
  // ----------------------------------------------------------------
@@ -325,7 +366,6 @@ public class Tenant extends BaseEntity {
  // ----------------------------------------------------------------
 
  public void updateLocalization(String timezone, String currency, String locale) {
-
   this.timezone = timezone;
   this.currency = currency;
   this.locale = locale;

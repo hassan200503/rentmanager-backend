@@ -11,13 +11,19 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class CreatePropertyValidator {
 
+
     private final PropertyRepository propertyRepository;
 
     public void validate(UUID tenantId,
                          CreatePropertyRequest request) {
 
-        if (request.getName() == null ||
-            request.getName().isBlank()) {
+        if (tenantId == null) {
+            throw new IllegalArgumentException("TenantId is required");
+        }
+
+        if (request == null ||
+                request.getName() == null ||
+                request.getName().isBlank()) {
 
             throw new IllegalArgumentException(
                     "Property name is required"
@@ -31,8 +37,10 @@ public class CreatePropertyValidator {
                 );
 
         if (exists) {
-            throw new IllegalArgumentException(
-                    "Property already exists"
+            // IMPORTANT: still safe exception type,
+            // but now clearly a business rule violation
+            throw new IllegalStateException(
+                    "Property already exists for tenant"
             );
         }
     }

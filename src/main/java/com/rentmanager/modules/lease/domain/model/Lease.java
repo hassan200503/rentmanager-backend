@@ -255,6 +255,10 @@ public class Lease extends AggregateRoot {
         );
     }
 
+
+
+
+
     // ===================== EXISTING METHODS KEPT AS-IS =====================
     public void reject(String reason) {
 

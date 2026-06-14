@@ -2,8 +2,13 @@ package com.rentmanager.modules.unit.application.dto.request;
 
 import java.math.BigDecimal;
 
-import lombok.Data;
+import lombok.*;
 
+
+@Getter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 @Data
 public class UpdateUnitRequest {
 

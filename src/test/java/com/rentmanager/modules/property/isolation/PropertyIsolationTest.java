@@ -19,7 +19,6 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -120,7 +119,10 @@ class PropertyIsolationTest {
     @Test
     void shouldIsolateTenantOnCreateOperation() {
 
-        CreatePropertyRequest request = mock(CreatePropertyRequest.class);
+        CreatePropertyRequest request = new CreatePropertyRequest();
+        request.setName("Test Property");
+        request.setPropertyType(com.rentmanager.modules.property.domain.enums.PropertyType.APARTMENT);
+        request.setDescription("Test Description");
 
         Property saved = mock(Property.class);
         PropertyResponse response = mock(PropertyResponse.class);

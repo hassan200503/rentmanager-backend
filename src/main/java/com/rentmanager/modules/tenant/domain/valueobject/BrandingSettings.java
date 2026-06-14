@@ -84,4 +84,20 @@ public class BrandingSettings {
 
   return url.trim();
  }
+
+
+
+ public static BrandingSettings of(
+         String logoUrl,
+         String faviconUrl,
+         String primaryColor,
+         String secondaryColor
+ ) {
+  return new BrandingSettings(
+          logoUrl,
+          faviconUrl,
+          primaryColor,
+          secondaryColor
+  );
+ }
 }

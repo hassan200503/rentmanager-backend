@@ -1,6 +1,6 @@
 package com.rentmanager.modules.lease.application.mapper;
 
-import com.rentmanager.contract.lease.dto.LeaseTypeDTO;
+import com.rentmanager.modules.lease.application.dto.request.LeaseTypeDTO;
 import com.rentmanager.modules.lease.domain.enums.LeaseType;
 
 import java.util.Arrays;

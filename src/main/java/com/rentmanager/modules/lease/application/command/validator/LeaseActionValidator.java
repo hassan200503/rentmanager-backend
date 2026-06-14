@@ -1,7 +1,7 @@
 package com.rentmanager.modules.lease.application.command.validator;
 
-import com.rentmanager.contract.lease.request.LeaseActionRequest;
-import com.rentmanager.contract.lease.request.LeaseActionType;
+import com.rentmanager.modules.lease.application.dto.request.LeaseActionRequest;
+import com.rentmanager.modules.lease.application.dto.request.LeaseActionType;
 import com.rentmanager.shared.exception.BusinessException;
 import com.rentmanager.shared.exception.ErrorCode;
 import com.rentmanager.shared.exception.ValidationException;

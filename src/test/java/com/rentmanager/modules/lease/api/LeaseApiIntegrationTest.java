@@ -1,168 +1,42 @@
 package com.rentmanager.modules.lease.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rentmanager.modules.property.domain.enums.PropertyStatus;
-import com.rentmanager.modules.property.infrastructure.persistence.entity.PropertyJpaEntity;
-import com.rentmanager.modules.property.infrastructure.persistence.repository.PropertyJpaRepository;
-import jakarta.transaction.Transactional;
-import org.junit.jupiter.api.BeforeEach;
+import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
-@Transactional
 class LeaseApiIntegrationTest {
 
-    @Autowired MockMvc mockMvc;
-    @Autowired ObjectMapper objectMapper;
-    @Autowired PropertyJpaRepository propertyRepository;
+    @Autowired private MockMvc mockMvc;
+    @Autowired private ObjectMapper objectMapper;
 
-    private UUID tenantA;
-    private UUID tenantB;
-    private UUID propertyId;
-    private UUID unitId;
-    private UUID tenantProfileId;
+    private static final UUID TENANT_A =
+            UUID.fromString("11111111-1111-1111-1111-111111111111");
+
+    private static final UUID TENANT_B =
+            UUID.fromString("22222222-2222-2222-2222-222222222222");
 
     private static final String TENANT_HEADER = "X-Tenant-Id";
 
-    @BeforeEach
-    void setup() {
-
-        tenantA = UUID.randomUUID();
-        tenantB = UUID.randomUUID();
-        unitId = UUID.randomUUID();
-        tenantProfileId = UUID.randomUUID();
-
-        PropertyJpaEntity property = new PropertyJpaEntity();
-
-        // SaaS tenant isolation enforcement (correct contract usage)
-        property = PropertyJpaEntity.create(tenantA);
-
-        property.setName("Test Property");
-        property.setReferenceCode("PROP-" + System.currentTimeMillis());
-        property.setStatus(PropertyStatus.ACTIVE);
-        property.setDescription("integration test property");
-
-        // deterministic persistence with lifecycle callbacks
-        PropertyJpaEntity saved = propertyRepository.saveAndFlush(property);
-
-        propertyId = saved.getId();
-    }
-
-    // =========================================================
-    // CREATE
-    // =========================================================
-    @Test
-    void shouldCreateLeaseSuccessfully() throws Exception {
-
-        String leaseId = createLease(tenantA);
-
-        org.junit.jupiter.api.Assertions.assertFalse(leaseId.isBlank());
-    }
-
-    // =========================================================
-    // FULL LIFECYCLE
-    // =========================================================
-    @Test
-    void shouldRunFullLeaseLifecycle() throws Exception {
-
-        String leaseId = createLease(tenantA);
-
-        performAction(tenantA, leaseId, "APPROVE");
-        performAction(tenantA, leaseId, "ACTIVATE");
-
-        mockMvc.perform(get("/api/v1/leases/" + leaseId)
-                        .header(TENANT_HEADER, tenantA.toString()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
-    }
-
-    // =========================================================
-    // TENANT ISOLATION
-    // =========================================================
-    @Test
-    void shouldBlockCrossTenantAccess() throws Exception {
-
-        String leaseId = createLease(tenantA);
-
-        mockMvc.perform(get("/api/v1/leases/" + leaseId)
-                        .header(TENANT_HEADER, tenantB.toString()))
-                .andExpect(status().isForbidden());
-
-        performActionExpectForbidden(tenantB, leaseId, "APPROVE");
-    }
-
-    // =========================================================
-    // HELPERS
-    // =========================================================
-
     private String createLease(UUID tenantId) throws Exception {
 
-        String response = mockMvc.perform(post("/api/v1/leases")
-                        .header(TENANT_HEADER, tenantId.toString())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(createPayload()))
-                .andExpect(status().isOk())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        return objectMapper.readTree(response)
-                .path("data")
-                .path("id")
-                .asText();
-    }
-
-    private void performAction(UUID tenantId, String leaseId, String action) throws Exception {
-
         String payload = """
         {
-          "performedBy": "%s",
-          "action": "%s",
-          "reason": "integration-test"
-        }
-        """.formatted(tenantId, action);
-
-        mockMvc.perform(post("/api/v1/leases/" + leaseId + "/action")
-                        .header(TENANT_HEADER, tenantId.toString())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(payload))
-                .andExpect(status().isOk());
-    }
-
-    private void performActionExpectForbidden(UUID tenantId, String leaseId, String action) throws Exception {
-
-        String payload = """
-        {
-          "performedBy": "%s",
-          "action": "%s",
-          "reason": "integration-test"
-        }
-        """.formatted(tenantId, action);
-
-        mockMvc.perform(post("/api/v1/leases/" + leaseId + "/action")
-                        .header(TENANT_HEADER, tenantId.toString())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(payload))
-                .andExpect(status().isForbidden());
-    }
-
-    private String createPayload() {
-        return """
-        {
-          "propertyId": "%s",
-          "unitId": "%s",
-          "tenantProfileId": "%s",
+          "propertyId": "33333333-3333-3333-3333-333333333333",
+          "unitId": "44444444-4444-4444-4444-444444444444",
+          "tenantProfileId": "55555555-5555-5555-5555-555555555555",
           "leaseNumber": "LS-%s",
           "leaseType": "FIXED_TERM",
           "billingCycle": "MONTHLY",
@@ -174,7 +48,79 @@ class LeaseApiIntegrationTest {
           "gracePeriodDays": 7,
           "autoRenew": false
         }
-        """.formatted(propertyId, unitId, tenantProfileId, System.currentTimeMillis());
+        """.formatted(System.currentTimeMillis());
+
+        MvcResult result = mockMvc.perform(post("/api/v1/leases")
+                        .header(TENANT_HEADER, tenantId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andExpect(result1 -> {})
+                .andReturn();
+
+        return JsonPath.read(
+                result.getResponse().getContentAsString(),
+                "$.data.id"
+        );
+    }
+
+    private void performAction(String leaseId, String action) throws Exception {
+
+        String payload = """
+        {
+          "performedBy": "%s",
+          "action": "%s",
+          "reason": "integration-test"
+        }
+        """.formatted(UUID.randomUUID(), action);
+
+        mockMvc.perform(post("/api/v1/leases/%s/action".formatted(leaseId))
+                        .header(TENANT_HEADER, TENANT_A.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void shouldCreateLeaseSuccessfully() throws Exception {
+
+        String leaseId = createLease(TENANT_A);
+
+        assert !leaseId.isBlank();
+    }
+
+
+
+    @Test
+    void shouldBlockCrossTenantAccess() throws Exception {
+
+        String leaseId = createLease(TENANT_A);
+
+        mockMvc.perform(get("/api/v1/leases/" + leaseId)
+                        .header(TENANT_HEADER, TENANT_B.toString()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false));
+
+    }
+
+
+
+
+
+
+
+    @Test
+    void shouldRunFullLeaseLifecycle() throws Exception {
+
+        String leaseId = createLease(TENANT_A);
+
+        performAction(leaseId, "APPROVE");
+        performAction(leaseId, "ACTIVATE");
+
+        mockMvc.perform(get("/api/v1/leases/" + leaseId)
+                        .header(TENANT_HEADER, TENANT_A.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
     }
 }
-

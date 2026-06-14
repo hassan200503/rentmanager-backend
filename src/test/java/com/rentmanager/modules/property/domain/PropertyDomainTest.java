@@ -14,7 +14,7 @@ class PropertyDomainTest {
 
         Property property = PropertyTestFactory.createProperty();
 
-        assertEquals(PropertyStatus.INACTIVE, property.getStatus());
+        assertEquals(PropertyStatus.DRAFT, property.getStatus());
         assertEquals(OccupancyStatus.VACANT, property.getOccupancyStatus());
         assertEquals("Alpha Building", property.getName());
     }

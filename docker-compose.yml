@@ -3,9 +3,8 @@ version: "3.9"
 services:
 
   postgres:
-    image: postgres:16
+    image: postgres:16-alpine
     container_name: rentmanager-postgres
-    restart: unless-stopped
     environment:
       POSTGRES_DB: rentmanager
       POSTGRES_USER: rentmanager
@@ -13,53 +12,38 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
-    networks:
-      - rentmanager-network
+      - rm_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rentmanager"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
-    image: redis:7
+    image: redis:7-alpine
     container_name: rentmanager-redis
-    restart: unless-stopped
     ports:
       - "6379:6379"
-    networks:
-      - rentmanager-network
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: rentmanager-zookeeper
-    restart: unless-stopped
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
-    networks:
-      - rentmanager-network
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     container_name: rentmanager-kafka
-    restart: unless-stopped
     depends_on:
       - zookeeper
-    ports:
-      - "9092:9092"
     environment:
-      KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-    networks:
-      - rentmanager-network
+    ports:
+      - "9092:9092"
 
 volumes:
-  pgdata:
-
-networks:
-  rentmanager-network:
-    driver: bridge
+  rm_postgres_data:

@@ -1,9 +1,7 @@
 package com.rentmanager.modules.lease.application.command.handler;
 
-import com.rentmanager.contract.lease.request.LeaseActionRequest;
-import com.rentmanager.contract.lease.request.LeaseActionType;
+import com.rentmanager.modules.lease.application.dto.request.LeaseActionRequest;
 import com.rentmanager.modules.lease.application.command.validator.LeaseActionValidator;
-import com.rentmanager.modules.lease.domain.enums.TerminationType;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.lease.infrastructure.persistence.entity.LeaseEntity;
@@ -11,7 +9,6 @@ import com.rentmanager.modules.lease.infrastructure.persistence.mapper.LeaseMapp
 import com.rentmanager.modules.lease.infrastructure.persistence.repository.JpaLeaseRepository;
 import com.rentmanager.shared.exception.ErrorCode;
 import com.rentmanager.shared.exception.ResourceNotFoundException;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import com.rentmanager.shared.security.context.TenantContext;
 

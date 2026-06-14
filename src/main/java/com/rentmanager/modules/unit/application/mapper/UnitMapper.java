@@ -11,16 +11,24 @@ public class UnitMapper {
 
         if (unit == null) return null;
 
-        return UnitResponse.builder()
-                .id(unit.getId())
-                .tenantId(unit.getTenantId())
-                .propertyId(unit.getPropertyId())
-                .unitNumber(unit.getUnitNumber())
-                .floor(unit.getFloor())
-                .description(unit.getDescription())
-                .rentAmount(unit.getRentAmount())
-                .status(unit.getStatus().name())
-                .occupancyStatus(unit.getOccupancyStatus().name())
-                .build();
+        UnitResponse response = new UnitResponse();
+
+        response.setId(unit.getId());
+        response.setTenantId(unit.getTenantId());
+        response.setPropertyId(unit.getPropertyId());
+        response.setUnitNumber(unit.getUnitNumber());
+        response.setFloor(unit.getFloor());
+        response.setDescription(unit.getDescription());
+        response.setRentAmount(unit.getRentAmount());
+
+        response.setStatus(
+                unit.getStatus() != null ? unit.getStatus().name() : null
+        );
+
+        response.setOccupancyStatus(
+                unit.getOccupancyStatus() != null ? unit.getOccupancyStatus().name() : null
+        );
+
+        return response;
     }
 }

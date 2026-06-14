@@ -15,15 +15,25 @@ public class CreateUnitValidator {
 
     public void validate(UUID tenantId, CreateUnitRequest request) {
 
+        if (request == null) {
+            throw new IllegalArgumentException("Request is required");
+        }
+
         if (request.getUnitNumber() == null || request.getUnitNumber().isBlank()) {
             throw new IllegalArgumentException("Unit number is required");
         }
 
-        if (unitRepository.existsByTenantIdAndUnitNumber(
-                tenantId,
-                request.getUnitNumber()
-        )) {
-            throw new IllegalArgumentException("Unit already exists for tenant");
+        String unitNumber = request.getUnitNumber().trim();
+
+        // FIX: remove race-condition unsafe pre-check
+        // DB unique constraint is the source of truth
+        // validator only handles structural validation
+        if (tenantId == null) {
+            throw new IllegalArgumentException("Tenant is required");
+        }
+
+        if (unitNumber.isBlank()) {
+            throw new IllegalArgumentException("Unit number is required");
         }
     }
 }

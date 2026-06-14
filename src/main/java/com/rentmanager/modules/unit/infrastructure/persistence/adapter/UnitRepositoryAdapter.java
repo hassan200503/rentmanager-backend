@@ -3,6 +3,7 @@ package com.rentmanager.modules.unit.infrastructure.persistence.adapter;
 import com.rentmanager.modules.unit.domain.enums.UnitStatus;
 import com.rentmanager.modules.unit.domain.model.Unit;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
+import com.rentmanager.modules.unit.infrastructure.persistence.entity.UnitJpaEntity;
 import com.rentmanager.modules.unit.infrastructure.persistence.mapper.UnitPersistenceMapper;
 import com.rentmanager.modules.unit.infrastructure.persistence.repository.UnitJpaRepository;
 import lombok.RequiredArgsConstructor;
@@ -78,9 +79,12 @@ public class UnitRepositoryAdapter implements UnitRepository {
     // =====================================================
     @Override
     public Unit save(Unit unit) {
-        return mapper.toDomain(
-                jpaRepository.save(mapper.toJpaEntity(unit))
-        );
+
+        UnitJpaEntity entity = mapper.toJpaEntity(unit);
+
+        UnitJpaEntity saved = jpaRepository.saveAndFlush(entity);
+
+        return mapper.toDomain(saved);
     }
 
     // =====================================================

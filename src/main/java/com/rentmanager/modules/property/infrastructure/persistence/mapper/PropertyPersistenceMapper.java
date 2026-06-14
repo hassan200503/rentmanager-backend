@@ -1,55 +1,86 @@
 package com.rentmanager.modules.property.infrastructure.persistence.mapper;
 
+import com.rentmanager.modules.property.domain.enums.OccupancyStatus;
+import com.rentmanager.modules.property.domain.enums.PropertyStatus;
 import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.domain.valueobject.Address;
 import com.rentmanager.modules.property.infrastructure.persistence.entity.PropertyAddressJpaEntity;
 import com.rentmanager.modules.property.infrastructure.persistence.entity.PropertyJpaEntity;
-import com.rentmanager.shared.security.context.TenantContext;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Field;
+import java.util.UUID;
 
 @Component
 public class PropertyPersistenceMapper {
 
+
     public PropertyJpaEntity toJpaEntity(Property property) {
-        if (property == null) {
-            return null;
-        }
+
+        if (property == null) return null;
 
         PropertyJpaEntity entity = new PropertyJpaEntity();
 
-        setField(entity, "id", property.getId());
+        if (property.getId() != null) {
+            entity.setId(property.getId());
+        }
+
         entity.setVersion(property.getVersion());
 
-        // =========================================================
-        // SAAS SAFE: enforce tenant at persistence boundary
-        // =========================================================
-        setField(entity, "tenantId",
-                property.getTenantId() != null
-                        ? property.getTenantId()
-                        : TenantContext.getTenantId()
+        UUID tenantId = property.getTenantId();
+
+        if (tenantId == null) {
+            throw new IllegalStateException("TenantId must be set before persistence");
+        }
+
+        entity.assignTenant(tenantId);
+
+        // ============================
+        // 🔥 FIX: SAFE DEFAULTS
+        // ============================
+        entity.setStatus(
+                property.getStatus() != null
+                        ? property.getStatus()
+                        : PropertyStatus.DRAFT
         );
 
-        entity.setReferenceCode(property.getReferenceCode());
+        entity.setOccupancyStatus(
+                property.getOccupancyStatus() != null
+                        ? property.getOccupancyStatus()
+                        : OccupancyStatus.VACANT
+        );
+
+        entity.setPropertyType(property.getPropertyType());
+
+        entity.setReferenceCode(
+                property.getReferenceCode() != null
+                        ? property.getReferenceCode()
+                        : "PROP-" + System.currentTimeMillis()
+        );
+
         entity.setName(property.getName());
         entity.setDescription(property.getDescription());
-        entity.setStatus(property.getStatus());
+
         entity.setAddress(toJpaAddress(property.getAddress()));
 
         return entity;
     }
 
+
+
+
+
     public Property toDomain(PropertyJpaEntity entity) {
-        if (entity == null) {
-            return null;
-        }
+
+        if (entity == null) return null;
 
         Property.PropertyBuilder builder = Property.builder()
                 .tenantId(entity.getTenantId())
                 .referenceCode(entity.getReferenceCode())
                 .name(entity.getName())
                 .status(entity.getStatus())
+                .propertyType(entity.getPropertyType())
+                .occupancyStatus(entity.getOccupancyStatus())
                 .address(toDomainAddress(entity.getAddress()))
                 .description(entity.getDescription());
 
@@ -63,10 +94,8 @@ public class PropertyPersistenceMapper {
         return property;
     }
 
-    private PropertyAddressJpaEntity toJpaAddress(Address address) {
-        if (address == null) {
-            return null;
-        }
+    private static PropertyAddressJpaEntity toJpaAddress(Address address) {
+        if (address == null) return null;
 
         return PropertyAddressJpaEntity.builder()
                 .addressLine1(address.getStreetAddress())
@@ -79,9 +108,7 @@ public class PropertyPersistenceMapper {
     }
 
     private Address toDomainAddress(PropertyAddressJpaEntity entity) {
-        if (entity == null) {
-            return null;
-        }
+        if (entity == null) return null;
 
         return Address.builder()
                 .streetAddress(entity.getAddressLine1())
@@ -109,5 +136,24 @@ public class PropertyPersistenceMapper {
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to map field: " + fieldName, ex);
         }
+    }
+
+    public static void updateEntity(Property property, PropertyJpaEntity entity) {
+
+        if (property == null || entity == null) return;
+
+        entity.setName(property.getName());
+        entity.setDescription(property.getDescription());
+        entity.setStatus(property.getStatus());
+
+        // SAFE UPDATES ONLY
+        entity.setPropertyType(property.getPropertyType());
+        entity.setOccupancyStatus(property.getOccupancyStatus());
+
+        if (property.getAddress() != null) {
+            entity.setAddress(toJpaAddress(property.getAddress()));
+        }
+
+        // tenant NEVER changes
     }
 }

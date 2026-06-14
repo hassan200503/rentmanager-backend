@@ -1,8 +1,11 @@
 package com.rentmanager.modules.lease.application.service;
 
 import com.rentmanager.contract.common.PageResponse;
-import com.rentmanager.contract.lease.request.*;
-import com.rentmanager.contract.lease.response.*;
+import com.rentmanager.modules.lease.application.dto.request.*;
+import com.rentmanager.modules.lease.application.dto.response.*;
+import com.rentmanager.modules.lease.application.dto.request.CreateLeaseRequest;
+import com.rentmanager.modules.lease.application.dto.request.LeaseActionRequest;
+import com.rentmanager.modules.lease.application.dto.request.UpdateLeaseRequest;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowEngine;
@@ -10,9 +13,9 @@ import com.rentmanager.modules.lease.domain.enums.*;
 import com.rentmanager.shared.security.context.TenantContext;
 import com.rentmanager.shared.exception.ErrorCode;
 import com.rentmanager.shared.exception.ResourceNotFoundException;
+import jakarta.validation.Valid;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
-import com.rentmanager.contract.lease.dto.*;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -37,7 +40,7 @@ public class LeaseApplicationService {
     // =========================================================
     // CREATE
     // =========================================================
-    public LeaseResponse create(CreateLeaseRequest request) {
+    public LeaseResponse create(@Valid @org.checkerframework.checker.nullness.qual.MonotonicNonNull CreateLeaseRequest request) {
 
         UUID tenantId = TenantContext.getTenantId(); // ✅ HERE (MANDATORY)
 
@@ -64,7 +67,7 @@ public class LeaseApplicationService {
 
     // =========================================================
     // UPDATE
-    public LeaseResponse update(UUID leaseId, UpdateLeaseRequest request) {
+    public LeaseResponse update(UUID leaseId, @Valid @org.checkerframework.checker.nullness.qual.MonotonicNonNull UpdateLeaseRequest request) {
 
         Lease lease = load(leaseId, TenantContext.getTenantId());
 
@@ -110,7 +113,7 @@ public class LeaseApplicationService {
     }
 
     // =========================================================
-    public LeaseActionResponse executeAction(UUID leaseId, LeaseActionRequest request) {
+    public LeaseActionResponse executeAction(UUID leaseId, @Valid @org.checkerframework.checker.nullness.qual.MonotonicNonNull LeaseActionRequest request) {
 
         UUID tenantId = TenantContext.getTenantId();
 
@@ -189,7 +192,7 @@ public class LeaseApplicationService {
                 lease.getPropertyId(),
                 lease.getUnitId(),
                 lease.getTenantProfileId(),
-                map(lease.getLeaseType()),
+                lease.getLeaseType(),
                 map(lease.getBillingCycle()),
                 lease.getStartDate(),
                 lease.getEndDate(),

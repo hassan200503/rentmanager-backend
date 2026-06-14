@@ -2,8 +2,10 @@ package com.rentmanager.modules.tenant.application.command.service;
 
 import com.rentmanager.modules.tenant.application.dto.request.*;
 import com.rentmanager.modules.tenant.application.dto.response.TenantResponse;
+import org.springframework.stereotype.Service;
 
 import java.util.UUID;
+
 
 public interface TenantCommandService {
 

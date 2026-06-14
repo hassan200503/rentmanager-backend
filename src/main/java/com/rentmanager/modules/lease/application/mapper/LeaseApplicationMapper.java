@@ -1,8 +1,9 @@
 package com.rentmanager.modules.lease.application.mapper;
 
-import com.rentmanager.contract.lease.dto.LeaseTypeDTO;
-import com.rentmanager.contract.lease.dto.BillingCycleDTO;
-import com.rentmanager.contract.lease.response.LeaseResponse;
+import com.rentmanager.modules.lease.application.dto.request.LeaseTypeDTO;
+import com.rentmanager.modules.lease.application.dto.request.BillingCycleDTO;
+import com.rentmanager.modules.lease.application.dto.response.LeaseResponse;
+import com.rentmanager.modules.lease.domain.enums.LeaseType;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import org.springframework.stereotype.Component;
 
@@ -22,7 +23,7 @@ public class LeaseApplicationMapper {
                 lease.getPropertyId(),
                 lease.getUnitId(),
                 lease.getTenantProfileId(),
-                LeaseTypeDTO.valueOf(lease.getLeaseType().name()),
+                LeaseType.valueOf(lease.getLeaseType().name()),
                 BillingCycleDTO.valueOf(lease.getBillingCycle().name()),
                 lease.getStartDate(),
                 lease.getEndDate(),

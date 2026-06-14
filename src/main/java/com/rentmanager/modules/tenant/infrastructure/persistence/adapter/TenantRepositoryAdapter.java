@@ -26,22 +26,29 @@ public class TenantRepositoryAdapter implements TenantRepository {
     }
 
     // ------------------------------------------------
-    // PERSISTENCE
-    // ------------------------------------------------
-
+// PERSISTENCE
+// ------------------------------------------------
     @Override
     public Tenant save(Tenant tenant) {
+
         TenantEntity entity = mapper.toJpaEntity(tenant);
+
         TenantEntity saved = jpaRepository.save(entity);
+
+        // IMPORTANT: ensure DB constraints + ID generation happen
+        jpaRepository.flush();
+
         return mapper.toDomain(saved);
     }
-
     // ------------------------------------------------
     // FINDERS
     // ------------------------------------------------
-
     @Override
     public Optional<Tenant> findById(UUID id) {
+        if (id == null) {
+            return Optional.empty();
+        }
+
         return jpaRepository.findById(id)
                 .map(mapper::toDomain);
     }

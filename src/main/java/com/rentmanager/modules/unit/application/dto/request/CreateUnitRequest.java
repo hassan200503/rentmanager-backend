@@ -3,8 +3,13 @@ package com.rentmanager.modules.unit.application.dto.request;
 import java.math.BigDecimal;
 import java.util.UUID;
 
-import lombok.Data;
+import lombok.*;
 
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 @Data
 public class CreateUnitRequest {
 

@@ -1,5 +1,6 @@
 package com.rentmanager.modules.unit.application.command.service;
 
+import com.rentmanager.modules.property.domain.enums.OccupancyStatus;
 import com.rentmanager.modules.unit.application.dto.request.CreateUnitRequest;
 import com.rentmanager.modules.unit.application.dto.request.UpdateUnitRequest;
 import com.rentmanager.modules.unit.application.dto.response.UnitResponse;
@@ -9,15 +10,22 @@ import com.rentmanager.modules.unit.domain.model.Unit;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+
+import static com.rentmanager.shared.security.SecurityUtils.getCurrentTenantId;
 
 @Service
 @RequiredArgsConstructor
 @Transactional
 public class UnitCommandServiceImpl implements UnitCommandService {
 
+    @PersistenceContext
+    private EntityManager entityManager;
     private final UnitRepository unitRepository;
     private final UnitMapper unitMapper;
 
@@ -46,9 +54,9 @@ public class UnitCommandServiceImpl implements UnitCommandService {
                 generateCorrelationId()
         );
 
-        return unitMapper.toResponse(unitRepository.save(unit));
+        Unit saved = unitRepository.save(unit);
+        return unitMapper.toResponse(saved);
     }
-
     // =====================================================
     // UPDATE
     // =====================================================
@@ -56,6 +64,12 @@ public class UnitCommandServiceImpl implements UnitCommandService {
     public UnitResponse update(UUID tenantId, UUID unitId, UpdateUnitRequest request) {
 
         Unit unit = updateUnitValidator.validate(tenantId, unitId);
+
+
+        if (request.getUnitNumber() != null) {
+            throw new IllegalArgumentException("unit_number cannot be modified");
+        }
+
 
         unit.updateDetails(
                 request.getUnitNumber(),
@@ -131,5 +145,37 @@ public class UnitCommandServiceImpl implements UnitCommandService {
         return (correlationId == null || correlationId.isBlank())
                 ? "SYSTEM"
                 : correlationId;
+    }
+
+
+
+
+
+
+    @Transactional
+    public UnitResponse create(CreateUnitRequest request) {
+
+        UUID tenantId = getCurrentTenantId();
+
+        try {
+            Unit unit = Unit.create(
+                    tenantId,
+                    request.getPropertyId(),
+                    request.getUnitNumber(),
+                    request.getLabel(),
+                    request.getRentAmount(),
+                    request.getDescription(),
+                    String.valueOf(OccupancyStatus.VACANT) // FIX: must pass enum, not string
+            );
+
+            Unit saved = unitRepository.save(unit);
+
+            return unitMapper.toResponse(saved);
+
+        } catch (DataIntegrityViolationException ex) {
+            throw new IllegalArgumentException(
+                    "Unit already exists for this tenant, property and unit number"
+            );
+        }
     }
 }

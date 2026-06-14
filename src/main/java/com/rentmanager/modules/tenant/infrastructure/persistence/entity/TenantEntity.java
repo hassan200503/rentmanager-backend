@@ -1,8 +1,10 @@
 package com.rentmanager.modules.tenant.infrastructure.persistence.entity;
 
+import com.rentmanager.domain.base.BaseEntity;
 import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;
 import com.rentmanager.modules.tenant.domain.enums.TenantStatus;
 import com.rentmanager.modules.tenant.domain.enums.TenantType;
+import com.rentmanager.modules.tenant.domain.valueobject.BrandingSettings;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -20,11 +22,9 @@ import java.util.UUID;
         }
 )
 @NoArgsConstructor
-public class TenantEntity {
+public class TenantEntity extends BaseEntity {
 
-    @Id
-    @Column(nullable = false, updatable = false)
-    private UUID id;
+
 
     @Column(name = "tenant_code", nullable = false, unique = true, length = 50)
     private String tenantCode;
@@ -73,4 +73,68 @@ public class TenantEntity {
 
     @Column(name = "onboarding_completed", nullable = false)
     private boolean onboardingCompleted;
+
+
+
+
+    public void setTenantCode(String tenantCode) {
+        this.tenantCode = tenantCode;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public void setSlug(String slug) {
+        this.slug = slug;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public void setPhoneNumber(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
+    }
+
+    public void setStatus(TenantStatus status) {
+        this.status = status;
+    }
+
+    public void setType(TenantType type) {
+        this.type = type;
+    }
+
+    public void setSubscriptionStatus(SubscriptionStatus subscriptionStatus) {
+        this.subscriptionStatus = subscriptionStatus;
+    }
+
+    public void setOrganizationId(UUID organizationId) {
+        this.organizationId = organizationId;
+    }
+
+    public void setActiveSubscriptionId(UUID activeSubscriptionId) {
+        this.activeSubscriptionId = activeSubscriptionId;
+    }
+
+
+    public void setTimezone(String timezone) {
+        this.timezone = timezone;
+    }
+
+    public void setCurrency(String currency) {
+        this.currency = currency;
+    }
+
+    public void setLocale(String locale) {
+        this.locale = locale;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
+    }
+
+    public void setOnboardingCompleted(boolean onboardingCompleted) {
+        this.onboardingCompleted = onboardingCompleted;
+    }
 }
