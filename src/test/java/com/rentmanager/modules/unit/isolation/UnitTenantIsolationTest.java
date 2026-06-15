@@ -1,7 +1,8 @@
-/*package com.rentmanager.modules.unit.isolation;
+package com.rentmanager.modules.unit.isolation;
 
 import com.rentmanager.RentManagerApplication;
 import com.rentmanager.crossmodule.support.PostgresSpringBridge;
+import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
                 PostgresSpringBridge.class
         }
 )
-class UnitTenantIsolationTest {
+class UnitTenantIsolationTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
     private UnitRepository repository;
@@ -51,4 +52,3 @@ class UnitTenantIsolationTest {
     }
 }
 
- */

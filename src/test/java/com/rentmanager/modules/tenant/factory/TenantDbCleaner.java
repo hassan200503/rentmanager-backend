@@ -13,7 +13,7 @@ public class TenantDbCleaner {
 
     @Transactional
     public void clean() {
-        em.createNativeQuery("TRUNCATE TABLE tenants RESTART IDENTITY CASCADE")
+        em.createNativeQuery("DELETE FROM tenants")
                 .executeUpdate();
         em.flush();
         em.clear();

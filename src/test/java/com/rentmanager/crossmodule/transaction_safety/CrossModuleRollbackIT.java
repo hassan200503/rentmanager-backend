@@ -1,6 +1,6 @@
 package com.rentmanager.crossmodule.transaction_safety;
 
-import com.rentmanager.crossmodule.support.PostgresTestContainerConfig;
+
 import com.rentmanager.crossmodule.support.TransactionBoundary;
 
 import com.rentmanager.modules.property.domain.enums.PropertyType;

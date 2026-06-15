@@ -1,15 +1,21 @@
-/*package com.rentmanager.modules.unit.api;
+package com.rentmanager.modules.unit.api;
 
 import com.rentmanager.modules.unit.api.controller.UnitQueryController;
 import com.rentmanager.modules.unit.application.dto.response.UnitResponse;
 import com.rentmanager.modules.unit.application.query.service.UnitQueryService;
 import com.rentmanager.shared.error.ErrorTrackingService;
+import com.rentmanager.shared.security.filter.JwtAuthenticationFilter;
 import com.rentmanager.shared.security.jwt.JwtProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Collections;
@@ -21,24 +27,28 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(UnitQueryController.class)
-class UnitQueryControllerTest {
+@AutoConfigureMockMvc(addFilters = false)
+@ImportAutoConfiguration(exclude = {
+        SecurityAutoConfiguration.class,
+        SecurityFilterAutoConfiguration.class
+})
+@ContextConfiguration(classes = {UnitQueryController.class})
+class UnitApiTest {
 
     @Autowired
     private MockMvc mockMvc;
 
-    // ===== service layer =====
     @MockBean
     private UnitQueryService service;
 
     @MockBean
     private ErrorTrackingService errorTrackingService;
 
-    // ===== security FIX (required because filter is global) =====
     @MockBean
-    private JwtProvider jwtProvider;
+    private JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @MockBean
-    private com.rentmanager.shared.security.filter.JwtAuthenticationFilter jwtAuthenticationFilter;
+    private JwtProvider jwtProvider;
 
     @Test
     void shouldReturnUnitsWithApiResponseWrapper() throws Exception {
@@ -46,7 +56,7 @@ class UnitQueryControllerTest {
         when(service.getAll(any(), any()))
                 .thenReturn(new PageImpl<>(Collections.emptyList()));
 
-        mockMvc.perform(get("/units")
+        mockMvc.perform(get("/api/v1/units")
                         .header("X-Tenant-Id", UUID.randomUUID().toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
@@ -60,7 +70,7 @@ class UnitQueryControllerTest {
         when(service.getById(any(), any()))
                 .thenReturn(new UnitResponse());
 
-        mockMvc.perform(get("/units/" + UUID.randomUUID())
+        mockMvc.perform(get("/api/v1/units/" + UUID.randomUUID())
                         .header("X-Tenant-Id", UUID.randomUUID().toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
@@ -68,7 +78,4 @@ class UnitQueryControllerTest {
                 .andExpect(jsonPath("$.data").exists());
     }
 }
-
-
-
- */
+ 

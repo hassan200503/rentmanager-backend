@@ -7,17 +7,22 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.annotation.Rollback;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Transactional
+@Rollback
+@SpringBootTest
 @AutoConfigureMockMvc
-class LeaseApiIntegrationTest {
+public class LeaseApiTest {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private ObjectMapper objectMapper;
@@ -55,7 +60,6 @@ class LeaseApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isOk())
-                .andExpect(result1 -> {})
                 .andReturn();
 
         return JsonPath.read(
@@ -86,10 +90,8 @@ class LeaseApiIntegrationTest {
 
         String leaseId = createLease(TENANT_A);
 
-        assert !leaseId.isBlank();
+        assertFalse(leaseId.isBlank());
     }
-
-
 
     @Test
     void shouldBlockCrossTenantAccess() throws Exception {
@@ -100,14 +102,7 @@ class LeaseApiIntegrationTest {
                         .header(TENANT_HEADER, TENANT_B.toString()))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.success").value(false));
-
     }
-
-
-
-
-
-
 
     @Test
     void shouldRunFullLeaseLifecycle() throws Exception {

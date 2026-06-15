@@ -1,7 +1,9 @@
-/*package com.rentmanager.modules.tenant.integration;
+
+package com.rentmanager.modules.tenant.integration;
 
 import com.rentmanager.RentManagerApplication;
 import com.rentmanager.crossmodule.support.PostgresSpringBridge;
+import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
 import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;
 import com.rentmanager.modules.tenant.domain.enums.TenantStatus;
 import com.rentmanager.modules.tenant.domain.enums.TenantType;
@@ -11,13 +13,14 @@ import com.rentmanager.modules.tenant.domain.valueobject.BrandingSettings;
 import com.rentmanager.modules.tenant.factory.TenantDbCleaner;
 import com.rentmanager.modules.tenant.factory.TenantTestDataFactory;
 import jakarta.persistence.EntityManager;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.transaction.BeforeTransaction;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -32,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.*;
 )
 @ActiveProfiles("test")
 @Transactional
-class TenantSaaSIntegrationTest {
+class TenantSaaSIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
     private TenantTestDataFactory factory;
@@ -46,7 +49,7 @@ class TenantSaaSIntegrationTest {
     @Autowired
     private TenantDbCleaner cleaner;
 
-    @BeforeEach
+    @BeforeTransaction
     void setUp() {
         cleaner.clean();
     }
@@ -165,15 +168,17 @@ class TenantSaaSIntegrationTest {
         tenant.updateBranding(BrandingSettings.of(
                 "logo.png",
                 "favicon.ico",
-                "#FFFFFF",
-                "#000000"
+                "#000000",
+                "#FFFFFF"
         ));
 
+        System.out.println(tenant.getBrandingSettings());
         tenant = persist(tenant);
 
-        assertEquals("#FFFFFF", tenant.getBrandingSettings().getPrimaryColor());
+
+        System.out.println(tenant.getBrandingSettings());
+
+        assertEquals("#000000", tenant.getBrandingSettings().getPrimaryColor());
     }
 }
 
-
- */

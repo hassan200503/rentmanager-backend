@@ -34,7 +34,6 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
         createPropertyValidator.validate(tenantId, request);
 
-        // FIX: single source of truth for required identity field
         String referenceCode = generateCorrelationId();
 
         Property property = Property.create(
@@ -48,9 +47,12 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
                 referenceCode
         );
 
-        return propertyMapper.toResponse(propertyRepository.save(property));
+        Property saved = propertyRepository.save(property);
+
+        return propertyMapper.toResponse(saved);
     }
 
+    // ---------------- READ ----------------
     @Override
     public PropertyResponse getProperty(UUID tenantId, UUID propertyId) {
 
@@ -73,7 +75,17 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
         property.updateDetails(request.getName(), request.getDescription());
 
-        Property saved = propertyRepository.save(property);
+        /*
+         * FIX (critical SaaS persistence safety):
+         * Ensure Hibernate is working with a managed entity state.
+         * Prevent detached entity version-null crashes in edge cases.
+         */
+        Property managed = propertyRepository.findByIdAndTenantId(propertyId, tenantId)
+                .orElseThrow(() -> new IllegalArgumentException("Property not found"));
+
+        managed.updateDetails(request.getName(), request.getDescription());
+
+        Property saved = propertyRepository.save(managed);
 
         return propertyMapper.toResponse(saved);
     }
@@ -88,7 +100,9 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
         property.archive(generateCorrelationId());
 
-        return propertyMapper.toResponse(propertyRepository.save(property));
+        Property saved = propertyRepository.save(property);
+
+        return propertyMapper.toResponse(saved);
     }
 
     // ---------------- ACTIVATE ----------------
@@ -100,7 +114,9 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
         property.activate(generateCorrelationId());
 
-        return propertyMapper.toResponse(propertyRepository.save(property));
+        Property saved = propertyRepository.save(property);
+
+        return propertyMapper.toResponse(saved);
     }
 
     // ---------------- FULLY OCCUPIED ----------------
@@ -112,7 +128,9 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
         property.markFullyOccupied(generateCorrelationId());
 
-        return propertyMapper.toResponse(propertyRepository.save(property));
+        Property saved = propertyRepository.save(property);
+
+        return propertyMapper.toResponse(saved);
     }
 
     // ---------------- VACANT ----------------
@@ -124,7 +142,9 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
         property.markVacant(generateCorrelationId());
 
-        return propertyMapper.toResponse(propertyRepository.save(property));
+        Property saved = propertyRepository.save(property);
+
+        return propertyMapper.toResponse(saved);
     }
 
     // ---------------- INTERNAL ----------------

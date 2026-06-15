@@ -1,51 +1,20 @@
-/*package com.rentmanager.modules.unit.integration;
+package com.rentmanager.modules.unit.integration;
 
-import com.rentmanager.RentManagerApplication;
-import com.rentmanager.crossmodule.support.PostgresTestContainerConfig;
 import com.rentmanager.modules.unit.application.command.service.UnitCommandService;
 import com.rentmanager.modules.unit.application.dto.request.CreateUnitRequest;
-import com.rentmanager.modules.unit.factory.UnitDbCleaner;
 import com.rentmanager.modules.unit.factory.UnitTestDataFactory;
+import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.annotation.Transactional;
-
-import jakarta.persistence.EntityManager;
 
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest(
-        classes = {
-                RentManagerApplication.class,
-                UnitIntegrationTest.TestConfig.class,
-                com.rentmanager.crossmodule.support.PostgresSpringBridge.class
-        },
-        webEnvironment = SpringBootTest.WebEnvironment.MOCK
-)
-@ActiveProfiles("test")
-@Transactional
-class UnitIntegrationTest {
+class UnitIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
     private UnitCommandService service;
-
-    @Autowired
-    private UnitDbCleaner cleaner;
-
-    @TestConfiguration
-    static class TestConfig {
-
-        @Bean
-        public UnitDbCleaner unitDbCleaner(EntityManager em) {
-            return new UnitDbCleaner(em);
-        }
-    }
 
     @Test
     void shouldRunFullUnitLifecycle() {
@@ -72,5 +41,3 @@ class UnitIntegrationTest {
         assertNotNull(created.getId());
     }
 }
-
- */

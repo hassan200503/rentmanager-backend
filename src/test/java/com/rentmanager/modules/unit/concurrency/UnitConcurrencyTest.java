@@ -1,5 +1,6 @@
-/*package com.rentmanager.modules.unit.concurrency;
+package com.rentmanager.modules.unit.concurrency;
 
+import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
 import com.rentmanager.modules.unit.application.command.service.UnitCommandService;
 import com.rentmanager.modules.unit.application.dto.request.CreateUnitRequest;
 import com.rentmanager.modules.unit.application.dto.request.UpdateUnitRequest;
@@ -18,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
 @ActiveProfiles("test")
-class UnitConcurrencyTest {
+class UnitConcurrencyTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
     private UnitCommandService service;
@@ -134,11 +135,10 @@ class UnitConcurrencyTest {
          * - final state must not crash system
          * - data corruption is NOT allowed
          */
-     /*   assertTrue(errors.size() <= 2, "System should not crash under concurrent updates");
+        assertTrue(errors.size() <= 2, "System should not crash under concurrent updates");
     }
 
 }
 
-/*
 
- */
+

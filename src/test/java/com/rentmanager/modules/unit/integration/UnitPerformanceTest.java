@@ -1,7 +1,8 @@
-/*package com.rentmanager.modules.unit.integration;
+package com.rentmanager.modules.unit.integration;
 
 import com.rentmanager.RentManagerApplication;
 import com.rentmanager.crossmodule.support.PostgresSpringBridge;
+import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
 import com.rentmanager.modules.unit.application.command.service.UnitCommandService;
 import com.rentmanager.modules.unit.application.dto.response.UnitResponse;
 import com.rentmanager.modules.unit.factory.UnitTestDataFactory;
@@ -26,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.*;
 )
 @ActiveProfiles("test")
 @Transactional
-class UnitPerformanceTest {
+class UnitPerformanceTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
     private UnitCommandService service;
@@ -75,4 +76,3 @@ class UnitPerformanceTest {
     }
 }
 
- */

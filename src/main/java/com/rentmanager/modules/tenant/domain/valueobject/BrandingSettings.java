@@ -1,6 +1,5 @@
 package com.rentmanager.modules.tenant.domain.valueobject;
 
-import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -15,16 +14,9 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class BrandingSettings {
 
- @Column(name = "logo_url", length = 500)
  private String logoUrl;
-
- @Column(name = "favicon_url", length = 500)
  private String faviconUrl;
-
- @Column(name = "primary_color", length = 20)
  private String primaryColor;
-
- @Column(name = "secondary_color", length = 20)
  private String secondaryColor;
 
  // --------------------------------------------------
@@ -85,8 +77,6 @@ public class BrandingSettings {
   return url.trim();
  }
 
-
-
  public static BrandingSettings of(
          String logoUrl,
          String faviconUrl,
@@ -99,5 +89,15 @@ public class BrandingSettings {
           primaryColor,
           secondaryColor
   );
+ }
+
+
+ public static BrandingSettings defaultSettings() {
+  return BrandingSettings.builder()
+          .logoUrl(null)
+          .faviconUrl(null)
+          .primaryColor("#000000")
+          .secondaryColor("#FFFFFF")
+          .build();
  }
 }

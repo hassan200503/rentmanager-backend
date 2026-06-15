@@ -1,12 +1,10 @@
 package com.rentmanager.modules.property.infrastructure.persistence.adapter;
 
-import com.rentmanager.modules.property.application.mapper.PropertyMapper;
 import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.modules.property.infrastructure.persistence.entity.PropertyJpaEntity;
 import com.rentmanager.modules.property.infrastructure.persistence.mapper.PropertyPersistenceMapper;
 import com.rentmanager.modules.property.infrastructure.persistence.repository.PropertyJpaRepository;
-import com.rentmanager.shared.security.context.TenantContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -24,8 +22,8 @@ public class PropertyRepositoryAdapter implements PropertyRepository {
     private final PropertyJpaRepository jpaRepository;
 
     // =========================================================
-    // SAVE
-
+    // SAVE (FIXED)
+    // =========================================================
     @Override
     @Transactional
     public Property save(Property property) {
@@ -34,37 +32,33 @@ public class PropertyRepositoryAdapter implements PropertyRepository {
             throw new IllegalArgumentException("Property cannot be null");
         }
 
-        // =========================
-        // CREATE FLOW (ID NOT IN DB YET)
-        // =========================
-        boolean isNew = !jpaRepository.existsById(property.getId());
+        PropertyJpaEntity entity;
 
-        if (isNew) {
+        // =====================================================
+        // FIX: NEVER decide persistence using existsById
+        // Let JPA decide insert vs update via entity state
+        // =====================================================
 
-            PropertyJpaEntity entity = toEntity(property);
+        if (property.getId() != null) {
 
-            // IMPORTANT: ensure JPA treats as insert
-            entity.setVersion(null);
+            entity = jpaRepository.findById(property.getId())
+                    .map(existing -> {
+                        PropertyPersistenceMapper.updateEntity(property, existing);
+                        return existing;
+                    })
+                    .orElseGet(() -> toEntity(property));
 
-            PropertyJpaEntity saved = jpaRepository.save(entity);
-
-            return toDomain(saved);
+        } else {
+            entity = toEntity(property);
         }
 
-        // =========================
-        // UPDATE FLOW (MUST EXIST)
-        // =========================
-        PropertyJpaEntity existing = jpaRepository.findById(property.getId())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Property not found: " + property.getId()
-                ));
-
-        PropertyPersistenceMapper.updateEntity(property, existing);
-
-        PropertyJpaEntity saved = jpaRepository.save(existing);
+        // ❌ IMPORTANT FIX: DO NOT TOUCH VERSION
+        // Hibernate manages @Version internally
+        PropertyJpaEntity saved = jpaRepository.save(entity);
 
         return toDomain(saved);
     }
+
     // =========================================================
     // FIND BY ID
     // =========================================================
@@ -131,8 +125,7 @@ public class PropertyRepositoryAdapter implements PropertyRepository {
     public List<Property> findByStatus(String status) {
         return jpaRepository.findByStatus(status)
                 .stream()
-                .map(this::toDomain)
-                .toList();
+                .map(this::toDomain).toList();
     }
 
     @Override
@@ -158,7 +151,7 @@ public class PropertyRepositoryAdapter implements PropertyRepository {
     }
 
     // =========================================================
-    // MAPPING (NO SETTERS ON DOMAIN)
+    // MAPPING (UNCHANGED SAFE)
     // =========================================================
 
     private Property toDomain(PropertyJpaEntity e) {
@@ -173,30 +166,23 @@ public class PropertyRepositoryAdapter implements PropertyRepository {
                 e.getPropertyType(),
                 e.getStatus(),
                 e.getOccupancyStatus(),
-                null, // map later safely
+                null,
                 null,
                 null,
                 e.getDescription()
         );
     }
+
     private PropertyJpaEntity toEntity(Property p) {
 
         if (p == null) return null;
 
         PropertyJpaEntity e = new PropertyJpaEntity();
 
-        // ==========================
-        // ID SAFETY RULE
-        // ==========================
-        // Only set ID if explicitly present AND this is NOT create flow
         if (p.getId() != null) {
             e.setId(p.getId());
         }
 
-        // ==========================
-        // TENANT SAFETY RULE
-        // ==========================
-        // DO NOT override domain tenant with context blindly
         e.assignTenant(p.getTenantId());
 
         e.setName(p.getName());
@@ -205,6 +191,8 @@ public class PropertyRepositoryAdapter implements PropertyRepository {
         e.setStatus(p.getStatus());
         e.setOccupancyStatus(p.getOccupancyStatus());
         e.setDescription(p.getDescription());
+
+        // ❌ DO NOT TOUCH VERSION HERE
 
         return e;
     }

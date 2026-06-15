@@ -36,7 +36,6 @@ public class TenantRepositoryAdapter implements TenantRepository {
         TenantEntity saved = jpaRepository.save(entity);
 
         // IMPORTANT: ensure DB constraints + ID generation happen
-        jpaRepository.flush();
 
         return mapper.toDomain(saved);
     }

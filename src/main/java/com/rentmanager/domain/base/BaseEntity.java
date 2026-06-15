@@ -15,7 +15,6 @@ public abstract class BaseEntity implements Serializable {
     @Setter
     @Getter
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     @Column(nullable = false, updatable = false)
     private UUID id;
 
@@ -35,12 +34,16 @@ public abstract class BaseEntity implements Serializable {
 
         Instant now = Instant.now();
 
-        // ensure ID consistency (safe fallback for detached entities / manual construction)
+        // FIX: single source of truth for ID generation
         if (this.id == null) {
             this.id = UUID.randomUUID();
         }
 
-        // enforce timestamps at persistence boundary
+        // FIX: prevent Hibernate version null crash
+        if (this.version == null) {
+            this.version = 0L;
+        }
+
         if (this.createdAt == null) {
             this.createdAt = now;
         }
@@ -54,7 +57,6 @@ public abstract class BaseEntity implements Serializable {
     }
 
     public Instant getCreatedAt() {
-        // SAFETY NET: covers merge/detached/test edge cases where JPA lifecycle is bypassed
         if (createdAt == null) {
             return Instant.now();
         }
@@ -83,5 +85,4 @@ public abstract class BaseEntity implements Serializable {
     protected void restoreId(UUID id) {
         this.id = id;
     }
-
 }

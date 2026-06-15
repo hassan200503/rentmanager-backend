@@ -1,9 +1,9 @@
 package com.rentmanager.modules.tenant.infrastructure.persistence.mapper;
 
 import com.rentmanager.modules.tenant.domain.model.Tenant;
+import com.rentmanager.modules.tenant.domain.valueobject.BrandingSettings;
 import com.rentmanager.modules.tenant.infrastructure.persistence.entity.TenantEntity;
 import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
 
 @Mapper(
@@ -13,13 +13,12 @@ import org.mapstruct.ReportingPolicy;
 public interface TenantPersistenceMapper {
 
     // ============================
-    // DOMAIN → JPA ENTITY (PERSISTENCE WRITE)
+    // DOMAIN → JPA ENTITY
     // ============================
-    @Mapping(target = "id", ignore = true) // JPA owns identity generation
     TenantEntity toJpaEntity(Tenant tenant);
 
     // ============================
-    // JPA ENTITY → DOMAIN (REHYDRATION READ)
+    // JPA ENTITY → DOMAIN
     // ============================
     default Tenant toDomain(TenantEntity entity) {
 
@@ -27,8 +26,14 @@ public interface TenantPersistenceMapper {
             return null;
         }
 
+        BrandingSettings brandingSettings =
+                entity.getBrandingSettings() != null
+                        ? entity.getBrandingSettings()
+                        : BrandingSettings.defaultSettings();
+
         return Tenant.rehydrate(
                 entity.getId(),
+                entity.getVersion(),
                 entity.getTenantCode(),
                 entity.getName(),
                 entity.getSlug(),
@@ -42,6 +47,7 @@ public interface TenantPersistenceMapper {
                 entity.getTimezone(),
                 entity.getCurrency(),
                 entity.getLocale(),
+                brandingSettings,
                 entity.isActive(),
                 entity.isOnboardingCompleted()
         );

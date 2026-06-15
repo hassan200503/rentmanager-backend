@@ -1,7 +1,8 @@
-/*package com.rentmanager.modules.tenant.isolation;
+package com.rentmanager.modules.tenant.isolation;
 
 import com.rentmanager.RentManagerApplication;
 import com.rentmanager.crossmodule.support.PostgresSpringBridge;
+import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
 import com.rentmanager.modules.tenant.domain.enums.TenantType;
 import com.rentmanager.modules.tenant.domain.model.Tenant;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
@@ -26,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.*;
 )
 @ActiveProfiles("test")
 @Transactional
-class TenantIsolationPenetrationTest {
+class TenantIsolationPenetrationTest  extends AbstractPostgresIntegrationTest {
 
     @Autowired
     private TenantRepository repository;
@@ -88,4 +89,5 @@ class TenantIsolationPenetrationTest {
     }
 }
 
- */
+
+

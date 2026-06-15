@@ -1,34 +1,21 @@
 spring:
-  application:
-    name: rentmanager-backend-test
-
   datasource:
-    url: jdbc:postgresql://localhost:5432/rentmanager_test
+    url: jdbc:postgresql://localhost:5432/rentmanager
+    username: rentmanager
+    password: rentmanager
     driver-class-name: org.postgresql.Driver
-    username: test
-    password: test
-
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none
+    open-in-view: false
     show-sql: true
     properties:
       hibernate:
         format_sql: true
-
   flyway:
     enabled: true
 
-  sql:
-    init:
-      mode: never
-
-  test:
-    database:
-      replace: none
-
 logging:
   level:
-    org.flywaydb: DEBUG
     org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.hibernate.orm.jdbc.bind: TRACE

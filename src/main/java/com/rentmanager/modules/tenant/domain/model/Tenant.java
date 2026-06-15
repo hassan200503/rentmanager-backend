@@ -111,7 +111,9 @@ public class Tenant extends BaseEntity {
   this.status = TenantStatus.PENDING;
   this.subscriptionStatus = SubscriptionStatus.TRIAL;
 
-  this.active = true;
+  this.active = false;
+
+
   this.onboardingCompleted = false;
  }
 
@@ -164,11 +166,7 @@ public class Tenant extends BaseEntity {
  // LIFECYCLE OPERATIONS (FIXED CONSISTENCY)
  // ----------------------------------------------------------------
 
- public boolean isActive() {
-  return this.status == TenantStatus.ACTIVE;
- }
-
- public void activate() {
+    public void activate() {
 
   if (this.status == TenantStatus.DEACTIVATED) {
    throw new IllegalStateException("Deactivated tenant cannot be reactivated");
@@ -271,6 +269,7 @@ public class Tenant extends BaseEntity {
 
  public static Tenant rehydrate(
          UUID id,
+         Long version,
          String tenantCode,
          String name,
          String slug,
@@ -284,12 +283,14 @@ public class Tenant extends BaseEntity {
          String timezone,
          String currency,
          String locale,
+         BrandingSettings brandingSettings,
          boolean active,
          boolean onboardingCompleted
  ) {
   Tenant tenant = new Tenant();
 
   tenant.setId(id);
+  tenant.setVersion(version);
   tenant.tenantCode = tenantCode;
   tenant.name = name;
   tenant.slug = slug;
@@ -306,7 +307,7 @@ public class Tenant extends BaseEntity {
   tenant.timezone = timezone;
   tenant.currency = currency;
   tenant.locale = locale;
-
+  tenant.brandingSettings = brandingSettings;
   tenant.active = active;
   tenant.onboardingCompleted = onboardingCompleted;
 
@@ -404,4 +405,8 @@ public class Tenant extends BaseEntity {
    throw new IllegalArgumentException("Tenant type is required");
   }
  }
+
+
+
+
 }

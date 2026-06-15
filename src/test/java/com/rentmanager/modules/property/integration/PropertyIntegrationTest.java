@@ -1,58 +1,24 @@
-/*package com.rentmanager.modules.property.integration;
+package com.rentmanager.modules.property.integration;
 
-import com.rentmanager.RentManagerApplication;
 import com.rentmanager.modules.property.application.command.service.PropertyCommandService;
 import com.rentmanager.modules.property.application.dto.request.CreatePropertyRequest;
 import com.rentmanager.modules.property.application.dto.request.UpdatePropertyRequest;
 import com.rentmanager.modules.property.domain.enums.PropertyType;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
+import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.*;
+
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.annotation.Transactional;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@Testcontainers
-@SpringBootTest(
-        classes = RentManagerApplication.class,
-        webEnvironment = SpringBootTest.WebEnvironment.MOCK
-)
-@ActiveProfiles("test")
 @Transactional
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-class PropertyIntegrationTest {
-
-    @Container
-    static final PostgreSQLContainer<?> postgres =
-            new PostgreSQLContainer<>("postgres:16-alpine")
-                    .withDatabaseName("rentmanager_test")
-                    .withUsername("test")
-                    .withPassword("test")
-                    .withReuse(false); // important for CI stability
-
-    @DynamicPropertySource
-    static void registerProperties(DynamicPropertyRegistry registry) {
-
-        // IMPORTANT: DO NOT CALL start() manually anywhere
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.datasource.driver-class-name", postgres::getDriverClassName);
-
-        // ensure schema consistency
-        registry.add("spring.flyway.enabled", () -> true);
-        registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
-    }
+class PropertyIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
     private PropertyCommandService service;
@@ -182,4 +148,3 @@ class PropertyIntegrationTest {
     }
 }
 
- */

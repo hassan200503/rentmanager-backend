@@ -8,6 +8,7 @@ import com.rentmanager.modules.tenant.domain.valueobject.BrandingSettings;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.util.UUID;
 
@@ -24,117 +25,69 @@ import java.util.UUID;
 @NoArgsConstructor
 public class TenantEntity extends BaseEntity {
 
+    @Embedded
+    private BrandingSettings brandingSettings = BrandingSettings.defaultSettings();
 
-
+    @Setter
     @Column(name = "tenant_code", nullable = false, unique = true, length = 50)
     private String tenantCode;
 
+    @Setter
     @Column(name = "name", nullable = false, length = 150)
     private String name;
 
+    @Setter
     @Column(name = "slug", nullable = false, unique = true, length = 120)
     private String slug;
 
+    @Setter
     @Column(name = "email", nullable = false, length = 150)
     private String email;
 
+    @Setter
     @Column(name = "phone_number", length = 50)
     private String phoneNumber;
 
+    @Setter
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 50)
     private TenantStatus status;
 
+    @Setter
     @Enumerated(EnumType.STRING)
     @Column(name = "type", nullable = false, length = 50)
     private TenantType type;
 
+    @Setter
     @Enumerated(EnumType.STRING)
     @Column(name = "subscription_status", nullable = false, length = 50)
     private SubscriptionStatus subscriptionStatus;
 
+    @Setter
     @Column(name = "organization_id")
     private UUID organizationId;
 
+    @Setter
     @Column(name = "active_subscription_id")
     private UUID activeSubscriptionId;
 
+    @Setter
     @Column(name = "timezone", length = 100)
     private String timezone;
 
+    @Setter
     @Column(name = "currency", length = 20)
     private String currency;
 
+    @Setter
     @Column(name = "locale", length = 20)
     private String locale;
 
+    @Setter
     @Column(name = "active", nullable = false)
     private boolean active;
 
+    @Setter
     @Column(name = "onboarding_completed", nullable = false)
     private boolean onboardingCompleted;
-
-
-
-
-    public void setTenantCode(String tenantCode) {
-        this.tenantCode = tenantCode;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public void setSlug(String slug) {
-        this.slug = slug;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public void setPhoneNumber(String phoneNumber) {
-        this.phoneNumber = phoneNumber;
-    }
-
-    public void setStatus(TenantStatus status) {
-        this.status = status;
-    }
-
-    public void setType(TenantType type) {
-        this.type = type;
-    }
-
-    public void setSubscriptionStatus(SubscriptionStatus subscriptionStatus) {
-        this.subscriptionStatus = subscriptionStatus;
-    }
-
-    public void setOrganizationId(UUID organizationId) {
-        this.organizationId = organizationId;
-    }
-
-    public void setActiveSubscriptionId(UUID activeSubscriptionId) {
-        this.activeSubscriptionId = activeSubscriptionId;
-    }
-
-
-    public void setTimezone(String timezone) {
-        this.timezone = timezone;
-    }
-
-    public void setCurrency(String currency) {
-        this.currency = currency;
-    }
-
-    public void setLocale(String locale) {
-        this.locale = locale;
-    }
-
-    public void setActive(boolean active) {
-        this.active = active;
-    }
-
-    public void setOnboardingCompleted(boolean onboardingCompleted) {
-        this.onboardingCompleted = onboardingCompleted;
-    }
 }

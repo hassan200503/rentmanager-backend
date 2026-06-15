@@ -33,7 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @Transactional
-class PropertyApiIntegrationTest {
+class PropertyApiTest {
 
     @MockBean
     private PropertyRepository propertyRepository;
