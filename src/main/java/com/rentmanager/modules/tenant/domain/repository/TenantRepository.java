@@ -20,6 +20,8 @@ public interface TenantRepository {
 
  List<Tenant> findAll();
 
+
+ Optional<Tenant> findByClerkOrgId(String clerkOrgId);
  // ------------------------------------------------
  // VALIDATION QUERIES
  // ------------------------------------------------

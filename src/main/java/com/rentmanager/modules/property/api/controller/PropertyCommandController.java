@@ -6,8 +6,10 @@ import com.rentmanager.modules.property.application.command.service.PropertyComm
 import com.rentmanager.modules.property.application.dto.request.CreatePropertyRequest;
 import com.rentmanager.modules.property.application.dto.request.UpdatePropertyRequest;
 import com.rentmanager.modules.property.application.dto.response.PropertyResponse;
+import com.rentmanager.shared.security.principal.AuthenticatedUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -22,12 +24,12 @@ public class PropertyCommandController {
     // ---------------- CREATE ----------------
     @PostMapping
     public ApiResponse<PropertyResponse> createProperty(
-            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @AuthenticationPrincipal AuthenticatedUser user,
             @RequestBody CreatePropertyRequest request
     ) {
         try {
             return ApiResponse.ok(
-                    propertyCommandService.createProperty(tenantId, request)
+                    propertyCommandService.createProperty(requireTenantId(user), request)
             );
         } catch (DataIntegrityViolationException ex) {
             return ApiResponse.fail("Property constraint violation", "CONFLICT");
@@ -39,13 +41,13 @@ public class PropertyCommandController {
     // ---------------- UPDATE ----------------
     @PutMapping("/{propertyId}")
     public ApiResponse<PropertyResponse> updateProperty(
-            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable UUID propertyId,
             @RequestBody UpdatePropertyRequest request
     ) {
         try {
             return ApiResponse.ok(
-                    propertyCommandService.updateProperty(tenantId, propertyId, request)
+                    propertyCommandService.updateProperty(requireTenantId(user), propertyId, request)
             );
         } catch (IllegalArgumentException ex) {
             return ApiResponse.fail(ex.getMessage(), "BAD_REQUEST");
@@ -55,22 +57,30 @@ public class PropertyCommandController {
     // ---------------- ACTIVATE ----------------
     @PostMapping("/{propertyId}/activate")
     public ApiResponse<PropertyResponse> activateProperty(
-            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable UUID propertyId
     ) {
         return ApiResponse.ok(
-                propertyCommandService.activateProperty(tenantId, propertyId)
+                propertyCommandService.activateProperty(requireTenantId(user), propertyId)
         );
     }
 
     // ---------------- ARCHIVE ----------------
     @PostMapping("/{propertyId}/archive")
     public ApiResponse<PropertyResponse> archiveProperty(
-            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable UUID propertyId
     ) {
         return ApiResponse.ok(
-                propertyCommandService.archiveProperty(tenantId, propertyId)
+                propertyCommandService.archiveProperty(requireTenantId(user), propertyId)
         );
+    }
+
+    private UUID requireTenantId(AuthenticatedUser user) {
+        UUID tenantId = user.getTenantId();
+        if (tenantId == null) {
+            throw new IllegalStateException("No tenant associated with this user. Please complete onboarding.");
+        }
+        return tenantId;
     }
 }

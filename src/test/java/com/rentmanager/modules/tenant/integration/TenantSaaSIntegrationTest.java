@@ -74,9 +74,10 @@ class TenantSaaSIntegrationTest extends AbstractPostgresIntegrationTest {
         return repository.findById(saved.getId()).orElseThrow();
     }
 
+
+
     @Test
     void should_create_tenant_in_pending_state() {
-
         Tenant tenant = factory.createTenant(
                 "Alpha Ltd",
                 "alpha",
@@ -84,11 +85,14 @@ class TenantSaaSIntegrationTest extends AbstractPostgresIntegrationTest {
                 TenantType.STANDARD
         );
 
-        Tenant persisted = repository.findById(tenant.getId()).orElseThrow();
+        Tenant persisted = persist(tenant);
 
         assertEquals(TenantStatus.PENDING, persisted.getStatus());
-        assertTrue(persisted.isActive());
+        assertFalse(persisted.isActive()); // PENDING tenants are not active
     }
+
+
+
 
     @Test
     void should_activate_tenant_correctly() {

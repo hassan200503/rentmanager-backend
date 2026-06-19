@@ -101,4 +101,12 @@ public class TenantRepositoryAdapter implements TenantRepository {
                 .map(mapper::toDomain)
                 .toList();
     }
+
+
+
+    @Override
+    public Optional<Tenant> findByClerkOrgId(String clerkOrgId) {
+        return jpaRepository.findByClerkOrgId(clerkOrgId)
+                .map(mapper::toDomain);
+    }
 }

@@ -28,7 +28,7 @@ public class ErrorTrackingService {
 
         ErrorEvent event = ErrorEvent.of(
                 traceId,
-                TenantContext.getTenantId(),
+                TenantContext.getTenantIdOrNull(),
                 TenantContext.getUserId(),
                 module,
                 errorType,

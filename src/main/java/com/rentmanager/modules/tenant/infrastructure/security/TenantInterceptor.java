@@ -1,12 +1,12 @@
 package com.rentmanager.modules.tenant.infrastructure.security;
 
+import com.rentmanager.shared.security.context.TenantContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.util.UUID;
-
 
 @Component
 public class TenantInterceptor implements HandlerInterceptor {
@@ -21,7 +21,7 @@ public class TenantInterceptor implements HandlerInterceptor {
         UUID tenantId = tenantResolver.resolve(request);
 
         if (tenantId != null) {
-            TenantContext.set(tenantId);
+            TenantContext.setTenantId(tenantId);
         }
 
         return true;

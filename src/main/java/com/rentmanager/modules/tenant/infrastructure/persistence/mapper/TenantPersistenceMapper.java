@@ -49,7 +49,8 @@ public interface TenantPersistenceMapper {
                 entity.getLocale(),
                 brandingSettings,
                 entity.isActive(),
-                entity.isOnboardingCompleted()
+                entity.isOnboardingCompleted(),
+                entity.getClerkOrgId()
         );
     }
 }

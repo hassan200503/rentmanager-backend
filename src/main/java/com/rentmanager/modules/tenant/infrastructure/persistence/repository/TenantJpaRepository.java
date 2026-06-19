@@ -12,6 +12,7 @@ public interface TenantJpaRepository extends JpaRepository<TenantEntity, UUID> {
     Optional<TenantEntity> findBySlug(String slug);
 
     Optional<TenantEntity> findByTenantCode(String tenantCode);
+    Optional<TenantEntity> findByClerkOrgId(String clerkOrgId);
 
     List<TenantEntity> findByNameContainingIgnoreCaseOrTenantCodeContainingIgnoreCase(
             String name,

@@ -21,6 +21,10 @@ public final class TenantContext {
         return tenantId;
     }
 
+    public static UUID getTenantIdOrNull() {
+        return CURRENT_TENANT.get();
+    }
+
     public static void setUserId(UUID userId) {
         CURRENT_USER.set(userId);
     }

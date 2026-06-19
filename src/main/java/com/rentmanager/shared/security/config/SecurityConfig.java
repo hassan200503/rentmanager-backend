@@ -1,8 +1,8 @@
 package com.rentmanager.shared.security.config;
 
-import com.rentmanager.shared.security.filter.JwtAuthenticationFilter;
 import com.rentmanager.shared.security.handler.CustomAccessDeniedHandler;
 import com.rentmanager.shared.security.handler.CustomAuthenticationEntryPoint;
+import com.rentmanager.shared.security.jwt.ClerkJwtAuthenticationConverter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -13,7 +13,6 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @RequiredArgsConstructor
@@ -21,9 +20,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableConfigurationProperties(SecurityProperties.class)
 public class SecurityConfig {
 
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final CustomAccessDeniedHandler accessDeniedHandler;
     private final CustomAuthenticationEntryPoint authenticationEntryPoint;
+    private final ClerkJwtAuthenticationConverter clerkJwtAuthenticationConverter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -54,11 +53,6 @@ public class SecurityConfig {
                         .authenticationEntryPoint(authenticationEntryPoint)     // 401
                 )
 
-
-
-                .exceptionHandling(ex -> ex
-                        .accessDeniedHandler(accessDeniedHandler)
-                )
                 // =====================================================
                 // Authorization Rules
                 // =====================================================
@@ -72,28 +66,19 @@ public class SecurityConfig {
                                 "/swagger-ui.html"
                         ).permitAll()
 
-                        // Public auth endpoints
-                        .requestMatchers(HttpMethod.POST,
-                                "/api/v1/auth/login",
-                                "/api/v1/auth/refresh-token",
-                                "/api/v1/auth/forgot-password",
-                                "/api/v1/auth/reset-password"
-                        ).permitAll()
-
                         // Everything else secured
                         .anyRequest().authenticated()
                 )
 
                 // =====================================================
-                // JWT Filter (must be BEFORE UsernamePasswordAuthenticationFilter)
+                // OAuth2 Resource Server (Clerk JWT verification via JWKS)
                 // =====================================================
-                .addFilterBefore(
-                        jwtAuthenticationFilter,
-                        UsernamePasswordAuthenticationFilter.class
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt
+                                .jwtAuthenticationConverter(clerkJwtAuthenticationConverter)
+                        )
                 );
 
         return http.build();
     }
 }
-
-

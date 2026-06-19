@@ -67,37 +67,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 authenticated = true;
             }
 
-
-            // =========================================================
-            // FIXED FALLBACK (ONLY IF NOT AUTHENTICATED)
-            // =========================================================
-
-
-            if (!authenticated) {
-
-                String tenantHeader = request.getHeader("X-Tenant-Id");
-
-                if (StringUtils.hasText(tenantHeader)) {
-
-                    UUID tenantId = UUID.fromString(tenantHeader);
-
-                    AuthenticatedUser user = new AuthenticatedUser(
-                            null,
-                            tenantId,
-                            "test@system.local",
-                            "N/A",
-                            true,
-                            Set.of()
-                    );
-
-                    securityContextService.setAuthentication(user);
-
-                    // 🔥 ONLY IF YOU STILL USE TenantContext elsewhere
-                    TenantContext.setTenantId(tenantId);
-                }
-            }
-
-
             filterChain.doFilter(request, response);
 
         } finally {

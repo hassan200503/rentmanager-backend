@@ -55,6 +55,9 @@ public class Tenant extends BaseEntity {
  @Column(name = "organization_id")
  private UUID organizationId;
 
+ @Getter
+ private String clerkOrgId;
+
  @Column(name = "active_subscription_id")
  private UUID activeSubscriptionId;
 
@@ -285,7 +288,8 @@ public class Tenant extends BaseEntity {
          String locale,
          BrandingSettings brandingSettings,
          boolean active,
-         boolean onboardingCompleted
+         boolean onboardingCompleted,
+         String clerkOrgId
  ) {
   Tenant tenant = new Tenant();
 
@@ -310,7 +314,7 @@ public class Tenant extends BaseEntity {
   tenant.brandingSettings = brandingSettings;
   tenant.active = active;
   tenant.onboardingCompleted = onboardingCompleted;
-
+  tenant.clerkOrgId = clerkOrgId;
   return tenant;
  }
 
@@ -406,6 +410,12 @@ public class Tenant extends BaseEntity {
   }
  }
 
+ public void assignClerkOrgId(String clerkOrgId) {
+  if (clerkOrgId == null || clerkOrgId.isBlank()) {
+   throw new IllegalArgumentException("Clerk organization ID cannot be null or blank");
+  }
+  this.clerkOrgId = clerkOrgId;
+ }
 
 
 

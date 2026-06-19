@@ -67,6 +67,12 @@ public class TenantEntity extends BaseEntity {
     @Column(name = "organization_id")
     private UUID organizationId;
 
+
+    @Setter
+    @Column(unique = true, length = 255)
+    private String clerkOrgId;
+
+
     @Setter
     @Column(name = "active_subscription_id")
     private UUID activeSubscriptionId;

@@ -63,6 +63,7 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
     }
 
     // ---------------- UPDATE ----------------
+// ---------------- UPDATE ----------------
     @Override
     public PropertyResponse updateProperty(UUID tenantId,
                                            UUID propertyId,
@@ -75,21 +76,10 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
         property.updateDetails(request.getName(), request.getDescription());
 
-        /*
-         * FIX (critical SaaS persistence safety):
-         * Ensure Hibernate is working with a managed entity state.
-         * Prevent detached entity version-null crashes in edge cases.
-         */
-        Property managed = propertyRepository.findByIdAndTenantId(propertyId, tenantId)
-                .orElseThrow(() -> new IllegalArgumentException("Property not found"));
-
-        managed.updateDetails(request.getName(), request.getDescription());
-
-        Property saved = propertyRepository.save(managed);
+        Property saved = propertyRepository.save(property);
 
         return propertyMapper.toResponse(saved);
     }
-
     // ---------------- ARCHIVE ----------------
     @Override
     public PropertyResponse archiveProperty(UUID tenantId,
