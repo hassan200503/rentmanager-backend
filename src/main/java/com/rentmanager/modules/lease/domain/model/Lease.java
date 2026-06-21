@@ -86,11 +86,6 @@ public class Lease extends AggregateRoot {
     protected Lease() {
     }
 
-    // =========================================================
-    // FIXED FACTORY (EVENT-COMPATIBLE)
-    // =========================================================
-
-
     public static Lease create(
             UUID tenantId,
             UUID propertyId,
@@ -109,11 +104,7 @@ public class Lease extends AggregateRoot {
 
     ) {
 
-
-
         Lease lease = new Lease();
-
-
 
         if (tenantId == null)
             throw new LeaseStateException(
@@ -163,9 +154,6 @@ public class Lease extends AggregateRoot {
                     ErrorCode.LEASE_INVALID_DATE_RANGE
             );
 
-// continue creation
-
-
         lease.setId(UUID.randomUUID());
         lease.assignTenant(tenantId);
 
@@ -188,7 +176,6 @@ public class Lease extends AggregateRoot {
 
         lease.status = LeaseStatus.DRAFT;
 
-        // FIXED EVENT (SAFE CONSTRUCTOR USAGE)
         lease.registerEvent(
                 new LeaseCreatedEvent(
                         tenantId,
@@ -204,10 +191,6 @@ public class Lease extends AggregateRoot {
 
         return lease;
     }
-
-    // =========================================================
-    // BUSINESS METHODS (UNCHANGED BUT SAFE)
-    // =========================================================
 
     public void approve() {
 
@@ -231,13 +214,26 @@ public class Lease extends AggregateRoot {
         );
     }
 
-    public void activate() {
-
-
+    public void markAwaitingDeposit() {
         if (status != LeaseStatus.PENDING_APPROVAL) {
             throw new LeaseStateException(
-                    "Only pending approval leases can be activated",
-                    ErrorCode.LEASE_ACTIVATION_ONLY_PENDING_APPROVAL_ALLOWED
+                    "Only pending-approval leases can move to awaiting deposit",
+                    ErrorCode.LEASE_AWAITING_DEPOSIT_ONLY_PENDING_ALLOWED
+            );
+        }
+        status = LeaseStatus.AWAITING_DEPOSIT;
+
+        registerEvent(new LeaseAwaitingDepositEvent(
+                getTenantId(), getId(), "SYSTEM", propertyId, unitId, tenantProfileId
+        ));
+    }
+
+    public void activate() {
+
+        if (status != LeaseStatus.AWAITING_DEPOSIT) {
+            throw new LeaseStateException(
+                    "Only leases awaiting deposit can be activated",
+                    ErrorCode.LEASE_ACTIVATION_ONLY_AWAITING_DEPOSIT_ALLOWED
             );
         }
         status = LeaseStatus.ACTIVE;
@@ -255,11 +251,6 @@ public class Lease extends AggregateRoot {
         );
     }
 
-
-
-
-
-    // ===================== EXISTING METHODS KEPT AS-IS =====================
     public void reject(String reason) {
 
         if (status != LeaseStatus.DRAFT && status != LeaseStatus.PENDING_APPROVAL) {
@@ -273,9 +264,6 @@ public class Lease extends AggregateRoot {
         this.terminatedAt = LocalDateTime.now();
         this.terminationReason = reason;
     }
-
-
-
 
     public void terminate(TerminationType type, String reason, String actor, UUID tenantId) {
         if (status != LeaseStatus.ACTIVE) {
@@ -313,7 +301,6 @@ public class Lease extends AggregateRoot {
             );
         }
 
-
         this.status = LeaseStatus.TERMINATED;
         this.terminatedAt = LocalDateTime.now();
         this.terminationType = type;
@@ -321,7 +308,7 @@ public class Lease extends AggregateRoot {
 
         registerEvent(new LeaseTerminatedEvent(
                 tenantId,
-                getId(),                 // aggregateId
+                getId(),
                 actor,
                 this.propertyId,
                 this.unitId,
@@ -330,10 +317,6 @@ public class Lease extends AggregateRoot {
                 reason
         ));
     }
-
-
-
-
 
     public void cancel() {
 
@@ -347,7 +330,6 @@ public class Lease extends AggregateRoot {
         this.terminatedAt = LocalDateTime.now();
     }
 
-
     public void expire() {
         if (status != LeaseStatus.ACTIVE) {
             throw new LeaseStateException(
@@ -358,8 +340,6 @@ public class Lease extends AggregateRoot {
         this.status = LeaseStatus.EXPIRED;
         this.expiredAt = LocalDateTime.now();
     }
-
-
 
     public void renew(
             LocalDate newStart,
@@ -409,8 +389,6 @@ public class Lease extends AggregateRoot {
         this.status = LeaseStatus.RENEWED;
         this.renewedAt = LocalDateTime.now();
 
-        // ✅ EXACT MATCH TO EVENT CONSTRUCTOR
-
         registerEvent(new LeaseRenewedEvent(
                 tenantId,
                 getId(),
@@ -419,8 +397,6 @@ public class Lease extends AggregateRoot {
                 newEnd
         ));
     }
-
-
 
     public String getLeaseNumber() {
         return leaseNumber;
@@ -438,7 +414,6 @@ public class Lease extends AggregateRoot {
         return tenantProfileId;
     }
 
-
     public LeaseType getLeaseType() {
         return leaseType;
     }
@@ -447,7 +422,6 @@ public class Lease extends AggregateRoot {
         return billingCycle;
     }
 
-
     public LocalDate getStartDate() {
         return startDate;
     }
@@ -455,7 +429,6 @@ public class Lease extends AggregateRoot {
     public LocalDate getEndDate() {
         return endDate;
     }
-
 
     public BigDecimal getRentAmount() {
         return monthlyRent;
@@ -485,7 +458,6 @@ public class Lease extends AggregateRoot {
         return this.status == LeaseStatus.ACTIVE;
     }
 
-
     public boolean isExpired() {
         return this.status == LeaseStatus.EXPIRED;
     }
@@ -502,9 +474,6 @@ public class Lease extends AggregateRoot {
         this.status = status;
     }
 
-
-
-
     public void updateContractTerms(
             LocalDate startDate,
             LocalDate endDate,
@@ -515,7 +484,6 @@ public class Lease extends AggregateRoot {
             boolean autoRenew
     ) {
 
-        // 1. Guard rules (VERY important in SaaS leasing)
         if (status.isTerminated() || status.isCancelled()) {
             throw new LeaseStateException(
                     "Cannot update a closed lease",
@@ -534,7 +502,6 @@ public class Lease extends AggregateRoot {
         validateAmount(securityDeposit);
         validateAmount(lateFeeAmount);
 
-        // 2. Apply updates safely
         this.startDate = startDate;
         this.endDate = endDate;
         this.monthlyRent = rentAmount;
@@ -543,8 +510,6 @@ public class Lease extends AggregateRoot {
         this.gracePeriodDays = gracePeriodDays;
         this.autoRenew = autoRenew;
     }
-
-
 
     private void validateAmount(java.math.BigDecimal amount) {
         if (amount == null) {
@@ -560,8 +525,7 @@ public class Lease extends AggregateRoot {
                     ErrorCode.LEASE_AMOUNT_MUST_BE_NON_NEGATIVE
             );
         }
-        }
-
+    }
 
     public static Lease restore(
             UUID id,
@@ -596,7 +560,4 @@ public class Lease extends AggregateRoot {
 
         return lease;
     }
-
-
 }
-    // getters unchanged...

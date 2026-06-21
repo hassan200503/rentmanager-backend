@@ -1,7 +1,6 @@
 
 package com.rentmanager.modules.tenant.integration;
 
-import com.rentmanager.RentManagerApplication;
 import com.rentmanager.crossmodule.support.PostgresSpringBridge;
 import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
 import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;
@@ -20,19 +19,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.transaction.BeforeTransaction;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest(
-        classes = {
-                RentManagerApplication.class,
-                PostgresSpringBridge.class,
-                TenantSaaSIntegrationTest.TestConfig.class
-        },
-        webEnvironment = SpringBootTest.WebEnvironment.MOCK
-)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+@ContextConfiguration(initializers = PostgresSpringBridge.class)
 @ActiveProfiles("test")
 @Transactional
 class TenantSaaSIntegrationTest extends AbstractPostgresIntegrationTest {

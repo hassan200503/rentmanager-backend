@@ -4,6 +4,7 @@ import com.rentmanager.modules.tenant.domain.model.Tenant;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import com.rentmanager.modules.user.domain.model.User;
 import com.rentmanager.modules.user.domain.repository.UserRepository;
+import com.rentmanager.shared.security.context.TenantContext;
 import com.rentmanager.shared.security.principal.AuthenticatedUser;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
@@ -57,6 +58,9 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
                 authorities
         );
 
+
+        TenantContext.setTenantId(resolvedTenantId);
+        TenantContext.setUserId(user.getId());
         return new ClerkAuthenticationToken(authenticatedUser, jwt, authorities);
     }
 

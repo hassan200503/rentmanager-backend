@@ -2,12 +2,18 @@ package com.rentmanager.modules.lease.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jayway.jsonpath.JsonPath;
+import com.rentmanager.crossmodule.support.PostgresSpringBridge;
+import com.rentmanager.modules.support.MockTenantAuthentication;
+import com.rentmanager.modules.support.TestSecurityConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.annotation.Rollback;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +28,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Rollback
 @SpringBootTest
 @AutoConfigureMockMvc
+@ActiveProfiles("test")
+@ContextConfiguration(initializers = PostgresSpringBridge.class)
+@Import(TestSecurityConfig.class)
 public class LeaseApiTest {
 
     @Autowired private MockMvc mockMvc;
@@ -56,6 +65,7 @@ public class LeaseApiTest {
         """.formatted(System.currentTimeMillis());
 
         MvcResult result = mockMvc.perform(post("/api/v1/leases")
+                        .with(MockTenantAuthentication.asTenant(tenantId))
                         .header(TENANT_HEADER, tenantId.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
@@ -79,6 +89,7 @@ public class LeaseApiTest {
         """.formatted(UUID.randomUUID(), action);
 
         mockMvc.perform(post("/api/v1/leases/%s/action".formatted(leaseId))
+                        .with(MockTenantAuthentication.asTenant(TENANT_A))
                         .header(TENANT_HEADER, TENANT_A.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
@@ -99,6 +110,7 @@ public class LeaseApiTest {
         String leaseId = createLease(TENANT_A);
 
         mockMvc.perform(get("/api/v1/leases/" + leaseId)
+                        .with(MockTenantAuthentication.asTenant(TENANT_B))
                         .header(TENANT_HEADER, TENANT_B.toString()))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.success").value(false));
@@ -113,6 +125,7 @@ public class LeaseApiTest {
         performAction(leaseId, "ACTIVATE");
 
         mockMvc.perform(get("/api/v1/leases/" + leaseId)
+                        .with(MockTenantAuthentication.asTenant(TENANT_A))
                         .header(TENANT_HEADER, TENANT_A.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))

@@ -1,6 +1,5 @@
 package com.rentmanager.modules.unit.integration;
 
-import com.rentmanager.RentManagerApplication;
 import com.rentmanager.crossmodule.support.PostgresSpringBridge;
 import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
 import com.rentmanager.modules.unit.application.command.service.UnitCommandService;
@@ -10,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.ContextConfiguration;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
@@ -18,13 +18,8 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest(
-        classes = {
-                RentManagerApplication.class,
-                PostgresSpringBridge.class
-        },
-        webEnvironment = SpringBootTest.WebEnvironment.MOCK
-)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+@ContextConfiguration(initializers = PostgresSpringBridge.class)
 @ActiveProfiles("test")
 @Transactional
 class UnitPerformanceTest extends AbstractPostgresIntegrationTest {

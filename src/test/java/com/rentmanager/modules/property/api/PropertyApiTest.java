@@ -10,13 +10,19 @@ import com.rentmanager.modules.property.domain.enums.PropertyStatus;
 import com.rentmanager.modules.property.domain.enums.PropertyType;
 import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
+import com.rentmanager.crossmodule.support.PostgresSpringBridge;
+import com.rentmanager.modules.support.MockTenantAuthentication;
+import com.rentmanager.modules.support.TestSecurityConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +39,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @Transactional
+@ActiveProfiles("test")
+@ContextConfiguration(initializers = PostgresSpringBridge.class)
+@Import(TestSecurityConfig.class)
 class PropertyApiTest {
 
     @MockBean
@@ -99,6 +108,7 @@ class PropertyApiTest {
         request.setPropertyType(PropertyType.APARTMENT);
 
         MvcResult result = mockMvc.perform(post("/api/v1/properties")
+                        .with(MockTenantAuthentication.asTenant(tenantId))
                         .header("X-Tenant-Id", tenantId.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -125,6 +135,7 @@ class PropertyApiTest {
         update.setDescription("Updated description");
 
         mockMvc.perform(put("/api/v1/properties/" + id)
+                        .with(MockTenantAuthentication.asTenant(TENANT_A))
                         .header("X-Tenant-Id", TENANT_A.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -139,6 +150,7 @@ class PropertyApiTest {
         String id = createProperty(TENANT_A, "Activate House");
 
         mockMvc.perform(post("/api/v1/properties/" + id + "/activate")
+                        .with(MockTenantAuthentication.asTenant(TENANT_A))
                         .header("X-Tenant-Id", TENANT_A.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
@@ -150,6 +162,7 @@ class PropertyApiTest {
         String id = createProperty(TENANT_A, "Archive House");
 
         mockMvc.perform(post("/api/v1/properties/" + id + "/archive")
+                        .with(MockTenantAuthentication.asTenant(TENANT_A))
                         .header("X-Tenant-Id", TENANT_A.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
@@ -161,6 +174,7 @@ class PropertyApiTest {
         String propertyId = createProperty(TENANT_A, "Tenant A Property");
 
         mockMvc.perform(get("/api/v1/properties/" + propertyId)
+                        .with(MockTenantAuthentication.asTenant(TENANT_B))
                         .header("X-Tenant-Id", TENANT_B.toString()))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.success").value(false));
@@ -177,6 +191,7 @@ class PropertyApiTest {
         duplicate.setPropertyType(PropertyType.VILLA);
 
         mockMvc.perform(post("/api/v1/properties")
+                        .with(MockTenantAuthentication.asTenant(TENANT_A))
                         .header("X-Tenant-Id", TENANT_A.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(duplicate)))
@@ -196,12 +211,14 @@ class PropertyApiTest {
         t2.setPropertyType(PropertyType.APARTMENT);
 
         mockMvc.perform(post("/api/v1/properties")
+                        .with(MockTenantAuthentication.asTenant(TENANT_A))
                         .header("X-Tenant-Id", TENANT_A.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(t1)))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/v1/properties")
+                        .with(MockTenantAuthentication.asTenant(TENANT_B))
                         .header("X-Tenant-Id", TENANT_B.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(t2)))
@@ -214,10 +231,12 @@ class PropertyApiTest {
         String id = createProperty(TENANT_A, "Lifecycle Property");
 
         mockMvc.perform(post("/api/v1/properties/" + id + "/activate")
+                        .with(MockTenantAuthentication.asTenant(TENANT_A))
                         .header("X-Tenant-Id", TENANT_A.toString()))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/v1/properties/" + id + "/archive")
+                        .with(MockTenantAuthentication.asTenant(TENANT_A))
                         .header("X-Tenant-Id", TENANT_A.toString()))
                 .andExpect(status().isOk());
     }

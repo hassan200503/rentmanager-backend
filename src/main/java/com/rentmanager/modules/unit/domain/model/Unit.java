@@ -185,4 +185,18 @@ public class Unit extends AggregateRoot {
     public String getStatusAsString() {
         return this.status != null ? this.status.name() : null;
     }
+
+
+    public void markReserved(String correlationId) {
+        if (this.occupancyStatus == UnitOccupancyStatus.RESERVED) return;
+
+        UnitOccupancyStatus previous = this.occupancyStatus;
+        this.occupancyStatus = UnitOccupancyStatus.RESERVED;
+
+        registerEvent(new UnitOccupancyChangedEvent(
+                tenantId, getId(), correlationId, getId(), previous, this.occupancyStatus
+        ));
+    }
+
+
 }

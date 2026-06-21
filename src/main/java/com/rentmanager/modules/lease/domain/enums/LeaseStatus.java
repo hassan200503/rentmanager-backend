@@ -6,6 +6,7 @@ public enum LeaseStatus {
 
     PENDING_APPROVAL,
 
+    AWAITING_DEPOSIT,
     ACTIVE,
 
     EXPIRED,

@@ -10,6 +10,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @Getter
@@ -47,6 +48,9 @@ public class Tenant extends BaseEntity {
  @Enumerated(EnumType.STRING)
  @Column(name = "type", nullable = false, length = 50)
  private TenantType type;
+
+ @Column(name = "commission_rate", nullable = false, precision = 5, scale = 4)
+ private BigDecimal commissionRate;
 
  @Enumerated(EnumType.STRING)
  @Column(name = "subscription_status", nullable = false, length = 50)
@@ -116,8 +120,9 @@ public class Tenant extends BaseEntity {
 
   this.active = false;
 
-
   this.onboardingCompleted = false;
+
+  this.commissionRate = new BigDecimal("0.0500"); // 5% default
  }
 
  // ----------------------------------------------------------------
@@ -169,7 +174,7 @@ public class Tenant extends BaseEntity {
  // LIFECYCLE OPERATIONS (FIXED CONSISTENCY)
  // ----------------------------------------------------------------
 
-    public void activate() {
+ public void activate() {
 
   if (this.status == TenantStatus.DEACTIVATED) {
    throw new IllegalStateException("Deactivated tenant cannot be reactivated");
@@ -289,7 +294,8 @@ public class Tenant extends BaseEntity {
          BrandingSettings brandingSettings,
          boolean active,
          boolean onboardingCompleted,
-         String clerkOrgId
+         String clerkOrgId,
+         BigDecimal commissionRate
  ) {
   Tenant tenant = new Tenant();
 
@@ -315,6 +321,7 @@ public class Tenant extends BaseEntity {
   tenant.active = active;
   tenant.onboardingCompleted = onboardingCompleted;
   tenant.clerkOrgId = clerkOrgId;
+  tenant.commissionRate = commissionRate;
   return tenant;
  }
 
@@ -417,6 +424,12 @@ public class Tenant extends BaseEntity {
   this.clerkOrgId = clerkOrgId;
  }
 
-
-
+ public void updateCommissionRate(BigDecimal commissionRate) {
+  if (commissionRate == null
+          || commissionRate.compareTo(BigDecimal.ZERO) < 0
+          || commissionRate.compareTo(BigDecimal.ONE) > 0) {
+   throw new IllegalArgumentException("Commission rate must be between 0 and 1");
+  }
+  this.commissionRate = commissionRate;
+ }
 }

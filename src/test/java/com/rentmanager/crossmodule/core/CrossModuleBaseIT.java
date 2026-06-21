@@ -3,13 +3,16 @@ package com.rentmanager.crossmodule.core;
 import com.rentmanager.crossmodule.config.CrossModuleTestConfig;
 import com.rentmanager.crossmodule.support.DatabaseCleaner;
 import com.rentmanager.crossmodule.support.EventCapture;
+import com.rentmanager.crossmodule.support.PostgresSpringBridge;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ContextConfiguration;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 
 @SpringBootTest
 @Import(CrossModuleTestConfig.class)
+@ContextConfiguration(initializers = PostgresSpringBridge.class)
 @Transactional
 public abstract class CrossModuleBaseIT {
 

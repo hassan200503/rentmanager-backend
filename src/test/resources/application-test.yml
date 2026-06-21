@@ -1,21 +1,29 @@
 spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:0/jwks  # disabled in tests — TestSecurityConfig takes over
+
   datasource:
-    url: jdbc:postgresql://localhost:5432/rentmanager
-    username: rentmanager
-    password: rentmanager
+    url: jdbc:postgresql://localhost:5432/rentmanager_test
+    username: test
+    password: test
     driver-class-name: org.postgresql.Driver
+
   jpa:
     hibernate:
       ddl-auto: none
     open-in-view: false
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
+
   flyway:
     enabled: true
 
 logging:
   level:
-    org.hibernate.SQL: DEBUG
-    org.hibernate.orm.jdbc.bind: TRACE
+    root: WARN
+    org.hibernate.SQL: WARN

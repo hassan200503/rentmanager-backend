@@ -7,13 +7,16 @@ import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.lease.infrastructure.persistence.entity.LeaseEntity;
 import com.rentmanager.modules.lease.infrastructure.persistence.mapper.LeaseMapper;
 import com.rentmanager.modules.lease.infrastructure.persistence.repository.JpaLeaseRepository;
+import com.rentmanager.shared.events.DomainEventPublisher;
 import com.rentmanager.shared.exception.ErrorCode;
 import com.rentmanager.shared.exception.ResourceNotFoundException;
-import org.springframework.stereotype.Component;
 import com.rentmanager.shared.security.context.TenantContext;
+import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.UUID;
 
+import com.rentmanager.domain.base.DomainEvent;
 
 @Component
 public class LeaseActionHandler {
@@ -22,20 +25,22 @@ public class LeaseActionHandler {
     private final LeaseActionValidator validator;
     private final JpaLeaseRepository jpaLeaseRepository;
     private final LeaseMapper leaseMapper;
+    private final DomainEventPublisher eventPublisher;
 
     public LeaseActionHandler(
             LeaseRepository leaseRepository,
             LeaseActionValidator validator,
             JpaLeaseRepository jpaLeaseRepository,
-            LeaseMapper leaseMapper
+            LeaseMapper leaseMapper,
+            DomainEventPublisher eventPublisher
     ) {
         this.leaseRepository = leaseRepository;
         this.validator = validator;
         this.jpaLeaseRepository = jpaLeaseRepository;
         this.leaseMapper = leaseMapper;
+        this.eventPublisher = eventPublisher;
     }
 
-    // ✅ FIXED: leaseId added
     public void handle(UUID leaseId, LeaseActionRequest request) {
 
         // 1. Validate request
@@ -44,7 +49,7 @@ public class LeaseActionHandler {
         // 2. Tenant context
         UUID tenantId = TenantContext.getTenantId();
 
-        // 3. Load aggregate (FIXED)
+        // 3. Load aggregate
         Lease lease = leaseRepository.findByIdAndTenantId(leaseId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Lease not found: " + leaseId,
@@ -77,8 +82,15 @@ public class LeaseActionHandler {
             );
         }
 
-        // 5. Persist changes
+        // 5. Pull events BEFORE persisting — they live on this in-memory aggregate,
+        //    not on whatever the mapper reconstructs from the saved entity.
+        List<DomainEvent> events = lease.pullDomainEvents();
+
+        // 6. Persist changes
         save(lease);
+
+        // 7. Publish
+        eventPublisher.publishAll(events);
     }
 
     public Lease save(Lease lease) {

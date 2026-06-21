@@ -13,6 +13,7 @@ import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.modules.property.domain.valueobject.Address;
 import com.rentmanager.modules.property.domain.valueobject.GeoLocation;
 import com.rentmanager.modules.property.domain.valueobject.PropertyDimensions;
+import com.rentmanager.shared.events.DomainEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,6 +36,9 @@ class PropertyLifecycleTest {
 
     @Mock
     private PropertyMapper mapper;
+
+    @Mock
+    private DomainEventPublisher eventPublisher;
 
     @Mock
     private CreatePropertyValidator createPropertyValidator;
@@ -62,6 +66,7 @@ class PropertyLifecycleTest {
         service = new PropertyCommandServiceImpl(
                 repository,
                 mapper,
+                eventPublisher,
                 createPropertyValidator,
                 updatePropertyValidator,
                 activatePropertyValidator,
@@ -180,7 +185,3 @@ class PropertyLifecycleTest {
         assertTrue(property.isArchived());
     }
 }
-
-
-
-

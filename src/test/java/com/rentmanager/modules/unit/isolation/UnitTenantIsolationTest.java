@@ -1,6 +1,5 @@
 package com.rentmanager.modules.unit.isolation;
 
-import com.rentmanager.RentManagerApplication;
 import com.rentmanager.crossmodule.support.PostgresSpringBridge;
 import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
@@ -9,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.ContextConfiguration;
 
 import java.util.UUID;
 
@@ -16,12 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @ActiveProfiles("test")
-@SpringBootTest(
-        classes = {
-                RentManagerApplication.class,
-                PostgresSpringBridge.class
-        }
-)
+@SpringBootTest
+@ContextConfiguration(initializers = PostgresSpringBridge.class)
 class UnitTenantIsolationTest extends AbstractPostgresIntegrationTest {
 
     @Autowired

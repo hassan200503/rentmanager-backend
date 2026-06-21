@@ -7,6 +7,7 @@ import com.rentmanager.modules.property.application.mapper.PropertyMapper;
 import com.rentmanager.modules.property.application.command.validator.*;
 import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
+import com.rentmanager.shared.events.DomainEventPublisher;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -20,6 +21,7 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
     private final PropertyRepository propertyRepository;
     private final PropertyMapper propertyMapper;
+    private final DomainEventPublisher eventPublisher;
 
     private final CreatePropertyValidator createPropertyValidator;
     private final UpdatePropertyValidator updatePropertyValidator;
@@ -49,6 +51,8 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
         Property saved = propertyRepository.save(property);
 
+        eventPublisher.publishAll(saved.pullDomainEvents());
+
         return propertyMapper.toResponse(saved);
     }
 
@@ -63,7 +67,6 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
     }
 
     // ---------------- UPDATE ----------------
-// ---------------- UPDATE ----------------
     @Override
     public PropertyResponse updateProperty(UUID tenantId,
                                            UUID propertyId,
@@ -80,6 +83,7 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
         return propertyMapper.toResponse(saved);
     }
+
     // ---------------- ARCHIVE ----------------
     @Override
     public PropertyResponse archiveProperty(UUID tenantId,
@@ -91,6 +95,8 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
         property.archive(generateCorrelationId());
 
         Property saved = propertyRepository.save(property);
+
+        eventPublisher.publishAll(saved.pullDomainEvents());
 
         return propertyMapper.toResponse(saved);
     }
@@ -106,6 +112,8 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
         Property saved = propertyRepository.save(property);
 
+        eventPublisher.publishAll(saved.pullDomainEvents());
+
         return propertyMapper.toResponse(saved);
     }
 
@@ -120,6 +128,8 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
         Property saved = propertyRepository.save(property);
 
+        eventPublisher.publishAll(saved.pullDomainEvents());
+
         return propertyMapper.toResponse(saved);
     }
 
@@ -133,6 +143,8 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
         property.markVacant(generateCorrelationId());
 
         Property saved = propertyRepository.save(property);
+
+        eventPublisher.publishAll(saved.pullDomainEvents());
 
         return propertyMapper.toResponse(saved);
     }

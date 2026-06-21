@@ -6,6 +6,7 @@ import com.rentmanager.modules.property.application.dto.request.UpdatePropertyRe
 import com.rentmanager.modules.property.application.mapper.PropertyMapper;
 import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
+import com.rentmanager.shared.events.DomainEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +31,7 @@ class PropertyConcurrencyLifecycleTest {
 
     @Mock private PropertyRepository repository;
     @Mock private PropertyMapper mapper;
+    @Mock private DomainEventPublisher eventPublisher;
 
     @Mock private CreatePropertyValidator createPropertyValidator;
     @Mock private UpdatePropertyValidator updatePropertyValidator;
@@ -48,6 +50,7 @@ class PropertyConcurrencyLifecycleTest {
         service = new PropertyCommandServiceImpl(
                 repository,
                 mapper,
+                eventPublisher,
                 createPropertyValidator,
                 updatePropertyValidator,
                 activatePropertyValidator,

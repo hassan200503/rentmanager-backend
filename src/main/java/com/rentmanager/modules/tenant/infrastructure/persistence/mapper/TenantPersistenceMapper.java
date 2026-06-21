@@ -50,7 +50,8 @@ public interface TenantPersistenceMapper {
                 brandingSettings,
                 entity.isActive(),
                 entity.isOnboardingCompleted(),
-                entity.getClerkOrgId()
+                entity.getClerkOrgId(),
+                entity.getCommissionRate()
         );
     }
 }

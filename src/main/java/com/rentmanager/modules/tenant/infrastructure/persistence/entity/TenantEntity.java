@@ -10,6 +10,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @Getter
@@ -96,4 +97,12 @@ public class TenantEntity extends BaseEntity {
     @Setter
     @Column(name = "onboarding_completed", nullable = false)
     private boolean onboardingCompleted;
+
+
+
+
+    @Setter
+    @Column(name = "commission_rate", nullable = false, precision = 5, scale = 4)
+    private BigDecimal commissionRate;
+
 }

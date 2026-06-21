@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
 public enum LeaseActionType {
 
     APPROVE,
+    AWAITING_DEPOSIT,
     ACTIVATE,
     TERMINATE,
     REJECT,
@@ -22,7 +23,7 @@ public enum LeaseActionType {
         } catch (Exception ex) {
             throw new IllegalArgumentException(
                     "Invalid LeaseActionType: " + value +
-                            ". Allowed: APPROVE, ACTIVATE, TERMINATE, REJECT, RENEW"
+                            ". Allowed: APPROVE, AWAITING_DEPOSIT, ACTIVATE, TERMINATE, REJECT, RENEW"
             );
         }
     }

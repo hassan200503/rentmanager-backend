@@ -8,6 +8,7 @@ import com.rentmanager.modules.property.application.dto.response.PropertyRespons
 import com.rentmanager.modules.property.application.mapper.PropertyMapper;
 import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
+import com.rentmanager.shared.events.DomainEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,6 +34,9 @@ class PropertyIsolationTest {
     private PropertyMapper mapper;
 
     @Mock
+    private DomainEventPublisher eventPublisher;
+
+    @Mock
     private CreatePropertyValidator createPropertyValidator;
 
     @Mock
@@ -56,6 +60,7 @@ class PropertyIsolationTest {
         service = new PropertyCommandServiceImpl(
                 repository,
                 mapper,
+                eventPublisher,
                 createPropertyValidator,
                 updatePropertyValidator,
                 activatePropertyValidator,
