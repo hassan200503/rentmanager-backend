@@ -182,4 +182,12 @@ public class LeaseWorkflowEngine {
                 newEnd
         ));
     }
+
+
+
+
+    public void markAwaitingDeposit(Lease lease) {
+
+        lease.markAwaitingDeposit();
+    }
 }

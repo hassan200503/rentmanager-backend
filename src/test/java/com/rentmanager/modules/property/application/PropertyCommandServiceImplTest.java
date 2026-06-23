@@ -6,23 +6,26 @@ import com.rentmanager.modules.property.application.dto.request.CreatePropertyRe
 import com.rentmanager.modules.property.application.dto.request.UpdatePropertyRequest;
 import com.rentmanager.modules.property.application.dto.response.PropertyResponse;
 import com.rentmanager.modules.property.application.mapper.PropertyMapper;
+import com.rentmanager.modules.property.domain.enums.PropertyType;
 import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
-import com.rentmanager.modules.property.domain.enums.PropertyType;
 import com.rentmanager.modules.property.domain.valueobject.Address;
 import com.rentmanager.modules.property.domain.valueobject.GeoLocation;
 import com.rentmanager.modules.property.domain.valueobject.PropertyDimensions;
+import com.rentmanager.shared.events.DomainEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Collections;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.anyList;
 
 @ExtendWith(MockitoExtension.class)
 class PropertyCommandServiceImplTest {
@@ -35,6 +38,9 @@ class PropertyCommandServiceImplTest {
 
     @Mock
     private PropertyMapper propertyMapper;
+
+    @Mock
+    private DomainEventPublisher eventPublisher;
 
     @Mock
     private CreatePropertyValidator createPropertyValidator;
@@ -54,13 +60,6 @@ class PropertyCommandServiceImplTest {
     private final UUID TENANT_ID = UUID.randomUUID();
     private final UUID PROPERTY_ID = UUID.randomUUID();
 
-
-
-
-
-
-
-
     @Test
     void shouldCreateProperty_underTenantScope_andPersistCorrectly() {
 
@@ -79,6 +78,9 @@ class PropertyCommandServiceImplTest {
         when(propertyRepository.save(any(Property.class)))
                 .thenReturn(saved);
 
+        when(saved.pullDomainEvents())
+                .thenReturn(Collections.emptyList());
+
         when(propertyMapper.toResponse(saved))
                 .thenReturn(response);
 
@@ -89,12 +91,9 @@ class PropertyCommandServiceImplTest {
         verify(createPropertyValidator).validate(TENANT_ID, request);
 
         verify(propertyRepository, times(1)).save(any(Property.class));
+        verify(eventPublisher).publishAll(anyList());
         verify(propertyMapper).toResponse(saved);
     }
-
-
-
-
 
     @Test
     void shouldReturnProperty_whenExistsInTenantScope() {
@@ -118,8 +117,6 @@ class PropertyCommandServiceImplTest {
         verify(propertyMapper).toResponse(property);
     }
 
-
-
     @Test
     void shouldThrowException_whenPropertyNotFoundInTenantScope() {
 
@@ -132,9 +129,6 @@ class PropertyCommandServiceImplTest {
         verify(propertyRepository)
                 .findByIdAndTenantId(PROPERTY_ID, TENANT_ID);
     }
-
-
-
 
     @Test
     void shouldUpdateProperty_throughDomainMutationFlow() {
@@ -170,8 +164,6 @@ class PropertyCommandServiceImplTest {
         verify(propertyMapper).toResponse(saved);
     }
 
-
-
     @Test
     void shouldActivateProperty_throughValidatorAndDomainFlow() {
 
@@ -184,6 +176,9 @@ class PropertyCommandServiceImplTest {
 
         when(propertyRepository.save(property))
                 .thenReturn(updated);
+
+        when(updated.pullDomainEvents())
+                .thenReturn(Collections.emptyList());
 
         when(propertyMapper.toResponse(updated))
                 .thenReturn(response);
@@ -198,9 +193,8 @@ class PropertyCommandServiceImplTest {
         verify(property).activate(anyString());
 
         verify(propertyRepository).save(property);
+        verify(eventPublisher).publishAll(anyList());
     }
-
-
 
     @Test
     void shouldArchiveProperty_andPersistStateChange() {
@@ -215,6 +209,9 @@ class PropertyCommandServiceImplTest {
         when(propertyRepository.save(property))
                 .thenReturn(saved);
 
+        when(saved.pullDomainEvents())
+                .thenReturn(Collections.emptyList());
+
         when(propertyMapper.toResponse(saved))
                 .thenReturn(response);
 
@@ -225,8 +222,8 @@ class PropertyCommandServiceImplTest {
         verify(property).archive(anyString());
 
         verify(propertyRepository).save(property);
+        verify(eventPublisher).publishAll(anyList());
     }
-
 
     @Test
     void shouldMarkPropertyFullyOccupied() {
@@ -241,6 +238,9 @@ class PropertyCommandServiceImplTest {
         when(propertyRepository.save(property))
                 .thenReturn(saved);
 
+        when(saved.pullDomainEvents())
+                .thenReturn(Collections.emptyList());
+
         when(propertyMapper.toResponse(saved))
                 .thenReturn(response);
 
@@ -250,8 +250,8 @@ class PropertyCommandServiceImplTest {
 
         verify(property).markFullyOccupied(anyString());
         verify(propertyRepository).save(property);
+        verify(eventPublisher).publishAll(anyList());
     }
-
 
     @Test
     void shouldMarkPropertyVacant() {
@@ -266,6 +266,9 @@ class PropertyCommandServiceImplTest {
         when(propertyRepository.save(property))
                 .thenReturn(saved);
 
+        when(saved.pullDomainEvents())
+                .thenReturn(Collections.emptyList());
+
         when(propertyMapper.toResponse(saved))
                 .thenReturn(response);
 
@@ -275,10 +278,8 @@ class PropertyCommandServiceImplTest {
 
         verify(property).markVacant(anyString());
         verify(propertyRepository).save(property);
+        verify(eventPublisher).publishAll(anyList());
     }
 }
-
-
-
 
 

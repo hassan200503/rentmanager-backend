@@ -43,12 +43,15 @@ public class LeaseApprovalWorkflowTest {
         assertEquals(ErrorCode.LEASE_APPROVAL_ONLY_DRAFT_ALLOWED, ex.getErrorCode());
     }
 
+
+
     @Test
     void shouldNotAllowApprovalAfterActivation() {
 
         Lease lease = createValidLease();
 
         lease.approve();
+        lease.markAwaitingDeposit();
         lease.activate();
 
         LeaseStateException ex = assertThrows(
@@ -58,6 +61,9 @@ public class LeaseApprovalWorkflowTest {
 
         assertEquals(ErrorCode.LEASE_APPROVAL_ONLY_DRAFT_ALLOWED, ex.getErrorCode());
     }
+
+
+
 
     @Test
     void shouldNotAllowApprovalOnTerminatedLease() {

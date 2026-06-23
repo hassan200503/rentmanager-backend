@@ -66,9 +66,11 @@ class LeaseTenantIsolationRepositoryTest {
         Lease activeB = createLease(tenantB, "LS-B1");
 
         activeA.approve();
+        activeA.markAwaitingDeposit();
         activeA.activate();
 
         activeB.approve();
+        activeB.markAwaitingDeposit();
         activeB.activate();
 
         leaseRepository.save(activeA);
@@ -99,9 +101,11 @@ class LeaseTenantIsolationRepositoryTest {
         Lease leaseB = createLease(tenantB, "LS-B1", sharedUnit);
 
         leaseA.approve();
+        leaseA.markAwaitingDeposit();
         leaseA.activate();
 
         leaseB.approve();
+        leaseB.markAwaitingDeposit();
         leaseB.activate();
 
         leaseRepository.save(leaseA);

@@ -75,6 +75,7 @@ class LeaseDomainEventEmissionTest {
         Lease lease = createLease();
 
         lease.approve();
+        lease.markAwaitingDeposit();
         lease.activate();
 
         List<Object> events = extractEvents(lease);
@@ -90,6 +91,7 @@ class LeaseDomainEventEmissionTest {
         Lease lease = createLease();
 
         lease.approve();
+        lease.markAwaitingDeposit();
         lease.activate();
         lease.terminate(
                 TerminationType.TENANT_REQUEST,
@@ -111,6 +113,7 @@ class LeaseDomainEventEmissionTest {
         Lease lease = createLease();
 
         lease.approve();
+        lease.markAwaitingDeposit();
         lease.activate();
         lease.renew(
                 LocalDate.now().plusDays(1),

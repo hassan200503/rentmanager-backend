@@ -64,10 +64,12 @@ class LeaseTenantIsolationServiceTest {
 
         Lease leaseA = createLease(tenantA);
         leaseA.approve();
+        leaseA.markAwaitingDeposit();
         leaseA.activate();
 
         Lease leaseB = createLease(tenantB);
         leaseB.approve();
+        leaseB.markAwaitingDeposit();
         leaseB.activate();
 
         assertNotEquals(leaseA.getTenantId(), leaseB.getTenantId());
@@ -86,6 +88,7 @@ class LeaseTenantIsolationServiceTest {
 
         Lease leaseA = createLease(tenantA);
         leaseA.approve();
+        leaseA.markAwaitingDeposit();
         leaseA.activate();
 
         Lease leaseB = createLease(tenantB);
@@ -117,6 +120,7 @@ class LeaseTenantIsolationServiceTest {
         Lease lease = createLease(tenantId);
 
         lease.approve();
+        lease.markAwaitingDeposit();
         lease.activate();
 
         assertDoesNotThrow(() ->

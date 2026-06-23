@@ -62,6 +62,9 @@ class LeaseFullWorkflowEventTest {
                 lease.getStatus()
         );
 
+
+
+        workflowEngine.markAwaitingDeposit(lease);
         // =====================================================
         // ACTIVATE
         // =====================================================

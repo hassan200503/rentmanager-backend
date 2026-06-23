@@ -271,6 +271,7 @@ class LeaseRepositoryTest {
         );
 
         activeLease.approve();
+        activeLease.markAwaitingDeposit();
         activeLease.activate();
 
         Lease draftLease = createLease();
@@ -293,6 +294,7 @@ class LeaseRepositoryTest {
         );
 
         terminatedLease.approve();
+        terminatedLease.markAwaitingDeposit();
         terminatedLease.activate();
         terminatedLease.terminate(
                 TerminationType.TENANT_REQUEST,

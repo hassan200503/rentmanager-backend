@@ -57,6 +57,7 @@ class LeaseBusinessConstraintTest {
     private Lease createActiveLease() {
         Lease lease = createLease();
         lease.approve();
+        lease.markAwaitingDeposit();
         lease.activate();
         return lease;
     }
@@ -77,6 +78,7 @@ class LeaseBusinessConstraintTest {
         Lease lease = createLease();
 
         lease.approve();
+        lease.markAwaitingDeposit();
         engine.activate(lease);
 
         assertEquals(LeaseStatus.ACTIVE, lease.getStatus());

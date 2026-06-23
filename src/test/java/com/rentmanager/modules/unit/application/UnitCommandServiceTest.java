@@ -6,16 +6,17 @@ import com.rentmanager.modules.unit.application.dto.request.CreateUnitRequest;
 import com.rentmanager.modules.unit.application.dto.request.UpdateUnitRequest;
 import com.rentmanager.modules.unit.application.dto.response.UnitResponse;
 import com.rentmanager.modules.unit.application.mapper.UnitMapper;
-import com.rentmanager.modules.unit.domain.enums.UnitOccupancyStatus;
-import com.rentmanager.modules.unit.domain.enums.UnitStatus;
 import com.rentmanager.modules.unit.domain.model.Unit;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
+import com.rentmanager.shared.events.DomainEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.*;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -33,6 +34,9 @@ class UnitCommandServiceTest {
 
     @Mock
     private UnitMapper unitMapper;
+
+    @Mock
+    private DomainEventPublisher eventPublisher;
 
     @Mock
     private CreateUnitValidator createUnitValidator;
@@ -72,17 +76,18 @@ class UnitCommandServiceTest {
         UnitResponse response = mock(UnitResponse.class);
 
         when(unitRepository.save(any(Unit.class))).thenReturn(unit);
+        when(unit.pullDomainEvents()).thenReturn(Collections.emptyList());
         when(unitMapper.toResponse(unit)).thenReturn(response);
 
         UnitResponse result = service.create(tenantId, request);
 
         verify(createUnitValidator).validate(tenantId, request);
         verify(unitRepository).save(any(Unit.class));
+        verify(eventPublisher).publishAll(anyList());
         verify(unitMapper).toResponse(unit);
 
         assertNotNull(result);
     }
-
 
     // =====================================================
     // ACTIVATE
@@ -97,11 +102,15 @@ class UnitCommandServiceTest {
         Unit unit = mock(Unit.class);
 
         when(activateUnitValidator.validate(tenantId, unitId)).thenReturn(unit);
+        when(unitRepository.save(any(Unit.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(unit.pullDomainEvents()).thenReturn(Collections.emptyList());
 
         service.activate(tenantId, unitId, "corr");
 
         verify(unit).activate(anyString());
         verify(unitRepository).save(unit);
+        verify(eventPublisher).publishAll(anyList());
     }
 
     // =====================================================
@@ -117,11 +126,15 @@ class UnitCommandServiceTest {
         Unit unit = mock(Unit.class);
 
         when(archiveUnitValidator.validate(tenantId, unitId)).thenReturn(unit);
+        when(unitRepository.save(any(Unit.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(unit.pullDomainEvents()).thenReturn(Collections.emptyList());
 
         service.archive(tenantId, unitId);
 
         verify(unit).archive(anyString());
         verify(unitRepository).save(unit);
+        verify(eventPublisher).publishAll(anyList());
     }
 
     // =====================================================
@@ -137,11 +150,15 @@ class UnitCommandServiceTest {
         Unit unit = mock(Unit.class);
 
         when(markOccupiedValidator.validate(tenantId, unitId)).thenReturn(unit);
+        when(unitRepository.save(any(Unit.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(unit.pullDomainEvents()).thenReturn(Collections.emptyList());
 
         service.markOccupied(tenantId, unitId, "corr");
 
         verify(unit).markOccupied(anyString());
         verify(unitRepository).save(unit);
+        verify(eventPublisher).publishAll(anyList());
     }
 
     @Test
@@ -153,11 +170,15 @@ class UnitCommandServiceTest {
         Unit unit = mock(Unit.class);
 
         when(unitMarkVacantValidator.validate(tenantId, unitId)).thenReturn(unit);
+        when(unitRepository.save(any(Unit.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(unit.pullDomainEvents()).thenReturn(Collections.emptyList());
 
         service.markVacant(tenantId, unitId, "corr");
 
         verify(unit).markVacant(anyString());
         verify(unitRepository).save(unit);
+        verify(eventPublisher).publishAll(anyList());
     }
 
     // =====================================================
@@ -173,17 +194,20 @@ class UnitCommandServiceTest {
         Unit unit = mock(Unit.class);
 
         when(activateUnitValidator.validate(tenantId, unitId)).thenReturn(unit);
+        when(unitRepository.save(any(Unit.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(unit.pullDomainEvents()).thenReturn(Collections.emptyList());
 
         service.activate(tenantId, unitId, "");
 
         verify(unit).activate(eq("SYSTEM"));
+        verify(eventPublisher).publishAll(anyList());
     }
-
-
 
     // =====================================================
     // UPDATE
     // =====================================================
+
     @Test
     void should_update_unit() {
 
@@ -210,10 +234,6 @@ class UnitCommandServiceTest {
         verify(updateUnitValidator).validate(tenantId, unitId);
         verifyNoInteractions(unitRepository);
         verifyNoInteractions(unitMapper);
+        verifyNoInteractions(eventPublisher);
     }
-
-
-
-
 }
-

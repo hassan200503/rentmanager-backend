@@ -46,7 +46,7 @@ class LeaseWorkflowEventConsistencyTest {
         );
 
         lease.approve();
-
+        lease.markAwaitingDeposit();
         engine.activate(lease);
 
         verify(publisher, times(1)).publish(any());

@@ -5,9 +5,16 @@ import com.rentmanager.modules.unit.application.dto.response.UnitResponse;
 import com.rentmanager.modules.unit.application.query.service.UnitQueryService;
 import com.rentmanager.shared.error.ErrorTrackingService;
 import com.rentmanager.shared.exception.GlobalExceptionHandler;
+import com.rentmanager.shared.security.filter.JwtAuthenticationFilter;
+import com.rentmanager.shared.security.jwt.ClerkJwtAuthenticationConverter;
+import com.rentmanager.shared.security.jwt.JwtProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
+import org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration;
+import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
 import org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration;
@@ -30,7 +37,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ImportAutoConfiguration(exclude = {
         SecurityAutoConfiguration.class,
         SecurityFilterAutoConfiguration.class,
-        OAuth2ResourceServerAutoConfiguration.class
+        OAuth2ResourceServerAutoConfiguration.class,
+        DataSourceAutoConfiguration.class,
+        DataSourceTransactionManagerAutoConfiguration.class,
+        HibernateJpaAutoConfiguration.class,
+        JpaRepositoriesAutoConfiguration.class
 })
 class UnitApiTest {
 
@@ -42,6 +53,15 @@ class UnitApiTest {
 
     @MockBean
     private ErrorTrackingService errorTrackingService;
+
+    @MockBean
+    private JwtProvider jwtProvider;
+
+    @MockBean
+    private JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    @MockBean
+    private ClerkJwtAuthenticationConverter clerkJwtAuthenticationConverter;
 
     @Test
     void shouldReturnUnitsWithApiResponseWrapper() throws Exception {
@@ -71,4 +91,3 @@ class UnitApiTest {
                 .andExpect(jsonPath("$.data").exists());
     }
 }
- 

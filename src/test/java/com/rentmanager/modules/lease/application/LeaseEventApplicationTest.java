@@ -47,7 +47,8 @@ class LeaseEventApplicationTest {
                 false
         );
 
-        lease.approve();
+        workflowEngine.approve(lease);
+        workflowEngine.markAwaitingDeposit(lease);
 
         workflowEngine.activate(lease);
 
@@ -80,7 +81,8 @@ class LeaseEventApplicationTest {
                 false
         );
 
-        lease.approve();
+        workflowEngine.approve(lease);
+        workflowEngine.markAwaitingDeposit(lease);
         workflowEngine.activate(lease);
 
         workflowEngine.terminate(lease, TerminationType.TENANT_REQUEST, "exit");

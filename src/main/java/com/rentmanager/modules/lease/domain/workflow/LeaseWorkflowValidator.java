@@ -25,8 +25,7 @@ public class LeaseWorkflowValidator {
             throw new IllegalStateException("Invalid rent: must be greater than 0");
         }
 
-        if (lease.getStatus() != LeaseStatus.DRAFT
-                && lease.getStatus() != LeaseStatus.PENDING_APPROVAL) {
+        if (lease.getStatus() != LeaseStatus.AWAITING_DEPOSIT) {
             throw new IllegalStateException("Lease not in activatable state");
         }
     }

@@ -39,6 +39,7 @@ public class LeaseActivationWorkflowTest {
         Lease lease = createValidLease();
 
         lease.approve();
+        lease.markAwaitingDeposit();
         lease.activate();
 
         assertTrue(lease.isActive());
@@ -56,7 +57,7 @@ public class LeaseActivationWorkflowTest {
                 lease::activate
         );
 
-        assertEquals(ErrorCode.LEASE_ACTIVATION_ONLY_PENDING_APPROVAL_ALLOWED, ex.getErrorCode());
+        assertEquals(ErrorCode.LEASE_ACTIVATION_ONLY_AWAITING_DEPOSIT_ALLOWED, ex.getErrorCode());
     }
 
     @Test
@@ -65,6 +66,7 @@ public class LeaseActivationWorkflowTest {
         Lease lease = createValidLease();
 
         lease.approve();
+        lease.markAwaitingDeposit();
         lease.activate();
 
         LeaseStateException ex = assertThrows(
@@ -72,7 +74,7 @@ public class LeaseActivationWorkflowTest {
                 lease::activate
         );
 
-        assertEquals(ErrorCode.LEASE_ACTIVATION_ONLY_PENDING_APPROVAL_ALLOWED, ex.getErrorCode());
+        assertEquals(ErrorCode.LEASE_ACTIVATION_ONLY_AWAITING_DEPOSIT_ALLOWED, ex.getErrorCode());
     }
 
     @Test
@@ -87,6 +89,6 @@ public class LeaseActivationWorkflowTest {
                 lease::activate
         );
 
-        assertEquals(ErrorCode.LEASE_ACTIVATION_ONLY_PENDING_APPROVAL_ALLOWED, ex.getErrorCode());
+        assertEquals(ErrorCode.LEASE_ACTIVATION_ONLY_AWAITING_DEPOSIT_ALLOWED, ex.getErrorCode());
     }
 }
