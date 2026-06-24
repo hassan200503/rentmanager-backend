@@ -1,11 +1,17 @@
 package com.rentmanager.modules.unit.application.mapper;
 
+import com.rentmanager.modules.unit.application.dto.response.PublicUnitResponse;
 import com.rentmanager.modules.unit.application.dto.response.UnitResponse;
 import com.rentmanager.modules.unit.domain.model.Unit;
 import org.springframework.stereotype.Component;
 
 @Component
 public class UnitMapper {
+
+
+
+
+
 
     public UnitResponse toResponse(Unit unit) {
 
@@ -31,4 +37,18 @@ public class UnitMapper {
 
         return response;
     }
+
+
+
+    public PublicUnitResponse toPublicResponse(Unit unit) {
+        PublicUnitResponse dto = new PublicUnitResponse();
+        dto.setId(unit.getId());
+        dto.setPropertyId(unit.getPropertyId());
+        dto.setUnitNumber(unit.getUnitNumber());
+        dto.setDescription(unit.getDescription());
+        dto.setRentAmount(unit.getRentAmount());
+        dto.setOccupancyStatus(unit.getOccupancyStatus().name());
+        return dto;
+    }
+
 }

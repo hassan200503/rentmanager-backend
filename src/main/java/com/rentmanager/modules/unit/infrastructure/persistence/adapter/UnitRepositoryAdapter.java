@@ -1,5 +1,6 @@
 package com.rentmanager.modules.unit.infrastructure.persistence.adapter;
 
+import com.rentmanager.modules.unit.domain.enums.UnitOccupancyStatus;
 import com.rentmanager.modules.unit.domain.enums.UnitStatus;
 import com.rentmanager.modules.unit.domain.model.Unit;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
@@ -93,5 +94,51 @@ public class UnitRepositoryAdapter implements UnitRepository {
     @Override
     public void delete(Unit unit) {
         jpaRepository.deleteById(unit.getId());
+    }
+
+
+
+
+    @Override
+    public Page<Unit> findByOccupancyStatus(
+            UnitOccupancyStatus occupancyStatus,
+            Pageable pageable
+    ) {
+        return jpaRepository
+                .findByOccupancyStatus(occupancyStatus, pageable)
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    public Page<Unit> searchPublic(
+            String keyword,
+            UnitOccupancyStatus occupancyStatus,
+            Pageable pageable
+    ) {
+        return jpaRepository
+                .searchPublic(keyword, occupancyStatus, pageable)
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    public Optional<Unit> findById(UUID id) {
+        return jpaRepository
+                .findById(id)
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    public Page<Unit> findByPropertyIdAndOccupancyStatus(
+            UUID propertyId,
+            UnitOccupancyStatus occupancyStatus,
+            Pageable pageable
+    ) {
+        return jpaRepository
+                .findByPropertyIdAndOccupancyStatus(
+                        propertyId,
+                        occupancyStatus,
+                        pageable
+                )
+                .map(mapper::toDomain);
     }
 }

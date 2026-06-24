@@ -1,5 +1,6 @@
 package com.rentmanager.modules.unit.domain.repository;
 
+import com.rentmanager.modules.unit.domain.enums.UnitOccupancyStatus;
 import com.rentmanager.modules.unit.domain.enums.UnitStatus;
 import com.rentmanager.modules.unit.domain.model.Unit;
 import org.springframework.data.domain.Page;
@@ -39,4 +40,14 @@ public interface UnitRepository {
     Unit save(Unit unit);
 
     void delete(Unit unit);
+
+
+
+
+
+
+    Page<Unit> findByOccupancyStatus(UnitOccupancyStatus occupancyStatus, Pageable pageable);
+    Page<Unit> searchPublic(String keyword, UnitOccupancyStatus occupancyStatus, Pageable pageable);
+    Optional<Unit> findById(UUID id); // tenant-agnostic — needed for public unit detail page
+    Page<Unit> findByPropertyIdAndOccupancyStatus(UUID propertyId, UnitOccupancyStatus occupancyStatus, Pageable pageable);
 }

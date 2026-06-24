@@ -1,11 +1,13 @@
 package com.rentmanager.modules.unit.infrastructure.persistence.repository;
 
+import com.rentmanager.modules.unit.domain.enums.UnitOccupancyStatus;
 import com.rentmanager.modules.unit.domain.enums.UnitStatus;
 import com.rentmanager.modules.unit.infrastructure.persistence.entity.UnitJpaEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -52,4 +54,38 @@ public interface UnitJpaRepository extends JpaRepository<UnitJpaEntity, UUID> {
         )
     """)
     Page<UnitJpaEntity> search(UUID tenantId, String keyword, Pageable pageable);
+
+
+
+    Page<UnitJpaEntity> findByOccupancyStatus(
+            UnitOccupancyStatus occupancyStatus,
+            Pageable pageable
+    );
+
+    Optional<UnitJpaEntity> findById(UUID id);
+
+    Page<UnitJpaEntity> findByPropertyIdAndOccupancyStatus(
+            UUID propertyId,
+            UnitOccupancyStatus occupancyStatus,
+            Pageable pageable
+    );
+
+
+
+
+    @Query("""
+    SELECT u
+    FROM UnitJpaEntity u
+    WHERE u.occupancyStatus = :occupancyStatus
+      AND (
+            :keyword IS NULL
+            OR LOWER(u.unitNumber) LIKE LOWER(CONCAT('%', :keyword, '%'))
+            OR LOWER(u.description) LIKE LOWER(CONCAT('%', :keyword, '%'))
+          )
+""")
+    Page<UnitJpaEntity> searchPublic(
+            @Param("keyword") String keyword,
+            @Param("occupancyStatus") UnitOccupancyStatus occupancyStatus,
+            Pageable pageable
+    );
 }

@@ -65,7 +65,8 @@ public class SecurityConfig {
                                 "/actuator/health",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
-                                "/swagger-ui.html"
+                                "/swagger-ui.html",
+                                "/api/v1/public/**"
                         ).permitAll()
 
                         // Everything else secured
@@ -83,4 +84,7 @@ public class SecurityConfig {
 
         return http.build();
     }
+
+
+
 }
