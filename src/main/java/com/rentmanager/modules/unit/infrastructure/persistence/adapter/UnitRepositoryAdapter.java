@@ -141,4 +141,16 @@ public class UnitRepositoryAdapter implements UnitRepository {
                 )
                 .map(mapper::toDomain);
     }
+
+
+    @Override
+    public long countByTenantId(UUID tenantId) {
+        return jpaRepository.countByTenantId(tenantId);
+    }
+
+    @Override
+    public long countByTenantIdAndOccupancyStatus(UUID tenantId, UnitOccupancyStatus occupancyStatus) {
+        return jpaRepository.countByTenantIdAndOccupancyStatus(tenantId, occupancyStatus);
+    }
+
 }

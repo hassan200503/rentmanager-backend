@@ -50,4 +50,9 @@ public interface UnitRepository {
     Page<Unit> searchPublic(String keyword, UnitOccupancyStatus occupancyStatus, Pageable pageable);
     Optional<Unit> findById(UUID id); // tenant-agnostic — needed for public unit detail page
     Page<Unit> findByPropertyIdAndOccupancyStatus(UUID propertyId, UnitOccupancyStatus occupancyStatus, Pageable pageable);
+
+
+
+    long countByTenantId(UUID tenantId);
+    long countByTenantIdAndOccupancyStatus(UUID tenantId, UnitOccupancyStatus occupancyStatus);
 }

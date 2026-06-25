@@ -3,6 +3,7 @@ package com.rentmanager.modules.unit.api.controller;
 import com.rentmanager.contract.common.ApiResponse;
 import com.rentmanager.modules.unit.api.routes.UnitRoutes;
 import com.rentmanager.modules.unit.application.dto.response.UnitResponse;
+import com.rentmanager.modules.unit.application.dto.response.UnitSummaryResponse;
 import com.rentmanager.modules.unit.application.query.service.UnitQueryService;
 import com.rentmanager.modules.unit.domain.enums.UnitStatus;
 import lombok.RequiredArgsConstructor;
@@ -92,4 +93,18 @@ public class UnitQueryController {
                 ApiResponse.ok("Units retrieved successfully", response)
         );
     }
+
+
+    @GetMapping("/summary")
+    public ResponseEntity<ApiResponse<UnitSummaryResponse>> getSummary(
+            @RequestHeader("X-Tenant-Id") UUID tenantId
+    ) {
+        UnitSummaryResponse response = unitQueryService.getSummary(tenantId);
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("Unit summary retrieved successfully", response)
+        );
+    }
+
+
 }

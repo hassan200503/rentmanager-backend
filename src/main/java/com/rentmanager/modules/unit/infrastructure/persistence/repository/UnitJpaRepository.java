@@ -88,4 +88,10 @@ public interface UnitJpaRepository extends JpaRepository<UnitJpaEntity, UUID> {
             @Param("occupancyStatus") UnitOccupancyStatus occupancyStatus,
             Pageable pageable
     );
+
+
+
+    long countByTenantId(UUID tenantId);
+
+    long countByTenantIdAndOccupancyStatus(UUID tenantId, UnitOccupancyStatus occupancyStatus);
 }

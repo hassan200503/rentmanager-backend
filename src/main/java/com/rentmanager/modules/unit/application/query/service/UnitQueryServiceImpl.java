@@ -1,7 +1,9 @@
 package com.rentmanager.modules.unit.application.query.service;
 
 import com.rentmanager.modules.unit.application.dto.response.UnitResponse;
+import com.rentmanager.modules.unit.application.dto.response.UnitSummaryResponse;
 import com.rentmanager.modules.unit.application.mapper.UnitMapper;
+import com.rentmanager.modules.unit.domain.enums.UnitOccupancyStatus;
 import com.rentmanager.modules.unit.domain.enums.UnitStatus;
 import com.rentmanager.modules.unit.domain.model.Unit;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
@@ -51,5 +53,20 @@ public class UnitQueryServiceImpl implements UnitQueryService {
     public Page<UnitResponse> search(UUID tenantId, String keyword, Pageable pageable) {
         return unitRepository.search(tenantId, keyword, pageable)
                 .map(unitMapper::toResponse);
+
     }
+
+
+
+    @Override
+    public UnitSummaryResponse getSummary(UUID tenantId) {
+        long total = unitRepository.countByTenantId(tenantId);
+        long vacant = unitRepository.countByTenantIdAndOccupancyStatus(tenantId, UnitOccupancyStatus.VACANT);
+        long occupied = unitRepository.countByTenantIdAndOccupancyStatus(tenantId, UnitOccupancyStatus.OCCUPIED);
+        long reserved = unitRepository.countByTenantIdAndOccupancyStatus(tenantId, UnitOccupancyStatus.RESERVED);
+
+        return new UnitSummaryResponse(total, vacant, occupied, reserved);
+    }
+
+
 }

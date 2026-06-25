@@ -1,6 +1,7 @@
 package com.rentmanager.modules.unit.application.query.service;
 
 import com.rentmanager.modules.unit.application.dto.response.UnitResponse;
+import com.rentmanager.modules.unit.application.dto.response.UnitSummaryResponse;
 import com.rentmanager.modules.unit.domain.enums.UnitStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -18,4 +19,6 @@ public interface UnitQueryService {
     Page<UnitResponse> getByStatus(UUID tenantId, UnitStatus status, Pageable pageable);
 
     Page<UnitResponse> search(UUID tenantId, String keyword, Pageable pageable);
+
+    UnitSummaryResponse getSummary(UUID tenantId);
 }
