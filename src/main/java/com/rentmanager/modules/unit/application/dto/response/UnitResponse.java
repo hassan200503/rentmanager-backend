@@ -90,4 +90,6 @@ public class UnitResponse {
     public void setOccupancyStatus(String occupancyStatus) {
         this.occupancyStatus = occupancyStatus;
     }
+
+
 }

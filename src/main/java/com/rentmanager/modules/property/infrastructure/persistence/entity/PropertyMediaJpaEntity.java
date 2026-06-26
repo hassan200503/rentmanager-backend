@@ -1,5 +1,6 @@
 package com.rentmanager.modules.property.infrastructure.persistence.entity;
 
+import com.rentmanager.modules.property.domain.enums.MediaType;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -22,6 +23,13 @@ public class PropertyMediaJpaEntity {
     @Id
     @Column(nullable = false, updatable = false)
     private UUID id;
+
+    @PrePersist
+    protected void onCreate() {
+        if (this.id == null) {
+            this.id = UUID.randomUUID();
+        }
+    }
 
     @Column(name = "tenant_id", nullable = false, updatable = false)
     private UUID tenantId;
@@ -49,4 +57,17 @@ public class PropertyMediaJpaEntity {
 
     @Version
     private Long version;
+
+    @Column(name = "public_id", nullable = false)
+    private String publicId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "media_type", nullable = false)
+    private MediaType mediaType;
+
+    @Column(name = "caption")
+    private String caption;
+
+    @Column(name = "sort_order", nullable = false)
+    private Integer sortOrder = 0;
 }

@@ -26,26 +26,44 @@ public class PropertyMediaRepositoryAdapter implements PropertyMediaRepository {
     }
 
     @Override
-    public Optional<PropertyMedia> findById(UUID id) {
-        return jpaRepository.findById(id)
+    public Optional<PropertyMedia> findByIdAndTenantId(UUID id, UUID tenantId) {
+        return jpaRepository
+                .findByIdAndTenantId(id, tenantId)
                 .map(mapper::toDomain);
     }
 
     @Override
-    public List<PropertyMedia> findAllByPropertyId(UUID propertyId) {
-        return jpaRepository.findAllByPropertyId(propertyId)
+    public Optional<PropertyMedia> findByTenantIdAndPropertyIdAndPrimaryMediaTrue(
+            UUID tenantId,
+            UUID propertyId
+    ) {
+        return jpaRepository
+                .findByTenantIdAndPropertyIdAndPrimaryMediaTrue(
+                        tenantId,
+                        propertyId
+                )
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    public List<PropertyMedia> findAllByTenantIdAndPropertyId(
+            UUID tenantId,
+            UUID propertyId
+    ) {
+        return jpaRepository
+                .findAllByTenantIdAndPropertyId(
+                        tenantId,
+                        propertyId
+                )
                 .stream()
                 .map(mapper::toDomain)
                 .toList();
     }
 
     @Override
-    public boolean existsById(UUID id) {
-        return jpaRepository.existsById(id);
-    }
-
-    @Override
-    public void deleteById(UUID id) {
-        jpaRepository.deleteById(id);
+    public void delete(PropertyMedia media) {
+        jpaRepository.delete(
+                mapper.toJpaEntity(media)
+        );
     }
 }

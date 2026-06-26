@@ -27,6 +27,7 @@ public class UnitMapper {
         response.setDescription(unit.getDescription());
         response.setRentAmount(unit.getRentAmount());
 
+
         response.setStatus(
                 unit.getStatus() != null ? unit.getStatus().name() : null
         );

@@ -10,11 +10,17 @@ public interface PropertyMediaRepository {
 
     PropertyMedia save(PropertyMedia media);
 
-    Optional<PropertyMedia> findById(UUID id);
+    Optional<PropertyMedia> findByIdAndTenantId(UUID id, UUID tenantId);
 
-    List<PropertyMedia> findAllByPropertyId(UUID propertyId);
+    Optional<PropertyMedia> findByTenantIdAndPropertyIdAndPrimaryMediaTrue(
+            UUID tenantId,
+            UUID propertyId
+    );
 
-    boolean existsById(UUID id);
+    List<PropertyMedia> findAllByTenantIdAndPropertyId(
+            UUID tenantId,
+            UUID propertyId
+    );
 
-    void deleteById(UUID id);
+    void delete(PropertyMedia media);
 }

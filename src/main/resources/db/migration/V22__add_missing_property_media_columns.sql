@@ -1,0 +1,4 @@
+ALTER TABLE property_media
+    ADD COLUMN caption VARCHAR(500),
+    ADD COLUMN media_type VARCHAR(50) NOT NULL DEFAULT 'IMAGE',
+    ADD COLUMN sort_order INT NOT NULL DEFAULT 0;

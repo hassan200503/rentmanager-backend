@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -26,16 +27,28 @@ public class UnitMediaRepositoryAdapter implements UnitMediaRepository {
     }
 
     @Override
-    public List<UnitMedia> findByTenantId(UUID tenantId) {
-        return jpaRepository.findByTenantId(tenantId)
+    public Optional<UnitMedia> findByIdAndTenantId(UUID id, UUID tenantId) {
+        return jpaRepository.findByIdAndTenantId(id, tenantId)
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    public Optional<UnitMedia> findByTenantIdAndUnitIdAndPrimaryMediaTrue(UUID tenantId, UUID unitId) {
+        return jpaRepository.findByTenantIdAndUnitIdAndPrimaryMediaTrue(tenantId, unitId)
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    public List<UnitMedia> findAllByTenantIdAndUnitId(UUID tenantId, UUID unitId) {
+        return jpaRepository.findByTenantIdAndUnitId(tenantId, unitId)
                 .stream()
                 .map(mapper::toDomain)
                 .collect(Collectors.toList());
     }
 
     @Override
-    public List<UnitMedia> findByTenantIdAndUnitId(UUID tenantId, UUID unitId) {
-        return jpaRepository.findByTenantIdAndUnitId(tenantId, unitId)
+    public List<UnitMedia> findByTenantId(UUID tenantId) {
+        return jpaRepository.findByTenantId(tenantId)
                 .stream()
                 .map(mapper::toDomain)
                 .collect(Collectors.toList());

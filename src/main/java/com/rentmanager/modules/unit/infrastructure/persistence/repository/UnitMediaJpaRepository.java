@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -13,6 +14,10 @@ public interface UnitMediaJpaRepository extends JpaRepository<UnitMediaJpaEntity
     List<UnitMediaJpaEntity> findByTenantId(UUID tenantId);
 
     List<UnitMediaJpaEntity> findByTenantIdAndUnitId(UUID tenantId, UUID unitId);
+
+    Optional<UnitMediaJpaEntity> findByIdAndTenantId(UUID id, UUID tenantId);
+
+    Optional<UnitMediaJpaEntity> findByTenantIdAndUnitIdAndPrimaryMediaTrue(UUID tenantId, UUID unitId);
 
     boolean existsByTenantIdAndUnitIdAndUrl(UUID tenantId, UUID unitId, String url);
 }

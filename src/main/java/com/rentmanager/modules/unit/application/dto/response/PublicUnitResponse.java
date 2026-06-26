@@ -31,4 +31,6 @@ public class PublicUnitResponse {
 
     public String getOccupancyStatus() { return occupancyStatus; }
     public void setOccupancyStatus(String occupancyStatus) { this.occupancyStatus = occupancyStatus; }
+
+
 }

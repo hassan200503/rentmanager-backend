@@ -5,34 +5,46 @@ import lombok.*;
 
 import java.util.UUID;
 
+@Entity
+@Table(
+        name = "unit_media",
+        indexes = {
+                @Index(name = "idx_unit_media_tenant", columnList = "tenant_id"),
+                @Index(name = "idx_unit_media_unit",   columnList = "unit_id")
+        }
+)
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@Entity
-@Table(name = "unit_media")
 public class UnitMediaJpaEntity {
 
     @Id
+    @Column(nullable = false, updatable = false)
     private UUID id;
 
-    @Column(nullable = false)
+    @Column(name = "tenant_id", nullable = false, updatable = false)
     private UUID tenantId;
 
-    @Column(nullable = false)
+    @Column(name = "unit_id", nullable = false, updatable = false)
     private UUID unitId;
 
-    @Column(nullable = false)
+    @Column(name = "url", nullable = false, length = 1000)
     private String url;
 
-    private String type;
+    @Column(name = "type", nullable = false)
+    private String type;                   // IMAGE, VIDEO, DOCUMENT
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "caption")
     private String caption;
 
-    @Column(nullable = false)
-    private boolean primaryMedia;
+    @Column(name = "primary_media", nullable = false)
+    private boolean primaryMedia = false;
 
-    private int sortOrder;
+    @Column(name = "sort_order", nullable = false)
+    private int sortOrder = 0;
+
+    @Version
+    private Long version;
 }

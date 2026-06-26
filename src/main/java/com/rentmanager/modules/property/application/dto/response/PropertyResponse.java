@@ -34,4 +34,9 @@ public class PropertyResponse {
     private PropertyDimensions dimensions;
 
     private String description;
+
+    /**
+     * Primary property image used for cards/listings.
+     */
+    private String thumbnailUrl;
 }

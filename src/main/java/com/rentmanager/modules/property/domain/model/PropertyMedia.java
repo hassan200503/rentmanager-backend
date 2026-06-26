@@ -2,30 +2,118 @@ package com.rentmanager.modules.property.domain.model;
 
 import com.rentmanager.domain.base.BaseTenantEntity;
 import com.rentmanager.modules.property.domain.enums.MediaType;
-import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.Instant;
 import java.util.UUID;
 
-@Entity
-@Table(name = "property_media")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
 @Builder
 public class PropertyMedia extends BaseTenantEntity {
 
-
-    @Column(name = "property_id", nullable = false)
     private UUID propertyId;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "media_type", nullable = false)
     private MediaType mediaType;
 
-    @Column(name = "file_url", nullable = false)
     private String fileUrl;
 
-    @Column(name = "file_name")
     private String fileName;
+
+    /**
+     * Cloudinary public_id used for delete/replace operations.
+     */
+    private String publicId;
+
+    private String contentType;
+
+    private Long fileSize;
+
+    private boolean primaryMedia;
+
+    private Instant uploadedAt;
+
+    private String caption;
+
+    private int sortOrder;
+
+    // =====================================================
+    // FACTORY
+    // =====================================================
+
+    public static PropertyMedia create(
+            UUID tenantId,
+            UUID propertyId,
+            MediaType mediaType,
+            String fileUrl,
+            String fileName,
+            String publicId,
+            String contentType,
+            Long fileSize,
+            boolean primaryMedia,
+            Instant uploadedAt,
+            String caption,
+            int sortOrder
+    ) {
+        PropertyMedia media = PropertyMedia.builder()
+                .propertyId(propertyId)
+                .mediaType(mediaType)
+                .fileUrl(fileUrl)
+                .fileName(fileName)
+                .publicId(publicId)
+                .contentType(contentType)
+                .fileSize(fileSize)
+                .primaryMedia(primaryMedia)
+                .uploadedAt(uploadedAt)
+                .caption(caption)
+                .sortOrder(sortOrder)
+                .build();
+
+        media.setId(UUID.randomUUID());   // ← add this line
+        media.assignTenant(tenantId);
+
+        return media;
+    }
+
+    // =====================================================
+    // REHYDRATE
+    // =====================================================
+
+    public static PropertyMedia rehydrate(
+            UUID id,
+            UUID tenantId,
+            UUID propertyId,
+            MediaType mediaType,
+            String fileUrl,
+            String fileName,
+            String publicId,
+            String contentType,
+            Long fileSize,
+            boolean primaryMedia,
+            Instant uploadedAt,
+            String caption,
+            int sortOrder,
+            Long version
+    ) {
+        PropertyMedia media = PropertyMedia.builder()
+                .propertyId(propertyId)
+                .mediaType(mediaType)
+                .fileUrl(fileUrl)
+                .fileName(fileName)
+                .publicId(publicId)
+                .contentType(contentType)
+                .fileSize(fileSize)
+                .primaryMedia(primaryMedia)
+                .uploadedAt(uploadedAt)
+                .caption(caption)
+                .sortOrder(sortOrder)
+                .build();
+
+        media.restoreId(id);
+        media.restoreTenantId(tenantId);
+        media.setVersion(version);
+
+        return media;
+    }
 }

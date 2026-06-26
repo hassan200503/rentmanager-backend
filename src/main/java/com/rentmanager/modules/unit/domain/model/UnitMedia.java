@@ -34,6 +34,7 @@ public class UnitMedia {
             int sortOrder
     ) {
         return UnitMedia.builder()
+                .id(UUID.randomUUID())   // ← add this line
                 .tenantId(tenantId)
                 .unitId(unitId)
                 .url(url)

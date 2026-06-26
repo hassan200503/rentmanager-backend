@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.Map;
 import java.util.stream.Collectors;
-
+import com.rentmanager.shared.exception.ConflictException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -148,6 +148,34 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.CONFLICT)
                 .body(ApiResponse.fail(ex.getMessage(), "INVALID_STATE"));
     }
+
+
+
+
+    // =========================================================
+// CONFLICT
+// =========================================================
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ApiResponse<Object>> handleConflict(
+            ConflictException ex,
+            HttpServletRequest request
+    ) {
+
+        errorTrackingService.capture(
+                ex,
+                "BUSINESS",
+                "CONFLICT",
+                resolveModule(request),
+                request,
+                Map.of()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.fail(ex.getMessage(), "CONFLICT"));
+    }
+
+
 
     // =========================================================
     // ACCESS DENIED

@@ -82,7 +82,7 @@ public abstract class BaseEntity implements Serializable {
         return Objects.hash(id);
     }
 
-    protected void restoreId(UUID id) {
+    public void restoreId(UUID id) {
         this.id = id;
     }
 }

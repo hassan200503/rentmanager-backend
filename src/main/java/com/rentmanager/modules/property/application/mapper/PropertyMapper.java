@@ -3,12 +3,25 @@ package com.rentmanager.modules.property.application.mapper;
 import com.rentmanager.modules.property.application.dto.response.PropertyResponse;
 import com.rentmanager.modules.property.application.dto.response.PublicPropertyResponse;
 import com.rentmanager.modules.property.domain.model.Property;
+import com.rentmanager.modules.property.domain.repository.PropertyMediaRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 @Component
+@RequiredArgsConstructor
 public class PropertyMapper {
 
+    private final PropertyMediaRepository propertyMediaRepository;
+
     public PropertyResponse toResponse(Property property) {
+
+        String thumbnailUrl = propertyMediaRepository
+                .findByTenantIdAndPropertyIdAndPrimaryMediaTrue(
+                        property.getTenantId(),
+                        property.getId()
+                )
+                .map(media -> media.getFileUrl())
+                .orElse(null);
 
         return PropertyResponse.builder()
                 .propertyId(property.getId())
@@ -21,11 +34,9 @@ public class PropertyMapper {
                 .geoLocation(property.getGeoLocation())
                 .dimensions(property.getDimensions())
                 .description(property.getDescription())
+                .thumbnailUrl(thumbnailUrl)
                 .build();
     }
-
-
-
 
     public PublicPropertyResponse toPublicResponse(Property property) {
         return PublicPropertyResponse.builder()

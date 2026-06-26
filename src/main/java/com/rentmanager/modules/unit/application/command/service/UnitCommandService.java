@@ -37,4 +37,7 @@ public interface UnitCommandService {
      * Mark Unit as vacant (available for leasing)
      */
     void markVacant(UUID tenantId, UUID unitId, String correlationId);
+
+
+
 }

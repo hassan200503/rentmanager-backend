@@ -14,7 +14,26 @@ public interface PropertyMediaPersistenceMapper {
     /**
      * JPA → Domain
      */
-    PropertyMedia toDomain(PropertyMediaJpaEntity entity);
+    default PropertyMedia toDomain(PropertyMediaJpaEntity entity) {
+        if (entity == null) return null;
+        PropertyMedia domain = PropertyMedia.rehydrate(
+                entity.getId(),
+                entity.getTenantId(),
+                entity.getPropertyId(),
+                entity.getMediaType(),
+                entity.getFileUrl(),
+                entity.getFileName(),
+                entity.getPublicId(),
+                entity.getContentType(),
+                entity.getFileSize(),
+                entity.getPrimaryMedia(),
+                entity.getUploadedAt(),
+                entity.getCaption(),
+                entity.getSortOrder(),
+                entity.getVersion()
+        );
+        return domain;
+    }
 
     /**
      * Domain → JPA

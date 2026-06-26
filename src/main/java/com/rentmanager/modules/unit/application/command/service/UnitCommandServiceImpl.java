@@ -8,8 +8,10 @@ import com.rentmanager.modules.unit.application.command.validator.*;
 import com.rentmanager.modules.unit.domain.model.Unit;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
 import com.rentmanager.shared.events.DomainEventPublisher;
+import com.rentmanager.shared.exception.ConflictException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
@@ -49,7 +51,14 @@ public class UnitCommandServiceImpl implements UnitCommandService {
                 generateCorrelationId()
         );
 
-        Unit saved = unitRepository.save(unit);
+        Unit saved;
+        try {
+            saved = unitRepository.save(unit);
+        } catch (DataIntegrityViolationException ex) {
+            throw new ConflictException(
+                    "Unit number '" + request.getUnitNumber() + "' already exists in this property"
+            );
+        }
 
         eventPublisher.publishAll(saved.pullDomainEvents());
 

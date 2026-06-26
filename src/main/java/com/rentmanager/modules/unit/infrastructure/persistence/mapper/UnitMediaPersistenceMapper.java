@@ -11,7 +11,6 @@ public class UnitMediaPersistenceMapper {
     // DOMAIN → JPA
     // =========================
     public UnitMediaJpaEntity toJpaEntity(UnitMedia media) {
-
         if (media == null) return null;
 
         return UnitMediaJpaEntity.builder()
@@ -30,7 +29,6 @@ public class UnitMediaPersistenceMapper {
     // JPA → DOMAIN
     // =========================
     public UnitMedia toDomain(UnitMediaJpaEntity entity) {
-
         if (entity == null) return null;
 
         return UnitMedia.rehydrate(
