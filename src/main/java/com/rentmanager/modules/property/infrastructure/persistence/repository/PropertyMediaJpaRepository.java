@@ -33,4 +33,8 @@ public interface PropertyMediaJpaRepository
     List<PropertyMediaJpaEntity> findAllByPropertyId(
             UUID propertyId
     );
+
+    List<PropertyMediaJpaEntity> findAllByPropertyIdIn(
+            List<UUID> propertyIds
+    );
 }

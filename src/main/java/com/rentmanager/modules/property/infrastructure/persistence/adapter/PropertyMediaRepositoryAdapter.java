@@ -66,4 +66,22 @@ public class PropertyMediaRepositoryAdapter implements PropertyMediaRepository {
                 mapper.toJpaEntity(media)
         );
     }
+
+
+
+    @Override
+    public List<PropertyMedia> findAllByPropertyIdIn(List<UUID> propertyIds) {
+        return jpaRepository.findAllByPropertyIdIn(propertyIds)
+                .stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<PropertyMedia> findAllByPropertyId(UUID propertyId) {
+        return jpaRepository.findAllByPropertyId(propertyId)
+                .stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
 }

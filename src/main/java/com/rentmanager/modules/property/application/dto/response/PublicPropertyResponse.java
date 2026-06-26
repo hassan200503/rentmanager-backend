@@ -6,6 +6,7 @@ import com.rentmanager.modules.property.domain.valueobject.GeoLocation;
 import lombok.Builder;
 import lombok.Getter;
 
+import java.util.List;
 import java.util.UUID;
 
 @Getter
@@ -17,4 +18,6 @@ public class PublicPropertyResponse {
     private Address address;
     private GeoLocation geoLocation;
     private String description;
+
+    private List<String> images; // 👈 add this
 }

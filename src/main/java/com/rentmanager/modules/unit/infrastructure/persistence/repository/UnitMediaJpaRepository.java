@@ -20,4 +20,8 @@ public interface UnitMediaJpaRepository extends JpaRepository<UnitMediaJpaEntity
     Optional<UnitMediaJpaEntity> findByTenantIdAndUnitIdAndPrimaryMediaTrue(UUID tenantId, UUID unitId);
 
     boolean existsByTenantIdAndUnitIdAndUrl(UUID tenantId, UUID unitId, String url);
+
+    List<UnitMediaJpaEntity> findAllByUnitIdIn(List<UUID> unitIds);
+
+    List<UnitMediaJpaEntity> findAllByUnitId(UUID unitId);
 }

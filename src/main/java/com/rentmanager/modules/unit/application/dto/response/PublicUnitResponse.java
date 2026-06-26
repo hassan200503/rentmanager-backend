@@ -1,6 +1,7 @@
 package com.rentmanager.modules.unit.application.dto.response;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 public class PublicUnitResponse {
@@ -31,6 +32,14 @@ public class PublicUnitResponse {
 
     public String getOccupancyStatus() { return occupancyStatus; }
     public void setOccupancyStatus(String occupancyStatus) { this.occupancyStatus = occupancyStatus; }
+
+
+
+    private List<String> images = List.of();
+
+    public List<String> getImages() { return images; }
+    public void setImages(List<String> images) { this.images = images; }
+
 
 
 }

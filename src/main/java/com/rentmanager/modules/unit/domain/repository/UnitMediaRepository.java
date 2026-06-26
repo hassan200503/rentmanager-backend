@@ -21,4 +21,9 @@ public interface UnitMediaRepository {
     boolean existsByTenantIdAndUnitIdAndUrl(UUID tenantId, UUID unitId, String url);
 
     void delete(UnitMedia media);
+
+
+    List<UnitMedia> findAllByUnitIdIn(List<UUID> unitIds);
+
+    List<UnitMedia> findAllByUnitId(UUID unitId);
 }

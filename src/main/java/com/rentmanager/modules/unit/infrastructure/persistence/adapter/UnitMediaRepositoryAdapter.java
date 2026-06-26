@@ -63,4 +63,21 @@ public class UnitMediaRepositoryAdapter implements UnitMediaRepository {
     public void delete(UnitMedia media) {
         jpaRepository.deleteById(media.getId());
     }
+
+
+    @Override
+    public List<UnitMedia> findAllByUnitIdIn(List<UUID> unitIds) {
+        return jpaRepository.findAllByUnitIdIn(unitIds)
+                .stream()
+                .map(mapper::toDomain)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<UnitMedia> findAllByUnitId(UUID unitId) {
+        return jpaRepository.findAllByUnitId(unitId)
+                .stream()
+                .map(mapper::toDomain)
+                .collect(Collectors.toList());
+    }
 }

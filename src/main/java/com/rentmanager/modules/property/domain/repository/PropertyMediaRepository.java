@@ -23,4 +23,10 @@ public interface PropertyMediaRepository {
     );
 
     void delete(PropertyMedia media);
+
+
+
+    List<PropertyMedia> findAllByPropertyIdIn(List<UUID> propertyIds);
+
+    List<PropertyMedia> findAllByPropertyId(UUID propertyId);
 }
