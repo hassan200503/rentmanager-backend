@@ -1,6 +1,7 @@
 package com.rentmanager.modules.unit.application.dto.response;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -41,5 +42,18 @@ public class PublicUnitResponse {
     public void setImages(List<String> images) { this.images = images; }
 
 
+
+    private String propertyName;
+    private String propertyArea;   // or however you want to render "Kilimani, Nairobi" — derived from Address
+    private LocalDateTime vacatedAt;
+
+    public String getPropertyName() { return propertyName; }
+    public void setPropertyName(String propertyName) { this.propertyName = propertyName; }
+
+    public String getPropertyArea() { return propertyArea; }
+    public void setPropertyArea(String propertyArea) { this.propertyArea = propertyArea; }
+
+    public LocalDateTime getVacatedAt() { return vacatedAt; }
+    public void setVacatedAt(LocalDateTime vacatedAt) { this.vacatedAt = vacatedAt; }
 
 }

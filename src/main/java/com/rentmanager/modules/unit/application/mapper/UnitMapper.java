@@ -49,6 +49,7 @@ public class UnitMapper {
         dto.setDescription(unit.getDescription());
         dto.setRentAmount(unit.getRentAmount());
         dto.setOccupancyStatus(unit.getOccupancyStatus().name());
+        dto.setVacatedAt(unit.getVacatedAt()); // ADDED
         return dto;
     }
 

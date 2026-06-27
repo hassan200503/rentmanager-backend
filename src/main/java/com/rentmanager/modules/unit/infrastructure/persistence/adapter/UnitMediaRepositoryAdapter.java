@@ -64,7 +64,6 @@ public class UnitMediaRepositoryAdapter implements UnitMediaRepository {
         jpaRepository.deleteById(media.getId());
     }
 
-
     @Override
     public List<UnitMedia> findAllByUnitIdIn(List<UUID> unitIds) {
         return jpaRepository.findAllByUnitIdIn(unitIds)
@@ -79,5 +78,15 @@ public class UnitMediaRepositoryAdapter implements UnitMediaRepository {
                 .stream()
                 .map(mapper::toDomain)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public void clearPrimaryForUnit(UUID tenantId, UUID unitId) {
+        jpaRepository.clearPrimaryForUnit(tenantId, unitId);
+    }
+
+    @Override
+    public void setPrimaryById(UUID id, UUID tenantId) {
+        jpaRepository.setPrimaryById(id, tenantId);
     }
 }

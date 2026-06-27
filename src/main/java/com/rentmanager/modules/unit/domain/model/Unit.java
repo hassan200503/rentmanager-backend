@@ -7,6 +7,7 @@ import com.rentmanager.modules.unit.domain.event.*;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Getter
@@ -23,6 +24,7 @@ public class Unit extends AggregateRoot {
     private UnitOccupancyStatus occupancyStatus;
     private BigDecimal rentAmount;
     private String description;
+    private LocalDateTime vacatedAt;
 
     public static Unit create(
             UUID tenantId,
@@ -41,6 +43,7 @@ public class Unit extends AggregateRoot {
                 .label(label)
                 .status(UnitStatus.INACTIVE)
                 .occupancyStatus(UnitOccupancyStatus.VACANT)
+                .vacatedAt(LocalDateTime.now())
                 .rentAmount(rentAmount)
                 .description(description)
                 .build();
@@ -113,6 +116,7 @@ public class Unit extends AggregateRoot {
 
         UnitOccupancyStatus previous = this.occupancyStatus;
         this.occupancyStatus = UnitOccupancyStatus.OCCUPIED;
+        this.vacatedAt = null;
 
         registerEvent(new UnitOccupancyChangedEvent(
                 tenantId,
@@ -129,6 +133,7 @@ public class Unit extends AggregateRoot {
 
         UnitOccupancyStatus previous = this.occupancyStatus;
         this.occupancyStatus = UnitOccupancyStatus.VACANT;
+        this.vacatedAt = LocalDateTime.now();
 
         registerEvent(new UnitOccupancyChangedEvent(
                 tenantId,
@@ -161,7 +166,8 @@ public class Unit extends AggregateRoot {
             UnitStatus status,
             UnitOccupancyStatus occupancyStatus,
             BigDecimal rentAmount,
-            String description
+            String description,
+            LocalDateTime vacatedAt
     ) {
         Unit unit = Unit.builder()
                 .tenantId(tenantId)
@@ -172,6 +178,7 @@ public class Unit extends AggregateRoot {
                 .occupancyStatus(occupancyStatus)
                 .rentAmount(rentAmount)
                 .description(description)
+                .vacatedAt(vacatedAt)
                 .build();
 
         unit.setId(id);
@@ -192,6 +199,7 @@ public class Unit extends AggregateRoot {
 
         UnitOccupancyStatus previous = this.occupancyStatus;
         this.occupancyStatus = UnitOccupancyStatus.RESERVED;
+        this.vacatedAt = null;
 
         registerEvent(new UnitOccupancyChangedEvent(
                 tenantId, getId(), correlationId, getId(), previous, this.occupancyStatus

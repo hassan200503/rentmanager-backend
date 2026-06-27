@@ -10,4 +10,6 @@ public interface PublicUnitQueryService {
     Page<PublicUnitResponse> getVacantUnits(String keyword, Pageable pageable);
     Page<PublicUnitResponse> getVacantUnitsByProperty(UUID propertyId, Pageable pageable);
     PublicUnitResponse getVacantUnitById(UUID unitId);
+
+    PublicUnitResponse getLongestVacantUnit();
 }

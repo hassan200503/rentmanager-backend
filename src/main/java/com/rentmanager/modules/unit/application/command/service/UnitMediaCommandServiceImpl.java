@@ -20,85 +20,35 @@ public class UnitMediaCommandServiceImpl
     private final UnitMediaRepository unitMediaRepository;
 
     @Override
-    public void setPrimaryMedia(
-            UUID tenantId,
-            UUID unitId,
-            UUID mediaId
-    ) {
+    public void setPrimaryMedia(UUID tenantId, UUID unitId, UUID mediaId) {
 
         UnitMedia targetMedia = unitMediaRepository
                 .findByIdAndTenantId(mediaId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Unit media not found",
-                        ErrorCode.RESOURCE_NOT_FOUND
-                ));
+                        "Unit media not found", ErrorCode.RESOURCE_NOT_FOUND));
 
         if (!targetMedia.getUnitId().equals(unitId)) {
             throw new ResourceNotFoundException(
-                    "Unit media not found",
-                    ErrorCode.RESOURCE_NOT_FOUND
-            );
+                    "Unit media not found", ErrorCode.RESOURCE_NOT_FOUND);
         }
 
-        unitMediaRepository
-                .findByTenantIdAndUnitIdAndPrimaryMediaTrue(
-                        tenantId,
-                        unitId
-                )
-                .ifPresent(existingPrimary -> {
+        if (targetMedia.isPrimary()) return;
 
-                    if (existingPrimary.getId().equals(mediaId)) {
-                        return;
-                    }
-
-                    UnitMedia demoted = UnitMedia.rehydrate(
-                            existingPrimary.getId(),
-                            existingPrimary.getTenantId(),
-                            existingPrimary.getUnitId(),
-                            existingPrimary.getUrl(),
-                            existingPrimary.getType(),
-                            existingPrimary.getCaption(),
-                            false,
-                            existingPrimary.getSortOrder()
-                    );
-
-                    unitMediaRepository.save(demoted);
-                });
-
-        UnitMedia promoted = UnitMedia.rehydrate(
-                targetMedia.getId(),
-                targetMedia.getTenantId(),
-                targetMedia.getUnitId(),
-                targetMedia.getUrl(),
-                targetMedia.getType(),
-                targetMedia.getCaption(),
-                true,
-                targetMedia.getSortOrder()
-        );
-
-        unitMediaRepository.save(promoted);
+        unitMediaRepository.clearPrimaryForUnit(tenantId, unitId);
+        unitMediaRepository.setPrimaryById(mediaId, tenantId);
     }
 
     @Override
-    public void updateCaption(
-            UUID tenantId,
-            UUID unitId,
-            UUID mediaId,
-            String caption
-    ) {
+    public void updateCaption(UUID tenantId, UUID unitId, UUID mediaId, String caption) {
 
         UnitMedia media = unitMediaRepository
                 .findByIdAndTenantId(mediaId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Unit media not found",
-                        ErrorCode.RESOURCE_NOT_FOUND
-                ));
+                        "Unit media not found", ErrorCode.RESOURCE_NOT_FOUND));
 
         if (!media.getUnitId().equals(unitId)) {
             throw new ResourceNotFoundException(
-                    "Unit media not found",
-                    ErrorCode.RESOURCE_NOT_FOUND
-            );
+                    "Unit media not found", ErrorCode.RESOURCE_NOT_FOUND);
         }
 
         UnitMedia updated = UnitMedia.rehydrate(
@@ -116,35 +66,25 @@ public class UnitMediaCommandServiceImpl
     }
 
     @Override
-    public void reorderMedia(
-            UUID tenantId,
-            UUID unitId,
-            List<UUID> mediaIdsInOrder
-    ) {
+    public void reorderMedia(UUID tenantId, UUID unitId, List<UUID> mediaIdsInOrder) {
 
         List<UnitMedia> mediaList =
-                unitMediaRepository.findAllByTenantIdAndUnitId(
-                        tenantId,
-                        unitId
-                );
+                unitMediaRepository.findAllByTenantIdAndUnitId(tenantId, unitId);
 
         if (mediaList.size() != mediaIdsInOrder.size()) {
             throw new IllegalArgumentException(
-                    "All unit media IDs must be provided for reordering."
-            );
+                    "All unit media IDs must be provided for reordering.");
         }
 
         for (int i = 0; i < mediaIdsInOrder.size(); i++) {
 
-            UUID mediaId = mediaIdsInOrder.get(i);
+            UUID id = mediaIdsInOrder.get(i);
 
             UnitMedia media = mediaList.stream()
-                    .filter(m -> m.getId().equals(mediaId))
+                    .filter(m -> m.getId().equals(id))
                     .findFirst()
                     .orElseThrow(() -> new ResourceNotFoundException(
-                            "Unit media not found",
-                            ErrorCode.RESOURCE_NOT_FOUND
-                    ));
+                            "Unit media not found", ErrorCode.RESOURCE_NOT_FOUND));
 
             UnitMedia reordered = UnitMedia.rehydrate(
                     media.getId(),

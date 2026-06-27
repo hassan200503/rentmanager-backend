@@ -193,7 +193,6 @@ class UnitDomainTest {
     // =====================================================
     // REHYDRATION
     // =====================================================
-
     @Test
     void should_rehydrate_unit_without_events() {
 
@@ -206,7 +205,8 @@ class UnitDomainTest {
                 UnitStatus.ACTIVE,
                 UnitOccupancyStatus.OCCUPIED,
                 new BigDecimal("1000"),
-                "desc"
+                "desc",
+                null
         );
 
         assertEquals(UnitStatus.ACTIVE, unit.getStatus());

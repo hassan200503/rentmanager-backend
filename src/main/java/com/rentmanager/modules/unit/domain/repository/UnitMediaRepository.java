@@ -22,8 +22,11 @@ public interface UnitMediaRepository {
 
     void delete(UnitMedia media);
 
-
     List<UnitMedia> findAllByUnitIdIn(List<UUID> unitIds);
 
     List<UnitMedia> findAllByUnitId(UUID unitId);
+
+    void clearPrimaryForUnit(UUID tenantId, UUID unitId);
+
+    void setPrimaryById(UUID id, UUID tenantId);
 }

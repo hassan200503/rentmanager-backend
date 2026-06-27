@@ -94,4 +94,17 @@ public interface UnitJpaRepository extends JpaRepository<UnitJpaEntity, UUID> {
     long countByTenantId(UUID tenantId);
 
     long countByTenantIdAndOccupancyStatus(UUID tenantId, UnitOccupancyStatus occupancyStatus);
+
+
+
+    @Query("""
+    SELECT u FROM UnitJpaEntity u
+    WHERE u.occupancyStatus = :occupancyStatus
+      AND u.vacatedAt IS NOT NULL
+    ORDER BY u.vacatedAt ASC
+""")
+    Page<UnitJpaEntity> findLongestVacant(
+            @Param("occupancyStatus") UnitOccupancyStatus occupancyStatus,
+            Pageable pageable
+    );
 }

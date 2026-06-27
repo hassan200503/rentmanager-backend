@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Getter
@@ -29,6 +30,9 @@ public class UnitJpaEntity {
     @Column(nullable = false, updatable = false)
     private UUID id;
 
+    @Column(name = "vacated_at")
+    private LocalDateTime vacatedAt;
+
     @Column(nullable = false)
     private UUID tenantId;
 
@@ -50,4 +54,7 @@ public class UnitJpaEntity {
 
     @Column(columnDefinition = "TEXT")
     private String description;
+
+
+
 }

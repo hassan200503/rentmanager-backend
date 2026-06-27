@@ -9,6 +9,7 @@ import com.rentmanager.modules.unit.infrastructure.persistence.mapper.UnitPersis
 import com.rentmanager.modules.unit.infrastructure.persistence.repository.UnitJpaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
@@ -151,6 +152,17 @@ public class UnitRepositoryAdapter implements UnitRepository {
     @Override
     public long countByTenantIdAndOccupancyStatus(UUID tenantId, UnitOccupancyStatus occupancyStatus) {
         return jpaRepository.countByTenantIdAndOccupancyStatus(tenantId, occupancyStatus);
+    }
+
+
+
+    @Override
+    public Optional<Unit> findLongestVacant() {
+        Page<UnitJpaEntity> page = jpaRepository.findLongestVacant(
+                UnitOccupancyStatus.VACANT,
+                PageRequest.of(0, 1)
+        );
+        return page.getContent().stream().findFirst().map(mapper::toDomain);
     }
 
 }

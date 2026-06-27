@@ -49,4 +49,15 @@ public class PublicUnitQueryController {
                 publicUnitQueryService.getVacantUnitById(unitId)
         ));
     }
+
+
+
+
+    @GetMapping("/featured/longest-vacant")
+    public ResponseEntity<ApiResponse<PublicUnitResponse>> getLongestVacantUnit() {
+        return ResponseEntity.ok(ApiResponse.ok(
+                "Longest vacant unit retrieved successfully",
+                publicUnitQueryService.getLongestVacantUnit()
+        ));
+    }
 }

@@ -55,4 +55,7 @@ public interface UnitRepository {
 
     long countByTenantId(UUID tenantId);
     long countByTenantIdAndOccupancyStatus(UUID tenantId, UnitOccupancyStatus occupancyStatus);
+
+
+    Optional<Unit> findLongestVacant();
 }
