@@ -1,7 +1,8 @@
 package com.rentmanager.modules.tenant.domain.service;
 
-import com.rentmanager.modules.tenant.domain.model.TenantSubscription;
+
 import com.rentmanager.modules.tenant.domain.model.SubscriptionPlan;
+import com.rentmanager.modules.tenant.domain.model.TenantSubscription;
 
 import java.time.LocalDate;
 

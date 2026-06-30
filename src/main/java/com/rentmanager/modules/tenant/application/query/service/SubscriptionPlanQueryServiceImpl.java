@@ -1,6 +1,7 @@
 package com.rentmanager.modules.tenant.application.query.service;
 
 import com.rentmanager.modules.tenant.application.dto.response.SubscriptionPlanResponse;
+
 import com.rentmanager.modules.tenant.domain.repository.SubscriptionPlanRepository;
 import org.springframework.stereotype.Service;
 

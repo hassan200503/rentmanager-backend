@@ -3,8 +3,9 @@ package com.rentmanager.modules.tenant.application.command.service;
 import com.rentmanager.modules.tenant.application.dto.request.*;
 import com.rentmanager.modules.tenant.application.dto.response.TenantResponse;
 import com.rentmanager.modules.tenant.application.mapper.TenantMapper;
-import com.rentmanager.modules.tenant.domain.model.Tenant;
+
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
+import com.rentmanager.modules.tenant.domain.model.Tenant;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;

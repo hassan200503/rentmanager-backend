@@ -1,6 +1,9 @@
 package com.rentmanager.shared.security.jwt;
 
+
+
 import com.rentmanager.modules.tenant.domain.model.Tenant;
+import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import com.rentmanager.modules.user.domain.model.User;
 import com.rentmanager.modules.user.domain.repository.UserRepository;
@@ -23,15 +26,26 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
     private static final String CLAIM_TENANT_ID = "tenant_id";
     private static final String CLAIM_EMAIL = "email";
 
+    private static final String ROLE_LANDLORD = "ROLE_LANDLORD";
+    private static final String ROLE_TENANT = "ROLE_TENANT";
+    // Authenticated via a valid Clerk token, but not yet linked to a landlord
+    // account (Clerk Org) or a TenantProfile under any landlord. Route guards
+    // should send these users to an onboarding flow rather than treat them
+    // as fully authorized for either role.
+    private static final String ROLE_PENDING_ONBOARDING = "ROLE_PENDING_ONBOARDING";
+
     private final UserRepository userRepository;
     private final TenantRepository tenantRepository;
+    private final TenantProfileRepository tenantProfileRepository;
 
     public ClerkJwtAuthenticationConverter(
             UserRepository userRepository,
-            TenantRepository tenantRepository
+            TenantRepository tenantRepository,
+            TenantProfileRepository tenantProfileRepository
     ) {
         this.userRepository = userRepository;
         this.tenantRepository = tenantRepository;
+        this.tenantProfileRepository = tenantProfileRepository;
     }
 
     @Override
@@ -45,9 +59,7 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
         User user = resolveOrProvisionUser(clerkUserId, email);
         UUID resolvedTenantId = resolveTenantId(clerkOrgId, user);
 
-        Set<SimpleGrantedAuthority> authorities = Set.of(
-                new SimpleGrantedAuthority("ROLE_USER")
-        );
+        Set<SimpleGrantedAuthority> authorities = resolveAuthorities(clerkUserId, resolvedTenantId);
 
         AuthenticatedUser authenticatedUser = new AuthenticatedUser(
                 user.getId(),
@@ -58,10 +70,37 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
                 authorities
         );
 
-
         TenantContext.setTenantId(resolvedTenantId);
         TenantContext.setUserId(user.getId());
         return new ClerkAuthenticationToken(authenticatedUser, jwt, authorities);
+    }
+
+    /**
+     * Role is derived from existing data rather than a stored field, so it
+     * can never drift out of sync with the underlying landlord/tenant records:
+     *
+     *   - resolvedTenantId present  -> this Clerk identity owns/belongs to a
+     *     landlord account (Clerk Org resolved to a local Tenant)            -> LANDLORD
+     *   - resolvedTenantId absent, but a TenantProfile exists for this
+     *     clerkUserId under ANY landlord                                     -> TENANT
+     *   - neither                                                            -> PENDING_ONBOARDING
+     *
+     * NOTE: a renter with profiles under multiple landlords still gets a
+     * single ROLE_TENANT grant here. Per-landlord/per-lease authorization
+     * (e.g. "can only view their own lease") must be enforced separately at
+     * the service/controller layer, not at this JWT-conversion stage.
+     */
+    private Set<SimpleGrantedAuthority> resolveAuthorities(String clerkUserId, UUID resolvedTenantId) {
+
+        if (resolvedTenantId != null) {
+            return Set.of(new SimpleGrantedAuthority(ROLE_LANDLORD));
+        }
+
+        if (tenantProfileRepository.existsByClerkUserId(clerkUserId)) {
+            return Set.of(new SimpleGrantedAuthority(ROLE_TENANT));
+        }
+
+        return Set.of(new SimpleGrantedAuthority(ROLE_PENDING_ONBOARDING));
     }
 
     /**

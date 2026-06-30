@@ -1,7 +1,9 @@
 package com.rentmanager.modules.tenant.infrastructure.persistence.specification;
 
+
+
+import com.rentmanager.modules.tenant.renter.infrastructure.persistence.entity.TenantEntity;
 import com.rentmanager.modules.tenant.infrastructure.persistence.entity.TenantSettingsEntity;
-import com.rentmanager.modules.tenant.infrastructure.persistence.entity.TenantEntity;
 
 public class TenantSettingsSpecification {
 

@@ -1,5 +1,9 @@
 package com.rentmanager.modules.tenant.domain.repository;
 
+
+
+
+
 import com.rentmanager.modules.tenant.domain.model.TenantSubscription;
 
 import java.util.List;

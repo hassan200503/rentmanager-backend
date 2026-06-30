@@ -10,6 +10,7 @@ import com.rentmanager.modules.lease.infrastructure.persistence.specification.Le
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -111,4 +112,30 @@ public class LeaseRepositoryImpl implements LeaseRepository {
                 .filter(e -> e.getTenantId().equals(tenantId))
                 .map(mapper::toDomain);
     }
+
+
+    @Override
+    public boolean hasActiveLeaseForUnit(UUID unitId) {
+        return jpaRepository.existsByUnitIdAndStatus(unitId, LeaseStatus.ACTIVE);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countAll() {
+        return jpaRepository.count();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Lease> findAllByStatusAndStartDateLessThanEqual(
+            LeaseStatus status,
+            LocalDate date
+    ) {
+        return jpaRepository
+                .findAllByStatusAndStartDateLessThanEqual(status, date)
+                .stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
 }

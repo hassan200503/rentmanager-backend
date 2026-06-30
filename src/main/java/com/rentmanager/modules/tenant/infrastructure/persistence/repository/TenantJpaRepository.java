@@ -1,6 +1,7 @@
 package com.rentmanager.modules.tenant.infrastructure.persistence.repository;
 
-import com.rentmanager.modules.tenant.infrastructure.persistence.entity.TenantEntity;
+
+import com.rentmanager.modules.tenant.renter.infrastructure.persistence.entity.TenantEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

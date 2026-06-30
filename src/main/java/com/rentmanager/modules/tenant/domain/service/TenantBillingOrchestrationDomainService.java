@@ -1,7 +1,9 @@
 package com.rentmanager.modules.tenant.domain.service;
 
-import com.rentmanager.modules.tenant.domain.model.Tenant;
+
+
 import com.rentmanager.modules.tenant.domain.model.SubscriptionPlan;
+import com.rentmanager.modules.tenant.domain.model.Tenant;
 
 public interface TenantBillingOrchestrationDomainService {
 

@@ -19,7 +19,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: none # IMPORTANT: Flyway owns schema (prevents your crash)
+      ddl-auto: none
     properties:
       hibernate:
         format_sql: true
@@ -58,3 +58,21 @@ cloudinary:
   cloud-name: ${CLOUDINARY_CLOUD_NAME}
   api-key: ${CLOUDINARY_API_KEY}
   api-secret: ${CLOUDINARY_API_SECRET}
+
+
+
+
+daraja:
+  consumer-key: ${DARAJA_CONSUMER_KEY:YOUR_CONSUMER_KEY}
+  consumer-secret: ${DARAJA_CONSUMER_SECRET:YOUR_CONSUMER_SECRET}
+  business-short-code: ${DARAJA_SHORT_CODE:174379}
+  passkey: ${DARAJA_PASSKEY:YOUR_DARAJA_PASSKEY}
+  callback-url: ${DARAJA_CALLBACK_URL:https://yourdomain.com/api/v1/public/reservations/mpesa/callback}
+  base-url: ${DARAJA_BASE_URL:https://sandbox.safaricom.co.ke}
+
+
+
+
+clerk:
+  secret-key: ${CLERK_SECRET_KEY:YOUR_CLERK_SECRET_KEY}
+  base-url: https://api.clerk.com/v1

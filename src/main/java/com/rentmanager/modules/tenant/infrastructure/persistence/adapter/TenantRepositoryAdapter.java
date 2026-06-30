@@ -1,10 +1,13 @@
 package com.rentmanager.modules.tenant.infrastructure.persistence.adapter;
 
-import com.rentmanager.modules.tenant.domain.model.Tenant;
+
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
-import com.rentmanager.modules.tenant.infrastructure.persistence.entity.TenantEntity;
+
 import com.rentmanager.modules.tenant.infrastructure.persistence.mapper.TenantPersistenceMapper;
+
 import com.rentmanager.modules.tenant.infrastructure.persistence.repository.TenantJpaRepository;
+import com.rentmanager.modules.tenant.domain.model.Tenant;
+import com.rentmanager.modules.tenant.renter.infrastructure.persistence.entity.TenantEntity;
 import org.springframework.stereotype.Component;
 
 import java.util.List;

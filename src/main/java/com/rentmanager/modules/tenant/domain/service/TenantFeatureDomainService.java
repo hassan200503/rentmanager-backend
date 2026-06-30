@@ -1,5 +1,6 @@
 package com.rentmanager.modules.tenant.domain.service;
 
+
 import com.rentmanager.modules.tenant.domain.model.Tenant;
 
 public interface TenantFeatureDomainService {

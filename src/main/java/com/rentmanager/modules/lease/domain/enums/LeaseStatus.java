@@ -11,6 +11,8 @@ public enum LeaseStatus {
 
     EXPIRED,
 
+    PENDING_ACTIVATION,
+
     RENEWED,
     CANCELLED,
 

@@ -1,5 +1,7 @@
 package com.rentmanager.modules.tenant.domain.repository;
 
+
+
 import com.rentmanager.modules.tenant.domain.model.Tenant;
 
 import java.util.List;

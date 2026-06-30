@@ -1,5 +1,6 @@
 package com.rentmanager.modules.tenant.infrastructure.persistence.specification;
 
+
 import com.rentmanager.modules.tenant.domain.model.Organization;
 import org.springframework.data.jpa.domain.Specification;
 

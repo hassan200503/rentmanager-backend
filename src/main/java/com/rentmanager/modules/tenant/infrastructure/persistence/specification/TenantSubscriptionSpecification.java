@@ -1,5 +1,7 @@
 package com.rentmanager.modules.tenant.infrastructure.persistence.specification;
 
+
+
 import com.rentmanager.modules.tenant.infrastructure.persistence.entity.TenantSubscriptionEntity;
 
 import java.time.Instant;

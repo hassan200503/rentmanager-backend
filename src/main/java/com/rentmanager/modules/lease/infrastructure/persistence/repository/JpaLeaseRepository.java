@@ -5,6 +5,8 @@ import com.rentmanager.modules.lease.infrastructure.persistence.entity.LeaseEnti
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -22,5 +24,12 @@ public interface JpaLeaseRepository extends JpaRepository<LeaseEntity, UUID>,
 
 
     Optional<LeaseEntity> findByUnitIdAndStatus(UUID unitId, LeaseStatus status);
+
+    boolean existsByUnitIdAndStatus(UUID unitId, LeaseStatus status);
+
+    List<LeaseEntity> findAllByStatusAndStartDateLessThanEqual(
+            LeaseStatus status,
+            LocalDate date
+    );
 
 }

@@ -48,7 +48,6 @@ public class Unit extends AggregateRoot {
                 .description(description)
                 .build();
 
-        // ✅ FIX 1: ensure aggregate root ID exists
         unit.setId(UUID.randomUUID());
 
         unit.registerEvent(new UnitCreatedEvent(
@@ -193,7 +192,6 @@ public class Unit extends AggregateRoot {
         return this.status != null ? this.status.name() : null;
     }
 
-
     public void markReserved(String correlationId) {
         if (this.occupancyStatus == UnitOccupancyStatus.RESERVED) return;
 
@@ -206,5 +204,21 @@ public class Unit extends AggregateRoot {
         ));
     }
 
+    /**
+     * Compensating action for a failed reservation fulfillment saga.
+     * Reverts a RESERVED unit back to VACANT so it can be reserved again.
+     * No-op if the unit isn't currently RESERVED (e.g. compensation running
+     * twice, or this step never actually completed before the failure).
+     */
+    public void releaseReservation(String correlationId) {
+        if (this.occupancyStatus != UnitOccupancyStatus.RESERVED) return;
 
+        UnitOccupancyStatus previous = this.occupancyStatus;
+        this.occupancyStatus = UnitOccupancyStatus.VACANT;
+        this.vacatedAt = LocalDateTime.now();
+
+        registerEvent(new UnitOccupancyChangedEvent(
+                tenantId, getId(), correlationId, getId(), previous, this.occupancyStatus
+        ));
+    }
 }

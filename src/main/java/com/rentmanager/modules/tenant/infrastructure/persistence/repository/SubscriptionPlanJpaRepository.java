@@ -1,5 +1,6 @@
 package com.rentmanager.modules.tenant.infrastructure.persistence.repository;
 
+
 import com.rentmanager.modules.tenant.infrastructure.persistence.entity.SubscriptionPlanEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 

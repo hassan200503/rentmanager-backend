@@ -1,4 +1,4 @@
-package com.rentmanager.modules.tenant.infrastructure.persistence.entity;
+package com.rentmanager.modules.tenant.renter.infrastructure.persistence.entity;
 
 import com.rentmanager.domain.base.BaseEntity;
 import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;

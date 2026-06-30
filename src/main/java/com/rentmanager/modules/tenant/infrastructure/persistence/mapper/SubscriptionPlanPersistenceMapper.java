@@ -1,5 +1,7 @@
 package com.rentmanager.modules.tenant.infrastructure.persistence.mapper;
 
+
+
 import com.rentmanager.modules.tenant.domain.model.SubscriptionPlan;
 import com.rentmanager.modules.tenant.infrastructure.persistence.entity.SubscriptionPlanEntity;
 import org.mapstruct.Mapper;

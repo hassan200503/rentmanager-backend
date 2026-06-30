@@ -30,6 +30,16 @@ public interface LeaseRepository {
 
     void delete(UUID id);
 
+
+    /**
+     * Finds leases in a given status whose start date is today or earlier.
+     * Used by the automatic lease activation scheduler.
+     */
+    List<Lease> findAllByStatusAndStartDateLessThanEqual(
+            LeaseStatus status,
+            LocalDate date
+    );
+
     /**
      * Optional domain-level convenience query
      * (can be derived from active + unit filter in service if needed)
@@ -55,4 +65,8 @@ public interface LeaseRepository {
     Optional<Lease> findByUnitIdAndStatus(UUID unitId, LeaseStatus status);
 
     Optional<Lease> findByIdAndTenantId(UUID id, UUID tenantId);
+
+    boolean hasActiveLeaseForUnit(UUID unitId);   // ← add this
+
+    long countAll();
 }

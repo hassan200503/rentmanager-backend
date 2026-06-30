@@ -1,4 +1,4 @@
-package com.rentmanager.modules.tenant.infrastructure.persistence.adapter;
+package com.rentmanager.modules.tenant.renter.infrastructure.persistence.adapter;
 
 import com.rentmanager.modules.tenant.domain.model.Tenant;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;

@@ -560,4 +560,61 @@ public class Lease extends AggregateRoot {
 
         return lease;
     }
+
+
+
+
+    public void activatePending() {
+
+        if (status != LeaseStatus.PENDING_ACTIVATION) {
+            throw new LeaseStateException(
+                    "Only leases pending activation can be activated",
+                    ErrorCode.LEASE_ACTIVATION_ONLY_PENDING_ACTIVATION_ALLOWED
+            );
+        }
+
+        this.status = LeaseStatus.ACTIVE;
+        this.activatedAt = LocalDateTime.now();
+
+        registerEvent(
+                new LeaseActivatedEvent(
+                        getTenantId(),
+                        getId(),
+                        "SYSTEM",
+                        propertyId,
+                        unitId,
+                        tenantProfileId
+                )
+        );
+    }
+
+
+
+
+    public static Lease createPendingActivation(
+            UUID tenantId,
+            UUID propertyId,
+            UUID unitId,
+            UUID tenantProfileId,
+            String leaseNumber,
+            LeaseType leaseType,
+            BillingCycle billingCycle,
+            LocalDate startDate,
+            LocalDate endDate,
+            BigDecimal monthlyRent,
+            BigDecimal securityDeposit,
+            BigDecimal lateFeeAmount,
+            Integer gracePeriodDays,
+            boolean autoRenew
+    ) {
+        Lease lease = create(tenantId, propertyId, unitId, tenantProfileId, leaseNumber,
+                leaseType, billingCycle, startDate, endDate, monthlyRent,
+                securityDeposit, lateFeeAmount, gracePeriodDays, autoRenew);
+        lease.status = LeaseStatus.PENDING_ACTIVATION;
+        return lease;
+    }
+
+
+
+
 }
