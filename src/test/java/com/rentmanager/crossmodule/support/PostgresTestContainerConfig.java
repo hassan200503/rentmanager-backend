@@ -11,9 +11,5 @@ public final class PostgresTestContainerConfig {
                     .withPassword("test")
                     .withReuse(true);
 
-    static {
-        INSTANCE.start();
-    }
-
     private PostgresTestContainerConfig() {}
 }

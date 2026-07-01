@@ -2,6 +2,7 @@ package com.rentmanager.modules.identity.clerk;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
@@ -90,8 +91,6 @@ public class ClerkServiceImpl implements ClerkService {
             );
             log.info("Clerk user deleted as compensation. clerkUserId={}", clerkUserId);
         } catch (Exception e) {
-            // Best-effort: never let a compensation failure mask the original
-            // error, or throw from inside a saga's failure-handling path.
             log.error("Failed to delete Clerk user during compensation. clerkUserId={} — " +
                     "MANUAL CLEANUP MAY BE REQUIRED", clerkUserId, e);
         }
@@ -103,25 +102,19 @@ public class ClerkServiceImpl implements ClerkService {
 
         String url = properties.getBaseUrl() + "/users?email_address[]=" + email;
 
-        ResponseEntity<Map> response = restTemplate.exchange(
+        ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
                 url,
                 HttpMethod.GET,
                 request,
-                Map.class
+                new ParameterizedTypeReference<List<Map<String, Object>>>() {}
         );
 
-        Map<?, ?> body = response.getBody();
-        if (body == null || !body.containsKey("data")) {
-            return null;
-        }
-
-        List<?> users = (List<?>) body.get("data");
+        List<Map<String, Object>> users = response.getBody();
         if (users == null || users.isEmpty()) {
             return null;
         }
 
-        Map<?, ?> firstMatch = (Map<?, ?>) users.get(0);
-        return (String) firstMatch.get("id");
+        return (String) users.get(0).get("id");
     }
 
     private HttpHeaders buildAuthHeaders() {

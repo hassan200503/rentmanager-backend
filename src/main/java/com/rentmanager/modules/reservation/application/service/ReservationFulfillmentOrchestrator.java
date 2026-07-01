@@ -19,6 +19,8 @@ import com.rentmanager.shared.events.DomainEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -28,12 +30,12 @@ import java.util.UUID;
 
 /**
  * Orchestrates the full Phase 4 chain as a compensating saga:
- *   1. Create tenant account in Clerk (track if NEWLY created vs reused)
- *   2. Send SMS with credentials
- *   3. Create or reuse TenantProfile (track if NEWLY created vs reused)
- *   4. Auto-create Lease in PENDING_ACTIVATION
- *   5. Mark Unit reserved
- *   6. Complete the Reservation (FULFILLING -> COMPLETED)
+ * 1. Create tenant account in Clerk (track if NEWLY created vs reused)
+ * 2. Send SMS with credentials
+ * 3. Create or reuse TenantProfile (track if NEWLY created vs reused)
+ * 4. Auto-create Lease in PENDING_ACTIVATION
+ * 5. Mark Unit reserved
+ * 6. Complete the Reservation (FULFILLING -> COMPLETED)
  *
  * Runs AFTER_COMMIT so a failure here can never roll back the confirmed
  * M-Pesa payment recorded by MpesaCallbackService.
@@ -43,6 +45,10 @@ import java.util.UUID;
  * prior successful reservation), then the Reservation is marked
  * FULFILLMENT_FAILED — not CANCELLED, because the deposit was genuinely
  * paid and a human must follow up.
+ *
+ * Compensation runs in ReservationFulfillmentCompensationService, in its
+ * own REQUIRES_NEW transaction, so an aborted/poisoned transaction from
+ * the triggering failure can never block the cleanup writes.
  */
 @Slf4j
 @Service
@@ -57,6 +63,7 @@ public class ReservationFulfillmentOrchestrator {
     private final SmsService smsService;
     private final ReservationFulfillmentValidator fulfillmentValidator;
     private final DomainEventPublisher eventPublisher;
+    private final ReservationFulfillmentCompensationService compensationService;
 
     // TODO: confirm — does a default lease term length exist anywhere
     // (e.g. tenant-configurable per property), or is 12 months a safe
@@ -64,6 +71,7 @@ public class ReservationFulfillmentOrchestrator {
     private static final int DEFAULT_LEASE_TERM_MONTHS = 12;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void on(ReservationDepositPaidEvent event) {
 
         UUID reservationId = event.getAggregateId();
@@ -177,84 +185,8 @@ public class ReservationFulfillmentOrchestrator {
         } catch (Exception e) {
             log.error("Reservation fulfillment failed, beginning compensation. reservationId={}",
                     reservationId, e);
-            compensate(saga, reservation, e);
+            compensationService.compensate(saga, reservationId, e);
         }
-    }
-
-    /**
-     * Undoes whatever this run actually completed, in reverse order, then
-     * marks the reservation as FULFILLMENT_FAILED. Each compensating step is
-     * independently guarded so one failing doesn't block the others —
-     * compensation should do its best to clean up everything possible.
-     */
-    private void compensate(SagaState saga, Reservation reservation, Exception originalError) {
-
-        if (saga.unitReserved && saga.unitId != null) {
-            try {
-                Unit unit = unitRepository.findById(saga.unitId).orElse(null);
-                if (unit != null) {
-                    unit.releaseReservation(reservation.getId().toString());
-                    unitRepository.save(unit);
-                    eventPublisher.publishAll(unit.pullDomainEvents());
-                    log.info("Compensation: released unit reservation. unitId={}", saga.unitId);
-                }
-            } catch (Exception ex) {
-                log.error("Compensation FAILED to release unit. unitId={} — MANUAL CLEANUP REQUIRED",
-                        saga.unitId, ex);
-            }
-        }
-
-        if (saga.leaseCreated && saga.leaseId != null) {
-            try {
-                leaseRepository.findById(saga.leaseId).ifPresent(lease -> {
-                    lease.cancel();
-                    leaseRepository.save(lease);
-                });
-                log.info("Compensation: cancelled lease. leaseId={}", saga.leaseId);
-            } catch (Exception ex) {
-                log.error("Compensation FAILED to cancel lease. leaseId={} — MANUAL CLEANUP REQUIRED",
-                        saga.leaseId, ex);
-            }
-        }
-
-        if (saga.tenantProfileCreatedThisRun && saga.tenantProfileId != null) {
-            try {
-                tenantProfileRepository.deleteById(saga.tenantProfileId);
-                log.info("Compensation: deleted newly-created TenantProfile. tenantProfileId={}",
-                        saga.tenantProfileId);
-            } catch (Exception ex) {
-                log.error("Compensation FAILED to delete TenantProfile. tenantProfileId={} — " +
-                        "MANUAL CLEANUP REQUIRED", saga.tenantProfileId, ex);
-            }
-        }
-
-        if (saga.clerkUserCreatedThisRun && saga.clerkUserId != null) {
-            // ClerkService.deleteUser is itself best-effort / non-throwing,
-            // so no try/catch needed here specifically, but kept for safety
-            // against any future change to that contract.
-            try {
-                clerkService.deleteUser(saga.clerkUserId);
-            } catch (Exception ex) {
-                log.error("Compensation FAILED to delete Clerk user. clerkUserId={} — " +
-                        "MANUAL CLEANUP REQUIRED", saga.clerkUserId, ex);
-            }
-        }
-
-        try {
-            Reservation freshReservation = reservationRepository.findById(reservation.getId())
-                    .orElse(reservation);
-            freshReservation.markFulfillmentFailed(
-                    originalError.getClass().getSimpleName() + ": " + originalError.getMessage());
-            reservationRepository.save(freshReservation);
-        } catch (Exception ex) {
-            log.error("CRITICAL: failed to mark reservation as FULFILLMENT_FAILED after " +
-                    "compensation. reservationId={} — this reservation is now in an UNKNOWN " +
-                    "state and requires immediate manual investigation", reservation.getId(), ex);
-        }
-
-        log.error("Reservation fulfillment compensation complete. reservationId={} — " +
-                        "PAYMENT WAS RECEIVED, manual follow-up required (refund or retry).",
-                reservation.getId());
     }
 
     private String generateTemporaryPassword() {
@@ -271,23 +203,5 @@ public class ReservationFulfillmentOrchestrator {
         // TODO: confirm desired lease number format/uniqueness strategy —
         // this is a placeholder, not validated against existing conventions.
         return "LSE-" + unit.getUnitNumber() + "-" + System.currentTimeMillis();
-    }
-
-    /**
-     * Mutable tracker for what THIS saga run actually accomplished, used
-     * exclusively to scope compensation correctly if a later step fails.
-     */
-    private static class SagaState {
-        String clerkUserId;
-        boolean clerkUserCreatedThisRun;
-
-        UUID tenantProfileId;
-        boolean tenantProfileCreatedThisRun;
-
-        UUID leaseId;
-        boolean leaseCreated;
-
-        UUID unitId;
-        boolean unitReserved;
     }
 }
