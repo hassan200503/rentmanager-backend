@@ -17,6 +17,13 @@ public class DarajaProperties {
     private String passkey;
     private String callbackUrl;
 
+    // Shared secret embedded as a path segment in callbackUrl, validated on
+    // receipt by ReservationController#mpesaCallback. Daraja does not sign
+    // callback payloads, so this is the only thing gating that endpoint from
+    // the open internet. Generate with e.g. `openssl rand -hex 32` and set
+    // via DARAJA_CALLBACK_SECRET — never commit a real value to application.yml.
+    private String callbackSecret;
+
     // Production base URL
     private String baseUrl = "https://api.safaricom.co.ke";
 }

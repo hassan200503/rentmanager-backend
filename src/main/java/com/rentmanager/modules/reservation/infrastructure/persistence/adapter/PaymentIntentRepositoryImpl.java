@@ -36,17 +36,17 @@ public class PaymentIntentRepositoryImpl implements PaymentIntentRepository {
     // -------------------------------------------------------
     // MAPPING
     // -------------------------------------------------------
-
     private PaymentIntentJpaEntity toEntity(PaymentIntent i) {
         return PaymentIntentJpaEntity.builder()
                 .id(i.getId())
                 .unitId(i.getUnitId())
-                .propertyId(i.getPropertyId())   // <-- add this
+                .propertyId(i.getPropertyId())
                 .formDataJson(i.getFormDataJson())
                 .mpesaCheckoutRequestId(i.getMpesaCheckoutRequestId())
                 .depositAmount(i.getDepositAmount())
                 .status(i.getStatus())
                 .mpesaReceiptNumber(i.getMpesaReceiptNumber())
+                .version(i.getVersion())
                 .build();
     }
 
@@ -59,7 +59,8 @@ public class PaymentIntentRepositoryImpl implements PaymentIntentRepository {
                 e.getMpesaCheckoutRequestId(),
                 e.getDepositAmount(),
                 e.getStatus(),
-                e.getMpesaReceiptNumber()
+                e.getMpesaReceiptNumber(),
+                e.getVersion()
         );
     }
 }

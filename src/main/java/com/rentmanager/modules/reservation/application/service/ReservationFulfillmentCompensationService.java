@@ -53,11 +53,15 @@ public class ReservationFulfillmentCompensationService {
             }
         }
 
+
+
+
         if (saga.leaseCreated && saga.leaseId != null) {
             try {
                 leaseRepository.findById(saga.leaseId).ifPresent(lease -> {
-                    lease.cancel();
+                    lease.cancel("Reservation fulfillment failed: " + originalError.getClass().getSimpleName());
                     leaseRepository.save(lease);
+                    eventPublisher.publishAll(lease.pullDomainEvents());
                 });
                 log.info("Compensation: cancelled lease. leaseId={}", saga.leaseId);
             } catch (Exception ex) {
@@ -65,6 +69,10 @@ public class ReservationFulfillmentCompensationService {
                         saga.leaseId, ex);
             }
         }
+
+
+
+
 
         if (saga.tenantProfileCreatedThisRun && saga.tenantProfileId != null) {
             try {

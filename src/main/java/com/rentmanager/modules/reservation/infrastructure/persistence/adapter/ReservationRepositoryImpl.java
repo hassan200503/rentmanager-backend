@@ -36,7 +36,6 @@ public class ReservationRepositoryImpl implements ReservationRepository {
     // -------------------------------------------------------
     // MAPPING
     // -------------------------------------------------------
-
     private ReservationJpaEntity toEntity(Reservation r) {
         return ReservationJpaEntity.builder()
                 .id(r.getId())
@@ -54,6 +53,7 @@ public class ReservationRepositoryImpl implements ReservationRepository {
                 .clerkUserId(r.getClerkUserId())
                 .paymentIntentId(r.getPaymentIntentId())
                 .fulfillmentFailureReason(r.getFulfillmentFailureReason())
+                .version(r.getVersion())
                 .build();
     }
 
@@ -73,7 +73,17 @@ public class ReservationRepositoryImpl implements ReservationRepository {
                 e.getMpesaReceiptNumber(),
                 e.getClerkUserId(),
                 e.getPaymentIntentId(),
-                e.getFulfillmentFailureReason()
+                e.getFulfillmentFailureReason(),
+                e.getVersion()
         );
+    }
+
+
+
+
+
+    @Override
+    public void flush() {
+        jpaRepository.flush();
     }
 }

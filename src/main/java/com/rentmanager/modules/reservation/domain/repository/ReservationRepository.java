@@ -12,4 +12,6 @@ public interface ReservationRepository {
     Optional<Reservation> findById(UUID id);
 
     Optional<Reservation> findByPaymentIntentId(UUID paymentIntentId);
+
+    void flush();
 }

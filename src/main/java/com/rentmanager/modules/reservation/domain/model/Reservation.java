@@ -31,6 +31,12 @@ public class Reservation extends AggregateRoot {
     // Set only if fulfillment fails, for support/diagnostic visibility
     private String fulfillmentFailureReason;
 
+    // Optimistic locking version, mirrored from ReservationJpaEntity's
+    // @Version column. Null until first persisted; Hibernate assigns 0
+    // on initial insert. Carried through rehydrate() on every load so
+    // concurrent saves against a stale version are detected.
+    private Long version;
+
     protected Reservation() {}
 
     public static Reservation create(
@@ -71,6 +77,7 @@ public class Reservation extends AggregateRoot {
         reservation.depositAmount = depositAmount;
         reservation.paymentIntentId = paymentIntentId;
         reservation.status = ReservationStatus.PENDING_PAYMENT;
+        reservation.version = null; // unpersisted; Hibernate assigns on first insert
 
         return reservation;
     }
@@ -168,6 +175,7 @@ public class Reservation extends AggregateRoot {
     public String getClerkUserId() { return clerkUserId; }
     public UUID getPaymentIntentId() { return paymentIntentId; }
     public String getFulfillmentFailureReason() { return fulfillmentFailureReason; }
+    public Long getVersion() { return version; }
 
     public static Reservation rehydrate(
             UUID id,
@@ -184,7 +192,8 @@ public class Reservation extends AggregateRoot {
             String mpesaReceiptNumber,
             String clerkUserId,
             UUID paymentIntentId,
-            String fulfillmentFailureReason
+            String fulfillmentFailureReason,
+            Long version
     ) {
         Reservation r = new Reservation();
         r.setId(id);
@@ -202,6 +211,7 @@ public class Reservation extends AggregateRoot {
         r.clerkUserId = clerkUserId;
         r.paymentIntentId = paymentIntentId;
         r.fulfillmentFailureReason = fulfillmentFailureReason;
+        r.version = version;
         return r;
     }
 }

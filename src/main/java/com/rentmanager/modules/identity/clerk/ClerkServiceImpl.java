@@ -20,12 +20,12 @@ public class ClerkServiceImpl implements ClerkService {
     private final RestTemplate restTemplate;
 
     @Override
-    public String createTenantUser(String fullName, String email, String phone, String password) {
+    public ClerkUserCreationResult createTenantUser(String fullName, String email, String phone, String password) {
 
         String existingUserId = findUserIdByEmail(email);
         if (existingUserId != null) {
             log.info("Clerk user already exists for email={}, reusing id={}", email, existingUserId);
-            return existingUserId;
+            return new ClerkUserCreationResult(existingUserId, false);
         }
 
         String[] names = splitFullName(fullName);
@@ -59,13 +59,13 @@ public class ClerkServiceImpl implements ClerkService {
 
             String clerkUserId = (String) responseBody.get("id");
             log.info("Clerk user created. clerkUserId={}", clerkUserId);
-            return clerkUserId;
+            return new ClerkUserCreationResult(clerkUserId, true);
 
         } catch (HttpClientErrorException e) {
             String fallbackId = findUserIdByEmail(email);
             if (fallbackId != null) {
                 log.warn("Clerk createTenantUser hit duplicate error, resolved existing id={}", fallbackId);
-                return fallbackId;
+                return new ClerkUserCreationResult(fallbackId, false);
             }
             log.error("Clerk user creation failed for email={}", email, e);
             throw new ClerkException("Clerk user creation failed: " + e.getMessage(), e);

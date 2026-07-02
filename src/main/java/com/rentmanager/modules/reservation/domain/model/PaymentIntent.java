@@ -24,6 +24,12 @@ public class PaymentIntent extends AggregateRoot {
     // Filled in after callback confirms payment
     private String mpesaReceiptNumber;
 
+    // Optimistic locking version, mirrored from PaymentIntentJpaEntity's
+    // @Version column. Null until first persisted; Hibernate assigns 0
+    // on initial insert. Carried through rehydrate() on every load so
+    // concurrent callback deliveries against a stale version are detected.
+    private Long version;
+
     protected PaymentIntent() {}
 
     // -------------------------------------------------------
@@ -48,6 +54,7 @@ public class PaymentIntent extends AggregateRoot {
         intent.formDataJson = formDataJson;
         intent.depositAmount = depositAmount;
         intent.status = PaymentIntentStatus.PENDING;
+        intent.version = null; // unpersisted; Hibernate assigns on first insert
 
         return intent;
     }
@@ -92,6 +99,7 @@ public class PaymentIntent extends AggregateRoot {
     public BigDecimal getDepositAmount() { return depositAmount; }
     public PaymentIntentStatus getStatus() { return status; }
     public String getMpesaReceiptNumber() { return mpesaReceiptNumber; }
+    public Long getVersion() { return version; }
 
     // -------------------------------------------------------
     // REHYDRATION
@@ -104,7 +112,8 @@ public class PaymentIntent extends AggregateRoot {
             String mpesaCheckoutRequestId,
             BigDecimal depositAmount,
             PaymentIntentStatus status,
-            String mpesaReceiptNumber
+            String mpesaReceiptNumber,
+            Long version
     ) {
         PaymentIntent intent = new PaymentIntent();
         intent.setId(id);
@@ -115,6 +124,7 @@ public class PaymentIntent extends AggregateRoot {
         intent.depositAmount = depositAmount;
         intent.status = status;
         intent.mpesaReceiptNumber = mpesaReceiptNumber;
+        intent.version = version;
         return intent;
     }
 }

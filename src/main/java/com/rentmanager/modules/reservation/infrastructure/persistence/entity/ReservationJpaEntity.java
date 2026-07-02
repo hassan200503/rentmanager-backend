@@ -63,4 +63,8 @@ public class ReservationJpaEntity {
 
     @Column(name = "fulfillment_failure_reason", length = 2000)
     private String fulfillmentFailureReason;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
 }

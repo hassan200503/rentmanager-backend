@@ -2,6 +2,7 @@ package com.rentmanager.modules.reservation.infrastructure.daraja;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rentmanager.modules.reservation.application.dto.InitiateReservationRequest;
+import com.rentmanager.modules.reservation.domain.enums.PaymentIntentStatus;
 import com.rentmanager.modules.reservation.domain.model.PaymentIntent;
 import com.rentmanager.modules.reservation.domain.model.Reservation;
 import com.rentmanager.modules.reservation.domain.repository.PaymentIntentRepository;
@@ -41,6 +42,23 @@ public class MpesaCallbackService {
                             "No PaymentIntent found for CheckoutRequestID: " + checkoutRequestId
                     );
                 });
+
+        // 1b. Idempotency guard: Safaricom retries callbacks that don't get a
+        // fast 200 response. A PENDING-only intent means this is the first
+        // (or only valid) delivery; anything else means we've already fully
+        // processed this checkoutRequestId and this is a duplicate delivery.
+        // Returning cleanly here (instead of letting markPaid/markFailed throw)
+        // avoids an unnecessary 500 -> Safaricom retry -> 500 loop for a
+        // completely expected webhook-retry scenario. True concurrent races
+        // (two deliveries processed at the same instant) are still caught by
+        // @Version optimistic locking on PaymentIntent/Reservation; that case
+        // surfaces as a genuine exception on commit and self-heals on the
+        // next Safaricom retry, which will then hit this early return.
+        if (intent.getStatus() != PaymentIntentStatus.PENDING) {
+            log.info("Duplicate M-Pesa callback ignored. CheckoutRequestID={} currentStatus={}",
+                    checkoutRequestId, intent.getStatus());
+            return;
+        }
 
         // 2. Handle failed payment
         if (!callback.isSuccessful()) {

@@ -41,4 +41,8 @@ public class PaymentIntentJpaEntity {
 
     @Column(name = "mpesa_receipt_number")
     private String mpesaReceiptNumber;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
 }

@@ -318,7 +318,10 @@ public class Lease extends AggregateRoot {
         ));
     }
 
-    public void cancel() {
+
+
+
+    public void cancel(String reason) {
 
         if (status == LeaseStatus.ACTIVE) {
             throw new LeaseStateException(
@@ -328,7 +331,22 @@ public class Lease extends AggregateRoot {
         }
         this.status = LeaseStatus.TERMINATED;
         this.terminatedAt = LocalDateTime.now();
+        this.terminationReason = reason;
+
+        registerEvent(new LeaseCancelledEvent(
+                getTenantId(),
+                getId(),
+                "SYSTEM",
+                propertyId,
+                unitId,
+                tenantProfileId,
+                reason
+        ));
     }
+
+
+
+
 
     public void expire() {
         if (status != LeaseStatus.ACTIVE) {

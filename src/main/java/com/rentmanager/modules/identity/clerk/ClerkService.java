@@ -3,17 +3,23 @@ package com.rentmanager.modules.identity.clerk;
 public interface ClerkService {
 
     /**
-     * Creates a tenant user in external identity system.
-     * Must be idempotent using email/phone uniqueness.
+     * Creates a tenant user in the external identity system, or reuses an
+     * existing one if the email is already registered. Idempotent by design.
+     *
+     * The returned newlyCreated flag reflects what THIS call actually did —
+     * it is the single source of truth for whether the account is new.
+     * Callers should rely on this flag rather than a separate pre-check
+     * against existsByEmail, since a check-then-create across two calls
+     * is inherently racy.
      */
-    String createTenantUser(String fullName, String email, String phone, String password);
+    ClerkUserCreationResult createTenantUser(String fullName, String email, String phone, String password);
 
     /**
      * Checks whether a Clerk user already exists for this email, without
-     * creating one. Used by callers (e.g. the fulfillment saga) that need to
-     * know in advance whether createTenantUser will create a NEW account or
-     * reuse an existing one — needed to decide whether compensation should
-     * delete the account on failure.
+     * creating one. General-purpose existence check. Callers that need to
+     * know whether createTenantUser will create vs reuse an account should
+     * use ClerkUserCreationResult.newlyCreated() instead of this method,
+     * to avoid a check-then-create race.
      */
     boolean existsByEmail(String email);
 

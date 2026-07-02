@@ -61,14 +61,14 @@ cloudinary:
 
 
 
-
 daraja:
   consumer-key: ${DARAJA_CONSUMER_KEY:YOUR_CONSUMER_KEY}
   consumer-secret: ${DARAJA_CONSUMER_SECRET:YOUR_CONSUMER_SECRET}
   business-short-code: ${DARAJA_SHORT_CODE:174379}
   passkey: ${DARAJA_PASSKEY:YOUR_DARAJA_PASSKEY}
-  callback-url: ${DARAJA_CALLBACK_URL:https://yourdomain.com/api/v1/public/reservations/mpesa/callback}
+  callback-url: ${DARAJA_CALLBACK_URL:https://yourdomain.com/api/v1/public/reservations/mpesa/callback/YOUR_CALLBACK_SECRET}
   base-url: ${DARAJA_BASE_URL:https://sandbox.safaricom.co.ke}
+  callback-secret: ${DARAJA_CALLBACK_SECRET}
 
 
 
@@ -76,3 +76,12 @@ daraja:
 clerk:
   secret-key: ${CLERK_SECRET_KEY:YOUR_CLERK_SECRET_KEY}
   base-url: https://api.clerk.com/v1
+
+
+
+africastalking:
+  enabled: ${AT_ENABLED:false}
+  api-key: ${AT_API_KEY:YOUR_AT_API_KEY}
+  username: ${AT_USERNAME:sandbox}
+  sender-id: ${AT_SENDER_ID:}
+  base-url: ${AT_BASE_URL:https://api.sandbox.africastalking.com/version1/messaging}
