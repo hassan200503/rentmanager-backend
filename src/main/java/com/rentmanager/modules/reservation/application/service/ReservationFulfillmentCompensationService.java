@@ -22,6 +22,14 @@ import java.util.UUID;
  * bean from ReservationFulfillmentOrchestrator — self-invocation within
  * the same class would bypass the Spring proxy and REQUIRES_NEW would
  * silently be ignored.
+ *
+ * NOTE (project handoff §1): this transaction cannot see steps 1-5's
+ * writes (Clerk/TenantProfile/Lease/Unit) if they haven't committed in
+ * the triggering saga's transaction — that's an inherent limit of running
+ * compensation separately, not a bug to "fix" here. What IS fixed: the
+ * reservation's FULFILLING status is now committed independently and
+ * early by ReservationFulfillmentStepZeroService, so this method's
+ * final status-transition step below is now reliable.
  */
 @Slf4j
 @Service
@@ -53,9 +61,6 @@ public class ReservationFulfillmentCompensationService {
             }
         }
 
-
-
-
         if (saga.leaseCreated && saga.leaseId != null) {
             try {
                 leaseRepository.findById(saga.leaseId).ifPresent(lease -> {
@@ -69,10 +74,6 @@ public class ReservationFulfillmentCompensationService {
                         saga.leaseId, ex);
             }
         }
-
-
-
-
 
         if (saga.tenantProfileCreatedThisRun && saga.tenantProfileId != null) {
             try {
@@ -98,9 +99,20 @@ public class ReservationFulfillmentCompensationService {
             Reservation freshReservation = reservationRepository.findById(reservationId)
                     .orElseThrow(() -> new IllegalStateException(
                             "Reservation vanished during compensation: " + reservationId));
-            freshReservation.markFulfillmentFailed(
+            boolean transitioned = freshReservation.markFulfillmentFailed(
                     originalError.getClass().getSimpleName() + ": " + originalError.getMessage());
-            reservationRepository.save(freshReservation);
+            if (transitioned) {
+                reservationRepository.save(freshReservation);
+                log.info("Compensation: reservation {} marked FULFILLMENT_FAILED.", reservationId);
+            } else {
+                // Tolerated no-op — see Reservation.markFulfillmentFailed() javadoc.
+                // With step 0 now committing independently, this should be rare;
+                // if it shows up often, that's a signal something upstream changed.
+                log.info("Compensation: reservation {} was not transitioned to " +
+                                "FULFILLMENT_FAILED (status={} at time of compensation) — " +
+                                "no action needed/possible from this transaction's view.",
+                        reservationId, freshReservation.getStatus());
+            }
         } catch (Exception ex) {
             log.error("CRITICAL: failed to mark reservation as FULFILLMENT_FAILED after " +
                     "compensation. reservationId={} — this reservation is now in an UNKNOWN " +

@@ -8,4 +8,5 @@ import java.util.UUID;
 
 public interface UserJpaRepository extends JpaRepository<UserEntity, UUID> {
     Optional<UserEntity> findByClerkUserId(String clerkUserId);
+    boolean existsByTenantId(UUID tenantId);
 }

@@ -1,6 +1,7 @@
 package com.rentmanager.modules.tenant.application.command.service;
 
 import com.rentmanager.modules.tenant.application.dto.request.*;
+import com.rentmanager.modules.tenant.application.dto.response.DarajaCredentialsStatusResponse;
 import com.rentmanager.modules.tenant.application.dto.response.TenantResponse;
 import org.springframework.stereotype.Service;
 
@@ -26,4 +27,12 @@ public interface TenantCommandService {
     TenantResponse changeTenantOwner(UUID tenantId, UUID targetTenantId, ChangeTenantOwnerRequest request);
 
     TenantResponse getTenant(UUID tenantId, UUID targetTenantId);
+
+
+
+    DarajaCredentialsStatusResponse configureDarajaCredentials(
+            UUID tenantId,
+            UUID targetTenantId,
+            ConfigureDarajaCredentialsRequest request
+    );
 }

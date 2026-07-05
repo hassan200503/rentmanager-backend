@@ -17,6 +17,7 @@ public class User extends BaseEntity {
     private String firstName;
     private String lastName;
     private boolean active;
+    private UserRole role;
 
     private User(String clerkUserId, String email) {
         this.clerkUserId = clerkUserId;
@@ -24,6 +25,32 @@ public class User extends BaseEntity {
         this.active = true;
     }
 
+    private User(
+            String clerkUserId,
+            String email,
+            String firstName,
+            String lastName,
+            UUID tenantId,
+            UserRole role
+    ) {
+        this.clerkUserId = clerkUserId;
+        this.email = email;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.tenantId = tenantId;
+        this.role = role;
+        this.active = true;
+    }
+
+    /**
+     * Just-in-time provisioning path (see ClerkJwtAuthenticationConverter).
+     * Role is intentionally left null here — it is resolved later, either
+     * by first-user-of-tenant detection (OWNER) when a tenant link is
+     * first established, or was already set via createInvited() if this
+     * Clerk identity was provisioned through the staff/manager invite flow
+     * (in which case resolveOrProvisionUser() finds this row by
+     * clerkUserId before ever reaching this factory).
+     */
     public static User createFromClerk(String clerkUserId, String email) {
         if (clerkUserId == null || clerkUserId.isBlank()) {
             throw new IllegalArgumentException("Clerk user ID is required");
@@ -34,6 +61,36 @@ public class User extends BaseEntity {
         return new User(clerkUserId, email);
     }
 
+    /**
+     * Invite-flow path: tenantId and role are known and set at creation
+     * time, before the invited person ever logs in. This means the
+     * JIT-provisioning path in ClerkJwtAuthenticationConverter never has
+     * to guess a role for an invited user — findByClerkUserId() finds this
+     * row already fully formed on their first login.
+     */
+    public static User createInvited(
+            String clerkUserId,
+            String email,
+            String firstName,
+            String lastName,
+            UUID tenantId,
+            UserRole role
+    ) {
+        if (clerkUserId == null || clerkUserId.isBlank()) {
+            throw new IllegalArgumentException("Clerk user ID is required");
+        }
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Email is required");
+        }
+        if (tenantId == null) {
+            throw new IllegalArgumentException("Tenant ID is required for an invited user");
+        }
+        if (role == null) {
+            throw new IllegalArgumentException("Role is required for an invited user");
+        }
+        return new User(clerkUserId, email, firstName, lastName, tenantId, role);
+    }
+
     public static User rehydrate(
             UUID id,
             Long version,
@@ -42,7 +99,8 @@ public class User extends BaseEntity {
             String email,
             String firstName,
             String lastName,
-            boolean active
+            boolean active,
+            UserRole role
     ) {
         User user = new User();
         user.setId(id);
@@ -53,6 +111,7 @@ public class User extends BaseEntity {
         user.firstName = firstName;
         user.lastName = lastName;
         user.active = active;
+        user.role = role;
         return user;
     }
 
@@ -61,5 +120,22 @@ public class User extends BaseEntity {
             throw new IllegalArgumentException("Tenant ID cannot be null");
         }
         this.tenantId = tenantId;
+    }
+
+    /**
+     * Sets this user's role within their tenant. Used by
+     * ClerkJwtAuthenticationConverter for first-user-of-tenant OWNER
+     * assignment on organic signups, and available for future role-change
+     * flows (an OWNER promoting/demoting a MANAGER/STAFF member).
+     */
+    public void assignRole(UserRole role) {
+        if (role == null) {
+            throw new IllegalArgumentException("Role cannot be null");
+        }
+        this.role = role;
+    }
+
+    public boolean hasRole(UserRole candidate) {
+        return this.role == candidate;
     }
 }

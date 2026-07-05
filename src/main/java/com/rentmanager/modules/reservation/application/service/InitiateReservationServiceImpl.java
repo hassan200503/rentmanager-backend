@@ -1,78 +1,69 @@
 package com.rentmanager.modules.reservation.application.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rentmanager.modules.reservation.application.dto.InitiateReservationRequest;
 import com.rentmanager.modules.reservation.application.dto.InitiateReservationResponse;
+import com.rentmanager.modules.reservation.domain.enums.UnitReservationResult;
 import com.rentmanager.modules.reservation.domain.model.PaymentIntent;
-import com.rentmanager.modules.reservation.domain.repository.PaymentIntentRepository;
 import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaService;
-import com.rentmanager.modules.unit.domain.model.Unit;
-import com.rentmanager.modules.unit.domain.repository.UnitRepository;
-import com.rentmanager.shared.exception.ErrorCode;
-import com.rentmanager.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-
+/**
+ * Coordinates reservation initiation across a fast, lock-protected DB
+ * transaction and a slow external Daraja STK push call.
+ *
+ * This class itself is NOT @Transactional. The actual DB work happens in
+ * UnitReservationTransactionService, invoked as calls on a separate proxied
+ * bean — never as internal method calls on `this` — so the PESSIMISTIC_WRITE
+ * unit lock is held only for the short DB steps and is fully released
+ * before the (potentially slow, potentially failing) call to Daraja.
+ *
+ * Failure modes:
+ *  - Unit already taken (not VACANT), or landlord hasn't configured Daraja
+ *    credentials yet -> reserveUnitAndCreateIntent throws before any
+ *    external call is made. Propagates to the caller as-is.
+ *  - STK push call itself fails (network/4xx/5xx from Daraja) -> caught
+ *    here, unit released back to VACANT immediately via
+ *    releaseUnitAndFailIntent, exception rethrown to the caller.
+ *  - STK push succeeds but the async callback later reports failure ->
+ *    handled separately, in MpesaCallbackService, not here.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class InitiateReservationServiceImpl implements InitiateReservationService {
 
-    private final UnitRepository unitRepository;
-    private final PaymentIntentRepository paymentIntentRepository;
+    private final UnitReservationTransactionService transactionService;
     private final DarajaService darajaService;
-    private final ObjectMapper objectMapper;
-
-    private static final int DEPOSIT_MONTHS = 2;
 
     @Override
-    @Transactional
     public InitiateReservationResponse initiate(InitiateReservationRequest request) {
 
-        // 1. Load unit — validate it exists and is vacant
-        Unit unit = unitRepository.findById(request.unitId())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Unit not found", ErrorCode.UNIT_NOT_FOUND
-                ));
+        // Step 1 (TX): lock unit row, validate VACANT, resolve landlord's
+        // Daraja credentials, flip unit to PENDING_PAYMENT, create
+        // PaymentIntent. Lock is released the instant this call returns.
+        UnitReservationResult result = transactionService.reserveUnitAndCreateIntent(request);
+        PaymentIntent intent = result.paymentIntent();
 
-        // 2. Calculate deposit
-        BigDecimal depositAmount = unit.getRentAmount()
-                .multiply(BigDecimal.valueOf(DEPOSIT_MONTHS));
-
-        // 3. Serialize form data to JSON for storage in PaymentIntent
-        String formDataJson;
+        // Step 2 (NO TX, NO LOCK HELD): slow external call, authenticated
+        // against this specific landlord's own Daraja credentials.
+        String checkoutRequestId;
         try {
-            formDataJson = objectMapper.writeValueAsString(request);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Failed to serialize reservation form data", e);
+            checkoutRequestId = darajaService.initiateSTKPush(
+                    request.mpesaPhone(),
+                    intent.getDepositAmount(),
+                    result.unitNumber(),
+                    "Deposit for Unit " + result.unitNumber(),
+                    result.darajaCredentials()
+            );
+        } catch (Exception e) {
+            transactionService.releaseUnitAndFailIntent(intent.getId(), e);
+            throw e;
         }
 
-        // 4. Create and persist PaymentIntent
-        PaymentIntent intent = PaymentIntent.create(
-                request.unitId(),
-                unit.getPropertyId(),
-                formDataJson,
-                depositAmount
-
-        );
-        intent = paymentIntentRepository.save(intent);
-
-        // 5. Trigger STK Push
-        String checkoutRequestId = darajaService.initiateSTKPush(
-                request.mpesaPhone(),
-                depositAmount,
-                unit.getUnitNumber(),           // shown on customer's M-Pesa screen
-                "Deposit for Unit " + unit.getUnitNumber()
-        );
-
-        // 6. Attach checkoutRequestId and persist again
-        intent.attachCheckoutRequestId(checkoutRequestId);
-        paymentIntentRepository.save(intent);
+        // Step 3 (TX): attach the checkoutRequestId now that we have it.
+        transactionService.attachCheckoutRequestId(intent.getId(), checkoutRequestId);
 
         log.info("Reservation initiated. paymentIntentId={} checkoutRequestId={}",
                 intent.getId(), checkoutRequestId);

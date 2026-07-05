@@ -1,6 +1,7 @@
 package com.rentmanager.modules.tenant.application.command.service;
 
 import com.rentmanager.modules.tenant.application.dto.request.*;
+import com.rentmanager.modules.tenant.application.dto.response.DarajaCredentialsStatusResponse;
 import com.rentmanager.modules.tenant.application.dto.response.TenantResponse;
 import com.rentmanager.modules.tenant.application.mapper.TenantMapper;
 
@@ -195,4 +196,36 @@ public class TenantCommandServiceImpl implements TenantCommandService {
             throw new SecurityException("Cross-tenant access denied");
         }
     }
+
+
+
+
+    // ------------------------------------------------------------
+// CONFIGURE DARAJA CREDENTIALS
+// ------------------------------------------------------------
+    @Override
+    public DarajaCredentialsStatusResponse configureDarajaCredentials(
+            UUID tenantId,
+            UUID targetTenantId,
+            ConfigureDarajaCredentialsRequest request
+    ) {
+
+        Tenant tenant = findTenant(targetTenantId);
+        validateTenantAccess(tenantId, tenant);
+
+        tenant.configureDarajaCredentials(
+                request.getConsumerKey(),
+                request.getConsumerSecret(),
+                request.getBusinessShortCode(),
+                request.getPasskey()
+        );
+
+        tenantRepository.save(tenant);
+
+        return new DarajaCredentialsStatusResponse(true);
+    }
+
+
+
+
 }

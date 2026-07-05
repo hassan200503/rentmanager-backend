@@ -49,6 +49,19 @@ public interface UnitRepository {
     Page<Unit> findByOccupancyStatus(UnitOccupancyStatus occupancyStatus, Pageable pageable);
     Page<Unit> searchPublic(String keyword, UnitOccupancyStatus occupancyStatus, Pageable pageable);
     Optional<Unit> findById(UUID id); // tenant-agnostic — needed for public unit detail page
+
+    /**
+     * Tenant-agnostic, row-locking read for the reservation flow.
+     * Acquires a PESSIMISTIC_WRITE lock on the unit row for the duration of
+     * the caller's transaction, so two concurrent reservation attempts on
+     * the same unit serialize instead of both observing VACANT and both
+     * proceeding. Callers MUST invoke this within a short-lived transaction
+     * — never hold this lock across an external HTTP call (e.g. the Daraja
+     * STK push), or concurrent reservation attempts on the unit will queue
+     * behind that call's latency.
+     */
+    Optional<Unit> findByIdForUpdate(UUID id);
+
     Page<Unit> findByPropertyIdAndOccupancyStatus(UUID propertyId, UnitOccupancyStatus occupancyStatus, Pageable pageable);
 
 

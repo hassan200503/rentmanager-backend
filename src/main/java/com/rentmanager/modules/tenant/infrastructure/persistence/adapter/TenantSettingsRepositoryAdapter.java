@@ -6,7 +6,7 @@ import com.rentmanager.modules.tenant.domain.valueobject.TenantSettings;
 import com.rentmanager.modules.tenant.infrastructure.persistence.mapper.TenantPersistenceMapper;
 
 import com.rentmanager.modules.tenant.domain.model.Tenant;
-import com.rentmanager.modules.tenant.renter.infrastructure.persistence.entity.TenantEntity;
+import com.rentmanager.modules.tenant.infrastructure.persistence.entity.TenantEntity;
 import com.rentmanager.modules.tenant.infrastructure.persistence.repository.TenantJpaRepository;
 import org.springframework.stereotype.Component;
 

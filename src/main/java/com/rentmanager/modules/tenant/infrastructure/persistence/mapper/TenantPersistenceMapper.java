@@ -1,9 +1,10 @@
 package com.rentmanager.modules.tenant.infrastructure.persistence.mapper;
 
 import com.rentmanager.modules.tenant.domain.valueobject.BrandingSettings;
+import com.rentmanager.modules.tenant.domain.valueobject.DarajaCredentials;
 
 import com.rentmanager.modules.tenant.domain.model.Tenant;
-import com.rentmanager.modules.tenant.renter.infrastructure.persistence.entity.TenantEntity;
+import com.rentmanager.modules.tenant.infrastructure.persistence.entity.TenantEntity;
 import org.mapstruct.Mapper;
 import org.mapstruct.ReportingPolicy;
 
@@ -32,6 +33,16 @@ public interface TenantPersistenceMapper {
                         ? entity.getBrandingSettings()
                         : BrandingSettings.defaultSettings();
 
+        // Same defensive fallback pattern as brandingSettings above: guards
+        // against a null embeddable reference in the unlikely event
+        // Hibernate ever returns one, rather than an all-null-fields
+        // instance (its normal behavior for @Embedded columns that are all
+        // NULL in the row).
+        DarajaCredentials darajaCredentials =
+                entity.getDarajaCredentials() != null
+                        ? entity.getDarajaCredentials()
+                        : DarajaCredentials.unconfigured();
+
         return Tenant.rehydrate(
                 entity.getId(),
                 entity.getVersion(),
@@ -52,7 +63,8 @@ public interface TenantPersistenceMapper {
                 entity.isActive(),
                 entity.isOnboardingCompleted(),
                 entity.getClerkOrgId(),
-                entity.getCommissionRate()
+                entity.getCommissionRate(),
+                darajaCredentials
         );
     }
 }

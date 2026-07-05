@@ -10,6 +10,8 @@ import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowEngine;
 import com.rentmanager.modules.lease.domain.enums.*;
+import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
+import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
 import com.rentmanager.shared.security.context.TenantContext;
 import com.rentmanager.shared.exception.ErrorCode;
 import com.rentmanager.shared.exception.ResourceNotFoundException;
@@ -28,13 +30,16 @@ public class LeaseApplicationService {
 
     private final LeaseRepository leaseRepository;
     private final LeaseWorkflowEngine workflowEngine;
+    private final TenantProfileRepository tenantProfileRepository;
 
     public LeaseApplicationService(
             LeaseRepository leaseRepository,
-            LeaseWorkflowEngine workflowEngine
+            LeaseWorkflowEngine workflowEngine,
+            TenantProfileRepository tenantProfileRepository
     ) {
         this.leaseRepository = leaseRepository;
         this.workflowEngine = workflowEngine;
+        this.tenantProfileRepository = tenantProfileRepository;
     }
 
     // =========================================================
@@ -44,6 +49,29 @@ public class LeaseApplicationService {
 
         UUID tenantId = TenantContext.getTenantId(); // ✅ HERE (MANDATORY)
 
+        // SECURITY FIX (this session): tenantProfileId is client-supplied
+        // and was previously passed straight into Lease.create() with no
+        // check of any kind — not even existence. Any authenticated
+        // landlord could bind another landlord's renter profile (real PII:
+        // name, email, phone, national ID) to a lease on their own
+        // property. This loads the profile and confirms it belongs to the
+        // calling landlord before proceeding. Do not remove this check or
+        // replace it with an existence-only check (see the separate,
+        // still-open finding on CreateLeaseValidator's existsById() usage
+        // in the reservation-fulfillment saga path).
+        TenantProfile tenantProfile = tenantProfileRepository.findById(request.tenantProfileId())
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Tenant profile not found: " + request.tenantProfileId(),
+                                ErrorCode.LEASE_PROFILE_NOT_FOUND
+                        )
+                );
+
+        if (!tenantProfile.getTenantId().equals(tenantId)) {
+            throw new AccessDeniedException(
+                    "Cross-tenant access denied for tenant profile: " + request.tenantProfileId()
+            );
+        }
 
         Lease lease = Lease.create(
                 tenantId,
@@ -158,7 +186,18 @@ public class LeaseApplicationService {
 
     // =========================================================
     public void delete(UUID leaseId) {
-        leaseRepository.delete(leaseId);
+        UUID tenantId = TenantContext.getTenantId();
+
+        // SECURITY (Addendum 3 §1.7 — confirmed, this session):
+        // load() enforces tenant ownership (throws AccessDeniedException on
+        // mismatch) before delete proceeds. Do NOT replace this with a direct
+        // leaseRepository.delete(leaseId) call — that previously allowed any
+        // authenticated user, from any tenant, to hard-delete any tenant's
+        // lease by ID alone. No header trick or auth bypass was even
+        // required; this was the single most severe finding of the session.
+        Lease lease = load(leaseId, tenantId);
+
+        leaseRepository.delete(lease.getId());
     }
 
 

@@ -2,6 +2,7 @@ package com.rentmanager.modules.reservation.application.service;
 
 import com.rentmanager.modules.identity.clerk.ClerkService;
 import com.rentmanager.modules.identity.clerk.ClerkUserCreationResult;
+import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.notification.sms.SmsService;
 import com.rentmanager.modules.reservation.application.command.validator.ReservationFulfillmentValidator;
@@ -10,7 +11,11 @@ import com.rentmanager.modules.reservation.domain.model.PaymentIntent;
 import com.rentmanager.modules.reservation.domain.model.Reservation;
 import com.rentmanager.modules.reservation.domain.repository.PaymentIntentRepository;
 import com.rentmanager.modules.reservation.domain.repository.ReservationRepository;
+import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
 import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
+import com.rentmanager.modules.unit.domain.enums.UnitOccupancyStatus;
+import com.rentmanager.modules.unit.domain.enums.UnitStatus;
+import com.rentmanager.modules.unit.domain.model.Unit;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
 import com.rentmanager.shared.events.DomainEventPublisher;
 import org.junit.jupiter.api.Test;
@@ -48,52 +53,46 @@ import static org.mockito.Mockito.*;
  * regression test for its fix: fires ReservationDepositPaidEvent for the
  * SAME reservation from two threads simultaneously, forced (via a barrier
  * on the reservation read) to hold the identical stale @Version, and
- * asserts the loser's ObjectOptimisticLockingFailureException is caught
- * inside the orchestrator's own try/catch at the markFulfilling() flush —
- * not left to surface invisibly at commit, after on() has already returned.
+ * asserts the loser's ObjectOptimisticLockingFailureException propagates
+ * out of on() undisturbed — proving step 0 rethrows rather than swallows.
  *
- * ---- Updated for the Option A + B1 fix ----
+ * ---- Updated for the step-0-extraction + decision-A fix ----
  *
- * The orchestrator's step-0 (markFulfilling) version-conflict handling was
- * changed from "catch, log, call compensate(), return normally" to "catch,
- * log, RETHROW — no compensate() call." This was a deliberate policy
- * decision (Option A): at step 0 nothing has been created yet, so there is
- * nothing to compensate, and simply returning normally after a failed
- * flush() was found to commit a poisoned Hibernate session, corrupting the
- * JDBC connection (see PSQLException/EOFException in the session's own
- * prior test run). Rethrowing is safe because on() only runs as an
- * AFTER_COMMIT transactional event listener callback in production — Spring
- * swallows and logs Throwables from those callbacks without affecting the
- * already-committed outer transaction. In THIS test, on() is invoked
- * directly (not via the real event-publishing mechanism), so the rethrown
- * exception surfaces as an ExecutionException wrapping
- * ObjectOptimisticLockingFailureException on the losing thread's Future —
- * that is expected and asserted on below, not a test failure.
+ * Step 0 (markFulfilling) now lives in ReservationFulfillmentStepZeroService,
+ * its own bean, committed in its own REQUIRES_NEW transaction, called
+ * from on() BEFORE the rest of the saga. Decision A (confirmed explicitly)
+ * kept this service's version-conflict handling identical to the
+ * pre-refactor inline code: it does NOT catch
+ * ObjectOptimisticLockingFailureException, so it propagates out of
+ * markFulfilling(), and on() does not catch it either — it propagates out
+ * of on() exactly as before. The barrier/read-count mechanics below are
+ * UNCHANGED and still correct: the spied ReservationRepository is the same
+ * shared bean regardless of which service (stepZeroService or on() itself)
+ * calls findById() on it, so the first two invocations across both threads
+ * are still exactly the two threads' step-0 reads, and the barrier still
+ * forces them to hold the identical stale version before either proceeds.
  *
- * Only ReservationRepository is real (Testcontainers Postgres). Everything
- * downstream of step 0 (Clerk, SMS, TenantProfile, Lease, Unit) is mocked,
- * since the losing thread never reaches step 1 — it dies at the flush()
- * immediately after markFulfilling(), which is exactly the behavior under
- * test.
+ * CHANGED IN THIS REVISION: previously this test left unitRepository (and
+ * everything downstream of step 0) unstubbed, relying on the winning
+ * thread's on() call swallowing any resulting failure and returning
+ * normally. That assumption broke once the orchestrator's generic catch
+ * was changed to rethrow after compensating (decision 1, a separate,
+ * earlier change) — an unstubbed unitRepository now causes the winning
+ * thread to compensate AND throw, which is not what this test is about.
+ * The winning path is now fully stubbed to complete the ENTIRE happy path
+ * for real, so "completed normally" actually means what it says, and this
+ * test is cleanly scoped to just the step-0 race, per its own original
+ * intent.
  *
- * SCOPE NOTE: this test does NOT assert on the winning thread's final
- * outcome or on the reservation's terminal status. The winning thread still
- * depends on unitRepository (an unstubbed @MockBean) and on
- * ReservationFulfillmentCompensationService's re-fetch, which has a
- * SEPARATE, already-identified, not-yet-fixed transaction-isolation bug
- * (compensate()'s REQUIRES_NEW re-fetch can't see the winner's own
- * still-uncommitted markFulfilling() write under READ COMMITTED, so
- * markFulfillmentFailed() can throw IllegalStateException and leave the
- * reservation stuck in FULFILLING). Asserting a terminal status here would
- * conflate that unrelated bug with this fix and produce a misleading
- * failure. That issue needs its own fix and its own test — flagged, not
- * silently addressed here.
+ * SCOPE NOTE (unchanged): this test does not need to assert anything
+ * about compensation logic itself — with the winning path now completing
+ * for real, compensate() should never be invoked at all in this test.
  *
- * ASSUMPTION (unverified against source): ClerkService.createTenantUser(...)
- * returns a ClerkUserCreationResult shaped as a record with
- * (String clerkUserId, boolean newlyCreated). If the winning thread's
- * stubbing fails to compile, adjust this construction to match the real
- * record/class shape.
+ * ASSUMPTION (unverified against source): ClerkUserCreationResult is a
+ * record (String clerkUserId, boolean newlyCreated); Unit.rehydrate(...)
+ * has the same parameter shape used elsewhere in this test suite
+ * (ReservationFulfillmentOrchestratorStepSixAndGenericFailureTest). If
+ * either differs from the real source, adjust construction accordingly.
  */
 @SpringBootTest
 @Testcontainers
@@ -117,8 +116,9 @@ class ReservationFulfillmentOrchestratorConcurrencyTest {
     private ReservationFulfillmentOrchestrator orchestrator;
 
     // Real bean, wrapped as a spy — Spring substitutes this spy into every
-    // consumer (including the orchestrator) after context refresh, so
-    // stubbing findById() here actually affects production code under test.
+    // consumer (including ReservationFulfillmentStepZeroService and the
+    // orchestrator itself) after context refresh, so stubbing findById()
+    // here affects both.
     @SpyBean
     private ReservationRepository reservationRepository;
 
@@ -137,30 +137,24 @@ class ReservationFulfillmentOrchestratorConcurrencyTest {
     @MockBean private ReservationFulfillmentValidator fulfillmentValidator;
 
     @Test
-    void concurrentFulfillment_loserIsRethrownNotCompensated() throws Exception {
+    void concurrentFulfillment_loserIsRethrownNotCompensated_winnerCompletesNormally() throws Exception {
 
-        // ---------------------------------------------------------------
-        // Arrange: seed a real PAID PaymentIntent first — reservations.
-        // payment_intent_id carries a real FK constraint on Postgres, so
-        // a random UUID here fails the insert with a constraint violation.
-        // ---------------------------------------------------------------
         UUID unitId = UUID.randomUUID();
         UUID propertyId = UUID.randomUUID();
         BigDecimal depositAmount = new BigDecimal("50000");
-
+        UUID landlordTenantId = UUID.randomUUID();
         PaymentIntent paymentIntent = PaymentIntent.create(
+                landlordTenantId,
                 unitId,
                 propertyId,
-                "{\"fullName\":\"Jane Tenant\"}", // formDataJson placeholder
+                "{\"fullName\":\"Jane Tenant\"}",
                 depositAmount
         );
+
         paymentIntent.attachCheckoutRequestId("ws_CO_TEST_" + UUID.randomUUID());
         paymentIntent.markPaid("SANDBOX_RECEIPT_1");
         paymentIntent = paymentIntentRepository.save(paymentIntent);
 
-        // ---------------------------------------------------------------
-        // Arrange: a reservation in DEPOSIT_PAID, ready for fulfillment.
-        // ---------------------------------------------------------------
         Reservation reservation = Reservation.create(
                 unitId,
                 propertyId,
@@ -168,10 +162,10 @@ class ReservationFulfillmentOrchestratorConcurrencyTest {
                 "+254700000000",
                 "jane@example.com",
                 "12345678",
-                "+254700000000",            // mpesaPhone
+                "+254700000000",
                 LocalDate.now().plusDays(7),
                 depositAmount,
-                paymentIntent.getId()       // real, persisted paymentIntentId
+                paymentIntent.getId()
         );
         reservation.markDepositPaid("SANDBOX_RECEIPT_1");
         reservation = reservationRepository.save(reservation);
@@ -191,34 +185,49 @@ class ReservationFulfillmentOrchestratorConcurrencyTest {
                 reservation.getMoveInDate()
         );
 
-        // No-op validation — we're testing the version race, not policy rules.
         doNothing().when(fulfillmentValidator).validate(any(), anyBoolean(), anyBoolean());
         when(leaseRepository.findByUnitIdAndStatus(any(), any())).thenReturn(Optional.empty());
 
-        // ASSUMPTION: ClerkUserCreationResult is a record (String clerkUserId,
-        // boolean newlyCreated) — inferred from its usage in the orchestrator
-        // (clerkResult.clerkUserId(), clerkResult.newlyCreated()), not
-        // verified against the actual file. If this line fails to compile,
-        // paste ClerkUserCreationResult.java and this will need adjusting.
-        // Only relevant to whichever thread wins the step-0 race and
-        // proceeds past it — the loser never reaches this stub.
+        String clerkUserId = "clerk_test_user_id";
         when(clerkService.createTenantUser(any(), any(), any(), any()))
-                .thenReturn(new ClerkUserCreationResult("clerk_test_user_id", true));
+                .thenReturn(new ClerkUserCreationResult(clerkUserId, true));
+
+        // Full happy-path stubs so the WINNING thread genuinely completes
+        // steps 1-6, rather than tripping over an unstubbed mock and
+        // getting compensated/rethrown for an unrelated reason.
+        Unit unit = Unit.rehydrate(
+                unitId,
+                landlordTenantId,
+                propertyId,
+                "A-101",
+                "Unit A-101",
+                UnitStatus.ACTIVE,
+                UnitOccupancyStatus.VACANT,
+                BigDecimal.valueOf(15000),
+                "Nice unit",
+                null
+        );
+        when(unitRepository.findById(unitId)).thenReturn(Optional.of(unit));
+        when(unitRepository.save(any(Unit.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        when(tenantProfileRepository.findByTenantIdAndClerkUserId(landlordTenantId, clerkUserId))
+                .thenReturn(Optional.empty());
+        when(tenantProfileRepository.save(any(TenantProfile.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        when(leaseRepository.save(any(Lease.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        doNothing().when(eventPublisher).publishAll(anyList());
 
         // Force both threads to complete their findById() read of the SAME
-        // reservation row — and therefore hold the identical stale version —
-        // before either is allowed to proceed to markFulfilling()+flush().
-        // Without this, the two threads might not actually overlap and the
-        // test would pass or fail based on luck rather than proving anything.
-        //
-        // Scoped to exactly the first 2 invocations: on() calls findById()
-        // once per thread at the top of the method (2 total). Any LATER
-        // call with this same id — compensate()'s re-fetch, or this test's
-        // own final lookup — must pass straight through. The barrier is
-        // built for exactly 2 parties; letting a 3rd or 4th caller touch it
-        // times out one side and throws BrokenBarrierException on the
-        // other, poisoning both REQUIRES_NEW transactions with an unrelated
-        // failure.
+        // reservation row — holding the identical stale version — before
+        // either proceeds to markFulfilling()+flush() inside
+        // ReservationFulfillmentStepZeroService. Scoped to exactly the
+        // first 2 invocations: those are necessarily each thread's step-0
+        // read (see class javadoc for why this still holds after the
+        // step-0 extraction). The winning thread's LATER re-fetch inside
+        // on() is a 3rd call and correctly falls outside this gate.
         CyclicBarrier bothThreadsHaveRead = new CyclicBarrier(2);
         UUID targetId = reservationId;
         AtomicInteger readCount = new AtomicInteger(0);
@@ -230,17 +239,12 @@ class ReservationFulfillmentOrchestratorConcurrencyTest {
             return result;
         }).when(reservationRepository).findById(targetId);
 
-        // ---------------------------------------------------------------
-        // Act: fire the same event from two threads concurrently.
-        // ---------------------------------------------------------------
         ExecutorService pool = Executors.newFixedThreadPool(2);
         List<Future<?>> futures = List.of(
                 pool.submit(() -> orchestrator.on(event)),
                 pool.submit(() -> orchestrator.on(event))
         );
 
-        // Collect each future's outcome individually rather than assuming
-        // which thread wins the barrier race — that's non-deterministic.
         List<Throwable> failures = new ArrayList<>();
         int completedNormally = 0;
         for (Future<?> f : futures) {
@@ -253,40 +257,18 @@ class ReservationFulfillmentOrchestratorConcurrencyTest {
         }
         pool.shutdown();
 
-        // ---------------------------------------------------------------
-        // Assert
-        // ---------------------------------------------------------------
-
-        // Exactly one thread must lose the version race at the step-0
-        // flush, and that loss must surface as a propagated
-        // ObjectOptimisticLockingFailureException — proving on() rethrows
-        // rather than swallowing it. (In production this is caught and
-        // logged by Spring's AFTER_COMMIT listener machinery instead of
-        // reaching test code, but the rethrow itself is what's under test
-        // here.)
         assertThat(failures)
-                .as("exactly one thread should lose the version race at markFulfilling()")
+                .as("exactly one thread should lose the version race at step 0")
                 .hasSize(1);
         assertThat(failures.get(0))
                 .isInstanceOf(ObjectOptimisticLockingFailureException.class);
 
-        // The other thread's on() call must return normally — i.e. NOT
-        // throw ObjectOptimisticLockingFailureException itself. (It may
-        // still internally hit compensate() for an unrelated reason, e.g.
-        // the unstubbed unitRepository — that's out of scope here, see
-        // class javadoc.)
         assertThat(completedNormally)
-                .as("the winning thread's on() call should return normally")
+                .as("the winning thread should complete the full saga normally")
                 .isEqualTo(1);
 
-        // The real assertion: the step-0 version conflict must NEVER be
-        // handed to compensate(). If the old catch-log-compensate-return
-        // behavior were reintroduced, this fails — proving Option A
-        // (silent abort, no compensation) is actually in effect.
-        verify(compensationService, never()).compensate(
-                any(),
-                eq(reservationId),
-                any(ObjectOptimisticLockingFailureException.class)
-        );
+        // With the winning path now genuinely successful, compensate()
+        // should never be invoked at all in this test.
+        verify(compensationService, never()).compensate(any(), any(), any());
     }
 }

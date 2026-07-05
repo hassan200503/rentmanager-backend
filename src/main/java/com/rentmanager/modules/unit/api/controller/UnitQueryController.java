@@ -6,6 +6,7 @@ import com.rentmanager.modules.unit.application.dto.response.UnitResponse;
 import com.rentmanager.modules.unit.application.dto.response.UnitSummaryResponse;
 import com.rentmanager.modules.unit.application.query.service.UnitQueryService;
 import com.rentmanager.modules.unit.domain.enums.UnitStatus;
+import com.rentmanager.shared.security.context.TenantContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -14,6 +15,16 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
+/**
+ * SECURITY NOTE (fix applied — see Addendum 3 §1.5):
+ * tenantId is NEVER accepted from a client-supplied header on this controller.
+ * It is derived exclusively from TenantContext, which is populated server-side
+ * by ClerkJwtAuthenticationConverter from the verified Clerk JWT on every
+ * authenticated request. Do not reintroduce @RequestHeader("X-Tenant-Id") or
+ * any equivalent client-trusted tenant parameter on this controller — doing so
+ * previously allowed any authenticated user to read any other tenant's unit
+ * data by simply setting a header (confirmed cross-tenant IDOR).
+ */
 @RestController
 @RequiredArgsConstructor
 @RequestMapping(UnitRoutes.BASE)
@@ -23,9 +34,9 @@ public class UnitQueryController {
 
     @GetMapping("/{unitId}")
     public ResponseEntity<ApiResponse<UnitResponse>> getById(
-            @RequestHeader("X-Tenant-Id") UUID tenantId,
             @PathVariable UUID unitId
     ) {
+        UUID tenantId = TenantContext.getTenantId();
 
         UnitResponse response = unitQueryService.getById(tenantId, unitId);
 
@@ -36,9 +47,9 @@ public class UnitQueryController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<Page<UnitResponse>>> getAll(
-            @RequestHeader("X-Tenant-Id") UUID tenantId,
             Pageable pageable
     ) {
+        UUID tenantId = TenantContext.getTenantId();
 
         Page<UnitResponse> response = unitQueryService.getAll(tenantId, pageable);
 
@@ -49,10 +60,10 @@ public class UnitQueryController {
 
     @GetMapping("/search")
     public ResponseEntity<ApiResponse<Page<UnitResponse>>> search(
-            @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam(required = false) String keyword,
             Pageable pageable
     ) {
+        UUID tenantId = TenantContext.getTenantId();
 
         Page<UnitResponse> response =
                 unitQueryService.search(tenantId, keyword, pageable);
@@ -64,10 +75,10 @@ public class UnitQueryController {
 
     @GetMapping("/property/{propertyId}")
     public ResponseEntity<ApiResponse<Page<UnitResponse>>> getByProperty(
-            @RequestHeader("X-Tenant-Id") UUID tenantId,
             @PathVariable UUID propertyId,
             Pageable pageable
     ) {
+        UUID tenantId = TenantContext.getTenantId();
 
         Page<UnitResponse> response =
                 unitQueryService.getByProperty(tenantId, propertyId, pageable);
@@ -79,10 +90,10 @@ public class UnitQueryController {
 
     @GetMapping("/status/{status}")
     public ResponseEntity<ApiResponse<Page<UnitResponse>>> getByStatus(
-            @RequestHeader("X-Tenant-Id") UUID tenantId,
             @PathVariable String status,
             Pageable pageable
     ) {
+        UUID tenantId = TenantContext.getTenantId();
 
         UnitStatus unitStatus = UnitStatus.valueOf(status.toUpperCase());
 
@@ -94,17 +105,14 @@ public class UnitQueryController {
         );
     }
 
-
     @GetMapping("/summary")
-    public ResponseEntity<ApiResponse<UnitSummaryResponse>> getSummary(
-            @RequestHeader("X-Tenant-Id") UUID tenantId
-    ) {
+    public ResponseEntity<ApiResponse<UnitSummaryResponse>> getSummary() {
+        UUID tenantId = TenantContext.getTenantId();
+
         UnitSummaryResponse response = unitQueryService.getSummary(tenantId);
 
         return ResponseEntity.ok(
                 ApiResponse.ok("Unit summary retrieved successfully", response)
         );
     }
-
-
 }

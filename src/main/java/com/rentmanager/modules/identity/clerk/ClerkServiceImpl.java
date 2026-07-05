@@ -21,10 +21,32 @@ public class ClerkServiceImpl implements ClerkService {
 
     @Override
     public ClerkUserCreationResult createTenantUser(String fullName, String email, String phone, String password) {
+        return createClerkUser(fullName, email, phone, password, "createTenantUser");
+    }
+
+    @Override
+    public ClerkUserCreationResult createStaffUser(String fullName, String email, String phone, String password) {
+        return createClerkUser(fullName, email, phone, password, "createStaffUser");
+    }
+
+    /**
+     * Shared Clerk API call underlying both createTenantUser and
+     * createStaffUser. logContext is included purely for log
+     * disambiguation between the two call sites — it has no effect on
+     * behavior.
+     */
+    private ClerkUserCreationResult createClerkUser(
+            String fullName,
+            String email,
+            String phone,
+            String password,
+            String logContext
+    ) {
 
         String existingUserId = findUserIdByEmail(email);
         if (existingUserId != null) {
-            log.info("Clerk user already exists for email={}, reusing id={}", email, existingUserId);
+            log.info("[{}] Clerk user already exists for email={}, reusing id={}",
+                    logContext, email, existingUserId);
             return new ClerkUserCreationResult(existingUserId, false);
         }
 
@@ -58,16 +80,16 @@ public class ClerkServiceImpl implements ClerkService {
             }
 
             String clerkUserId = (String) responseBody.get("id");
-            log.info("Clerk user created. clerkUserId={}", clerkUserId);
+            log.info("[{}] Clerk user created. clerkUserId={}", logContext, clerkUserId);
             return new ClerkUserCreationResult(clerkUserId, true);
 
         } catch (HttpClientErrorException e) {
             String fallbackId = findUserIdByEmail(email);
             if (fallbackId != null) {
-                log.warn("Clerk createTenantUser hit duplicate error, resolved existing id={}", fallbackId);
+                log.warn("[{}] hit duplicate error, resolved existing id={}", logContext, fallbackId);
                 return new ClerkUserCreationResult(fallbackId, false);
             }
-            log.error("Clerk user creation failed for email={}", email, e);
+            log.error("[{}] Clerk user creation failed for email={}", logContext, email, e);
             throw new ClerkException("Clerk user creation failed: " + e.getMessage(), e);
         }
     }

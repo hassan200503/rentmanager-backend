@@ -1,8 +1,11 @@
 package com.rentmanager.modules.user.infrastructure.persistence.entity;
 
 import com.rentmanager.domain.base.BaseEntity;
+import com.rentmanager.modules.user.domain.model.UserRole;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import lombok.Getter;
@@ -46,4 +49,9 @@ public class UserEntity extends BaseEntity {
     @Setter
     @Column(name = "active", nullable = false)
     private boolean active;
+
+    @Setter
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", length = 20)
+    private UserRole role;
 }

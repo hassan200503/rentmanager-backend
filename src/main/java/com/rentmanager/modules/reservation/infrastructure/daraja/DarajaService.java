@@ -1,5 +1,6 @@
 package com.rentmanager.modules.reservation.infrastructure.daraja;
 
+import com.rentmanager.modules.tenant.domain.valueobject.DarajaCredentials;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
@@ -30,33 +31,53 @@ public class DarajaService {
     // -------------------------------------------------------
 
     /**
-     * Initiates an STK Push to the customer's M-Pesa number.
+     * Initiates an STK Push to the customer's M-Pesa number, authenticated
+     * against a specific landlord's own Daraja credentials rather than a
+     * single shared platform-wide config. callbackUrl and baseUrl remain
+     * global (sourced from DarajaProperties) since they describe routing
+     * back to this platform's own single callback endpoint, not anything
+     * landlord-specific.
      *
      * @param mpesaPhone  phone in +254XXXXXXXXX format
      * @param amount      deposit amount
      * @param accountRef  shown on customer's M-Pesa screen (e.g. unit number)
      * @param description short description shown on prompt
+     * @param credentials the landlord's own Daraja credentials — caller is
+     *                    responsible for having already verified
+     *                    credentials.isConfigured() before calling this
      * @return CheckoutRequestID from Daraja — store this to match the callback
      */
     public String initiateSTKPush(
             String mpesaPhone,
             BigDecimal amount,
             String accountRef,
-            String description
+            String description,
+            DarajaCredentials credentials
     ) {
-        String token = fetchAccessToken();
+        if (credentials == null || !credentials.isConfigured()) {
+            // Defensive guard, not the primary check — callers (e.g.
+            // UnitReservationTransactionService) should already validate
+            // isConfigured() before ever reaching this point, so real
+            // credentials never need to be resolved this deep in the call
+            // chain unless something upstream skipped that check.
+            throw new DarajaException(
+                    "Cannot initiate STK Push: landlord has not configured Daraja credentials"
+            );
+        }
+
+        String token = fetchAccessToken(credentials);
         String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMAT);
-        String password = generatePassword(timestamp);
+        String password = generatePassword(timestamp, credentials);
         String phone = normalizePhone(mpesaPhone);
 
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("BusinessShortCode", properties.getBusinessShortCode());
+        body.put("BusinessShortCode", credentials.getBusinessShortCode());
         body.put("Password", password);
         body.put("Timestamp", timestamp);
         body.put("TransactionType", "CustomerPayBillOnline");
         body.put("Amount", amount.setScale(0, java.math.RoundingMode.CEILING).toBigInteger());
         body.put("PartyA", phone);
-        body.put("PartyB", properties.getBusinessShortCode());
+        body.put("PartyB", credentials.getBusinessShortCode());
         body.put("PhoneNumber", phone);
         body.put("CallBackURL", properties.getCallbackUrl());
         body.put("AccountReference", accountRef);
@@ -96,33 +117,39 @@ public class DarajaService {
     // PRIVATE HELPERS
     // -------------------------------------------------------
 
-    private String fetchAccessToken() {
-        String credentials = properties.getConsumerKey() + ":" + properties.getConsumerSecret();
+    private String fetchAccessToken(DarajaCredentials credentials) {
+        String rawCredentials = credentials.getConsumerKey() + ":" + credentials.getConsumerSecret();
         String encoded = Base64.getEncoder()
-                .encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
+                .encodeToString(rawCredentials.getBytes(StandardCharsets.UTF_8));
 
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Basic " + encoded);
 
         HttpEntity<Void> request = new HttpEntity<>(headers);
 
-        ResponseEntity<Map> response = restTemplate.exchange(
-                properties.getBaseUrl() + "/oauth/v1/generate?grant_type=client_credentials",
-                HttpMethod.GET,
-                request,
-                Map.class
-        );
+        ResponseEntity<Map> response;
+        try {
+            response = restTemplate.exchange(
+                    properties.getBaseUrl() + "/oauth/v1/generate?grant_type=client_credentials",
+                    HttpMethod.GET,
+                    request,
+                    Map.class
+            );
+        } catch (Exception ex) {
+            log.error("Failed to fetch Daraja access token", ex);
+            throw new DarajaException("Failed to fetch Daraja access token", ex);
+        }
 
         Map<?, ?> body = response.getBody();
         if (body == null || !body.containsKey("access_token")) {
-            throw new DarajaException("Failed to fetch Daraja access token");
+            throw new DarajaException("Failed to fetch Daraja access token — no access_token in response");
         }
 
         return (String) body.get("access_token");
     }
 
-    private String generatePassword(String timestamp) {
-        String raw = properties.getBusinessShortCode() + properties.getPasskey() + timestamp;
+    private String generatePassword(String timestamp, DarajaCredentials credentials) {
+        String raw = credentials.getBusinessShortCode() + credentials.getPasskey() + timestamp;
         return Base64.getEncoder()
                 .encodeToString(raw.getBytes(StandardCharsets.UTF_8));
     }

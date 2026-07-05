@@ -6,6 +6,7 @@ import com.rentmanager.modules.unit.application.command.service.UnitCommandServi
 import com.rentmanager.modules.unit.application.dto.request.CreateUnitRequest;
 import com.rentmanager.modules.unit.application.dto.request.UpdateUnitRequest;
 import com.rentmanager.modules.unit.application.dto.response.UnitResponse;
+import com.rentmanager.shared.security.context.TenantContext;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +14,16 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
+/**
+ * SECURITY NOTE (fix applied — see Addendum 3 §1.5):
+ * tenantId is NEVER accepted from a client-supplied header on this controller.
+ * It is derived exclusively from TenantContext, which is populated server-side
+ * by ClerkJwtAuthenticationConverter from the verified Clerk JWT on every
+ * authenticated request. Do not reintroduce @RequestHeader("X-Tenant-Id") or
+ * any equivalent client-trusted tenant parameter on this controller — doing so
+ * previously allowed any authenticated user to read/write any other tenant's
+ * unit data by simply setting a header (confirmed cross-tenant IDOR).
+ */
 @RestController
 @RequiredArgsConstructor
 @RequestMapping(UnitRoutes.BASE)
@@ -22,9 +33,9 @@ public class UnitCommandController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<UnitResponse>> createUnit(
-            @RequestHeader("X-Tenant-Id") UUID tenantId,
             @Valid @RequestBody CreateUnitRequest request
     ) {
+        UUID tenantId = TenantContext.getTenantId();
 
         UnitResponse response = unitCommandService.create(tenantId, request);
 
@@ -35,10 +46,10 @@ public class UnitCommandController {
 
     @PutMapping("/{unitId}")
     public ResponseEntity<ApiResponse<UnitResponse>> updateUnit(
-            @RequestHeader("X-Tenant-Id") UUID tenantId,
             @PathVariable UUID unitId,
             @Valid @RequestBody UpdateUnitRequest request
     ) {
+        UUID tenantId = TenantContext.getTenantId();
 
         UnitResponse response = unitCommandService.update(tenantId, unitId, request);
 
@@ -49,10 +60,10 @@ public class UnitCommandController {
 
     @PatchMapping("/{unitId}/activate")
     public ResponseEntity<ApiResponse<String>> activateUnit(
-            @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
             @PathVariable UUID unitId
     ) {
+        UUID tenantId = TenantContext.getTenantId();
 
         unitCommandService.activate(tenantId, unitId, correlationId);
 
@@ -63,9 +74,9 @@ public class UnitCommandController {
 
     @PatchMapping("/{unitId}/archive")
     public ResponseEntity<ApiResponse<String>> archiveUnit(
-            @RequestHeader("X-Tenant-Id") UUID tenantId,
             @PathVariable UUID unitId
     ) {
+        UUID tenantId = TenantContext.getTenantId();
 
         unitCommandService.archive(tenantId, unitId);
 
@@ -76,10 +87,10 @@ public class UnitCommandController {
 
     @PatchMapping("/{unitId}/occupied")
     public ResponseEntity<ApiResponse<String>> markOccupied(
-            @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
             @PathVariable UUID unitId
     ) {
+        UUID tenantId = TenantContext.getTenantId();
 
         unitCommandService.markOccupied(tenantId, unitId, correlationId);
 
@@ -90,10 +101,10 @@ public class UnitCommandController {
 
     @PatchMapping("/{unitId}/vacant")
     public ResponseEntity<ApiResponse<String>> markVacant(
-            @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
             @PathVariable UUID unitId
     ) {
+        UUID tenantId = TenantContext.getTenantId();
 
         unitCommandService.markVacant(tenantId, unitId, correlationId);
 

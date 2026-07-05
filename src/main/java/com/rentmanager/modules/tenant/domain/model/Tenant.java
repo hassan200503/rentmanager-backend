@@ -5,6 +5,7 @@ import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;
 import com.rentmanager.modules.tenant.domain.enums.TenantStatus;
 import com.rentmanager.modules.tenant.domain.enums.TenantType;
 import com.rentmanager.modules.tenant.domain.valueobject.BrandingSettings;
+import com.rentmanager.modules.tenant.domain.valueobject.DarajaCredentials;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -74,6 +75,13 @@ public class Tenant extends BaseEntity {
  })
  private BrandingSettings brandingSettings;
 
+ // Per-landlord M-Pesa Daraja credentials. Always non-null on a hydrated
+ // Tenant (see DarajaCredentials.unconfigured() used as the default in the
+ // constructor below, and the equivalent fallback in
+ // TenantPersistenceMapper.toDomain()) — check
+ // darajaCredentials.isConfigured() rather than null-checking this field.
+ private DarajaCredentials darajaCredentials;
+
  @Column(name = "timezone", length = 100)
  private String timezone;
 
@@ -123,6 +131,8 @@ public class Tenant extends BaseEntity {
   this.onboardingCompleted = false;
 
   this.commissionRate = new BigDecimal("0.0500"); // 5% default
+
+  this.darajaCredentials = DarajaCredentials.unconfigured();
  }
 
  // ----------------------------------------------------------------
@@ -295,7 +305,8 @@ public class Tenant extends BaseEntity {
          boolean active,
          boolean onboardingCompleted,
          String clerkOrgId,
-         BigDecimal commissionRate
+         BigDecimal commissionRate,
+         DarajaCredentials darajaCredentials
  ) {
   Tenant tenant = new Tenant();
 
@@ -322,6 +333,7 @@ public class Tenant extends BaseEntity {
   tenant.onboardingCompleted = onboardingCompleted;
   tenant.clerkOrgId = clerkOrgId;
   tenant.commissionRate = commissionRate;
+  tenant.darajaCredentials = darajaCredentials != null ? darajaCredentials : DarajaCredentials.unconfigured();
   return tenant;
  }
 
@@ -381,6 +393,30 @@ public class Tenant extends BaseEntity {
   this.timezone = timezone;
   this.currency = currency;
   this.locale = locale;
+ }
+
+ // ----------------------------------------------------------------
+ // DARAJA CREDENTIALS
+ // ----------------------------------------------------------------
+
+ /**
+  * Sets or replaces this landlord's M-Pesa Daraja credentials. Validation
+  * of individual field presence/blankness is delegated to
+  * DarajaCredentials.of(...) itself, keeping this a thin pass-through
+  * consistent with how updateBranding() delegates to the value object.
+  */
+ public void configureDarajaCredentials(
+         String consumerKey,
+         String consumerSecret,
+         String businessShortCode,
+         String passkey
+ ) {
+  this.darajaCredentials = DarajaCredentials.of(
+          consumerKey,
+          consumerSecret,
+          businessShortCode,
+          passkey
+  );
  }
 
  // ----------------------------------------------------------------

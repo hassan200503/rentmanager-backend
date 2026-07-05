@@ -15,6 +15,22 @@ public interface ClerkService {
     ClerkUserCreationResult createTenantUser(String fullName, String email, String phone, String password);
 
     /**
+     * Creates a landlord-org staff/manager user in the external identity
+     * system. Deliberately a SEPARATE method from createTenantUser, even
+     * though the underlying Clerk API call is identical — this keeps the
+     * reservation-fulfillment saga's compensation logic (which depends on
+     * createTenantUser's exact call sites and newlyCreated() semantics)
+     * completely isolated from the staff-invite flow. A change to one
+     * must never risk the other.
+     *
+     * Unlike createTenantUser, callers of this method should treat
+     * newlyCreated() == false as a hard rejection, not a reuse path —
+     * there is no safe way to deliver credentials for an account that
+     * already exists.
+     */
+    ClerkUserCreationResult createStaffUser(String fullName, String email, String phone, String password);
+
+    /**
      * Checks whether a Clerk user already exists for this email, without
      * creating one. General-purpose existence check. Callers that need to
      * know whether createTenantUser will create vs reuse an account should
@@ -24,9 +40,10 @@ public interface ClerkService {
     boolean existsByEmail(String email);
 
     /**
-     * Deletes a Clerk user by id. Used only as a compensating action when a
-     * fulfillment saga fails after a NEW Clerk account was created this run.
-     * Never called for accounts that were reused from a prior reservation.
+     * Deletes a Clerk user by id. Used as a compensating action when
+     * account creation succeeds in Clerk but the corresponding local
+     * write fails afterward (reservation saga, or staff-invite flow).
+     * Never called for accounts that were reused rather than newly created.
      */
     void deleteUser(String clerkUserId);
 }

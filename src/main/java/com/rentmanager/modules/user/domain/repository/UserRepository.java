@@ -11,5 +11,7 @@ public interface UserRepository {
 
     Optional<User> findByClerkUserId(String clerkUserId);
 
+    boolean existsByTenantId(UUID tenantId);
+
     User save(User user);
 }

@@ -137,16 +137,36 @@ public class Reservation extends AggregateRoot {
      * This does NOT mean no money changed hands — the deposit was already
      * paid. It means automation broke and a human needs to follow up
      * (refund, manual account creation, or retry).
+     *
+     * CHANGED (project handoff §1, decision 2 shape (a)): this is now a
+     * tolerant no-op rather than a guard exception when the reservation
+     * isn't in FULFILLING. ReservationFulfillmentStepZeroService now
+     * commits the FULFILLING transition independently before the rest of
+     * the saga runs, so in normal operation this method should always see
+     * FULFILLING when compensation calls it. But compensate() runs in its
+     * own transaction and cannot see every possible interleaving of
+     * concurrent writes, so this must not throw a surprising exception for
+     * a visibility situation it doesn't control — better to no-op and let
+     * the caller log accordingly than to produce a misleading "CRITICAL /
+     * UNKNOWN state" alarm for what may just be a timing artifact.
+     *
+     * @return true if the transition to FULFILLMENT_FAILED actually
+     *         happened; false if this was a tolerated no-op (already
+     *         FULFILLMENT_FAILED, or not currently FULFILLING).
      */
-    public void markFulfillmentFailed(String reason) {
+    public boolean markFulfillmentFailed(String reason) {
+        if (this.status == ReservationStatus.FULFILLMENT_FAILED) {
+            // Already marked — idempotent no-op (e.g. compensation ran twice).
+            return false;
+        }
         if (this.status != ReservationStatus.FULFILLING) {
-            throw new IllegalStateException(
-                    "Only FULFILLING reservations can be marked as fulfillment failed"
-            );
+            // See method javadoc above — tolerated, not an error.
+            return false;
         }
 
         this.status = ReservationStatus.FULFILLMENT_FAILED;
         this.fulfillmentFailureReason = reason;
+        return true;
     }
 
     public void cancel() {

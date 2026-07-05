@@ -201,6 +201,38 @@ public class GlobalExceptionHandler {
     }
 
     // =========================================================
+    // SECURITY EXCEPTION (CROSS-TENANT ACCESS DENIALS)
+    // =========================================================
+    // Distinct from Spring Security's AccessDeniedException above.
+    // TenantCommandServiceImpl.validateTenantAccess() throws plain
+    // java.lang.SecurityException for cross-tenant access attempts, which
+    // — without this handler — previously fell through to the generic
+    // Exception handler below and returned a misleading 500 Internal
+    // Server Error for what is actually a 403 Forbidden authorization
+    // failure. This handler corrects that for every existing caller of
+    // validateTenantAccess() across TenantCommandServiceImpl, not just
+    // newly-added endpoints.
+    @ExceptionHandler(SecurityException.class)
+    public ResponseEntity<ApiResponse<Object>> handleSecurityException(
+            SecurityException ex,
+            HttpServletRequest request
+    ) {
+
+        errorTrackingService.capture(
+                ex,
+                "SECURITY",
+                "ACCESS_DENIED",
+                resolveModule(request),
+                request,
+                Map.of("type", "SecurityException")
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.fail("Access denied", "ACCESS_DENIED"));
+    }
+
+    // =========================================================
     // FALLBACK (KEEP LAST)
     // =========================================================
     @ExceptionHandler(Exception.class)

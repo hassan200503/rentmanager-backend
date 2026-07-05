@@ -221,4 +221,57 @@ public class Unit extends AggregateRoot {
                 tenantId, getId(), correlationId, getId(), previous, this.occupancyStatus
         ));
     }
+
+    /**
+     * Marks the unit as held while an M-Pesa STK push is in flight for a
+     * reservation attempt. Must only be called from within a transaction
+     * that holds a pessimistic write lock on this unit's row (see
+     * UnitRepository#findByIdForUpdate), so that two concurrent reservation
+     * attempts on the same unit cannot both observe VACANT and both
+     * transition through here.
+     *
+     * Throws rather than no-oping on an illegal starting state: unlike the
+     * other transitions on this aggregate, reaching this method with the
+     * unit already in PENDING_PAYMENT/RESERVED/OCCUPIED means the guard
+     * this method exists to provide has already failed upstream (e.g. the
+     * pessimistic lock wasn't actually acquired, or a caller bypassed the
+     * lock), and that should surface loudly rather than be silently
+     * absorbed.
+     */
+    public void markPendingPayment(String correlationId) {
+        if (this.occupancyStatus != UnitOccupancyStatus.VACANT) {
+            throw new IllegalStateException(
+                    "Cannot initiate reservation payment for unit " + getId() +
+                            ": expected VACANT but was " + this.occupancyStatus
+            );
+        }
+
+        UnitOccupancyStatus previous = this.occupancyStatus;
+        this.occupancyStatus = UnitOccupancyStatus.PENDING_PAYMENT;
+
+        registerEvent(new UnitOccupancyChangedEvent(
+                tenantId, getId(), correlationId, getId(), previous, this.occupancyStatus
+        ));
+    }
+
+    /**
+     * Compensating action for a failed or expired STK push: reverts a
+     * PENDING_PAYMENT unit back to VACANT so it becomes reservable again.
+     * No-op if the unit isn't currently PENDING_PAYMENT — in particular,
+     * this deliberately does NOT touch a RESERVED or OCCUPIED unit, since a
+     * stale or duplicate M-Pesa callback firing this after the unit has
+     * legitimately moved on must never vacate it out from under a real
+     * tenant.
+     */
+    public void releasePendingPayment(String correlationId) {
+        if (this.occupancyStatus != UnitOccupancyStatus.PENDING_PAYMENT) return;
+
+        UnitOccupancyStatus previous = this.occupancyStatus;
+        this.occupancyStatus = UnitOccupancyStatus.VACANT;
+        this.vacatedAt = LocalDateTime.now();
+
+        registerEvent(new UnitOccupancyChangedEvent(
+                tenantId, getId(), correlationId, getId(), previous, this.occupancyStatus
+        ));
+    }
 }

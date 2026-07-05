@@ -128,6 +128,15 @@ public class UnitRepositoryAdapter implements UnitRepository {
                 .map(mapper::toDomain);
     }
 
+    // =====================================================
+    // FIND BY ID FOR UPDATE (PESSIMISTIC LOCK — RESERVATION FLOW)
+    // =====================================================
+    @Override
+    public Optional<Unit> findByIdForUpdate(UUID id) {
+        return jpaRepository.findByIdForUpdate(id)
+                .map(mapper::toDomain);
+    }
+
     @Override
     public Page<Unit> findByPropertyIdAndOccupancyStatus(
             UUID propertyId,

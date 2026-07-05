@@ -32,6 +32,8 @@ import java.util.UUID;
 
 /**
  * Orchestrates the full Phase 4 chain as a compensating saga:
+ * 0. Claim the reservation for fulfillment (DEPOSIT_PAID -> FULFILLING),
+ *    committed independently — see ReservationFulfillmentStepZeroService.
  * 1. Create tenant account in Clerk (track if NEWLY created vs reused)
  * 2. Send SMS with credentials
  * 3. Create or reuse TenantProfile (track if NEWLY created vs reused)
@@ -42,47 +44,41 @@ import java.util.UUID;
  * Runs AFTER_COMMIT so a failure here can never roll back the confirmed
  * M-Pesa payment recorded by MpesaCallbackService.
  *
- * If any step fails, compensating actions undo ONLY what THIS run actually
- * created (never touching reused Clerk accounts or TenantProfiles from a
- * prior successful reservation), then the Reservation is marked
- * FULFILLMENT_FAILED — not CANCELLED, because the deposit was genuinely
- * paid and a human must follow up.
+ * ---- Transaction-visibility fix (project handoff §1, Findings A & B) ----
  *
- * Compensation runs in ReservationFulfillmentCompensationService, in its
- * own REQUIRES_NEW transaction, so an aborted/poisoned transaction from
- * the triggering failure can never block the cleanup writes.
+ * Step 0 is now committed by ReservationFulfillmentStepZeroService in ITS
+ * OWN independent transaction, BEFORE steps 1-6 begin here. This
+ * guarantees compensate() always sees FULFILLING, no matter what fails
+ * afterward — closing the "permanently stuck, no failure marker" failure
+ * mode from Finding B.
+ *
+ * The generic catch (Exception e) below now RETHROWS (wrapped) after
+ * calling compensate() — previously it returned normally, letting Spring
+ * commit the transaction regardless of the failure. This was a deliberate
+ * decision (decision 1), confirmed explicitly, not an incidental change.
  *
  * ---- Concurrency handling (see ReservationFulfillmentOrchestratorConcurrencyTest) ----
  *
- * There are two points where a concurrent run of on() for the SAME
- * reservation can collide on the @Version-backed flush: right after
- * markFulfilling() (step 0), and right after complete() (step 6). Both
- * are handled with a dedicated catch for ObjectOptimisticLockingFailureException,
- * separate from the general catch (Exception e) that wraps the rest of the
- * saga — and in BOTH cases the exception is rethrown after handling, never
- * swallowed with a normal return. This is deliberate: once a flush() throws
- * a StaleObjectStateException, the underlying Hibernate session is no
- * longer safe to commit. Swallowing the exception and letting on() return
- * normally causes Spring's transaction interceptor to attempt a commit on
- * that poisoned session, which manifests as a broken JDBC connection
- * (PSQLException/EOFException) rather than a clean rollback. Rethrowing is
- * safe here because on() is only ever invoked as an AFTER_COMMIT listener
- * callback — Spring's TransactionSynchronizationUtils catches and logs
- * Throwable from listener callbacks without affecting the already-committed
- * outer transaction.
+ * Two collision points, handled asymmetrically on purpose:
  *
- * The two collision points are handled differently on purpose:
+ * - Step 0: handled entirely inside ReservationFulfillmentStepZeroService.
+ *   A version conflict there means another run already claimed this
+ *   reservation; nothing has been created yet, so there's nothing to
+ *   compensate. That service deliberately does NOT catch
+ *   ObjectOptimisticLockingFailureException — it propagates out of
+ *   stepZeroService.markFulfilling(...), and on() does not catch it
+ *   either, so it propagates out of on() unchanged (decision A —
+ *   preserves the exact rethrow behavior of the original pre-refactor
+ *   inline code, rather than swallowing it into a boolean). This is
+ *   asserted directly by ReservationFulfillmentOrchestratorConcurrencyTest.
  *
- * - Step 0 (markFulfilling flush): the saga hasn't created anything yet,
- *   so there is nothing to compensate. This is the common case in
- *   practice — two near-simultaneous ReservationDepositPaidEvent
- *   publications for the same reservation, e.g. from a race at the
- *   caller — and it's treated as "another run already has this," logged,
- *   and the transaction rolled back without invoking compensate() at all.
- *
- * - Step 6 (complete flush): by this point Clerk/Lease/Unit work may
- *   genuinely have been created by THIS run, so compensate() IS called
- *   (to undo it) before rethrowing to roll back the poisoned session.
+ * - Step 6 (complete flush): by this point real work (Clerk/Lease/Unit)
+ *   may have been created by THIS run, so compensate() IS called before
+ *   rethrowing. Rethrowing here is safe because on() only ever runs as
+ *   an AFTER_COMMIT transactional-event-listener callback — Spring's
+ *   TransactionSynchronizationUtils catches and logs Throwable from
+ *   listener callbacks without affecting the already-committed outer
+ *   transaction.
  */
 @Slf4j
 @Service
@@ -98,6 +94,7 @@ public class ReservationFulfillmentOrchestrator {
     private final ReservationFulfillmentValidator fulfillmentValidator;
     private final DomainEventPublisher eventPublisher;
     private final ReservationFulfillmentCompensationService compensationService;
+    private final ReservationFulfillmentStepZeroService stepZeroService;
 
     // TODO: confirm — does a default lease term length exist anywhere
     // (e.g. tenant-configurable per property), or is 12 months a safe
@@ -110,6 +107,18 @@ public class ReservationFulfillmentOrchestrator {
 
         UUID reservationId = event.getAggregateId();
 
+        // ---- Step 0: claim the reservation, committed independently ----
+        // A version conflict here propagates directly out of on() —
+        // see class javadoc "Concurrency handling" above. Deliberately
+        // NOT wrapped in try/catch at this call site.
+        boolean claimed = stepZeroService.markFulfilling(reservationId);
+        if (!claimed) {
+            return; // Already claimed by another run, or unexpected state — nothing to do.
+        }
+
+        // Re-fetch inside THIS transaction/session: stepZeroService
+        // committed in its own separate transaction, so this is a fresh
+        // read reflecting the FULFILLING status and bumped version.
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new IllegalStateException(
                         "Reservation not found for fulfillment: " + reservationId));
@@ -124,39 +133,8 @@ public class ReservationFulfillmentOrchestrator {
         // what it created — never a reused Clerk account or TenantProfile.
         SagaState saga = new SagaState();
 
-        // ---- Step 0: mark FULFILLING, flush immediately ----
-        // Isolated in its own try/catch, separate from the rest of the
-        // saga: at this point nothing has been created yet, so a version
-        // conflict here means "another run already has this reservation"
-        // — there's nothing to compensate, and this run should just step
-        // aside. See class-level javadoc for why this rethrows rather
-        // than swallowing.
-        try {
-            reservation.markFulfilling();
-            // Capture save()'s return value: ReservationRepositoryImpl
-            // builds a brand-new JPA entity per save() rather than
-            // mutating a managed one, so the local `reservation` variable
-            // never learns its version was bumped unless we reassign it
-            // here. Without this, a later save() in this same run would
-            // carry a stale version and spuriously conflict with itself.
-            reservation = reservationRepository.save(reservation);
-            // Force the flush now so the @Version check runs inside this
-            // try/catch. Without this, Hibernate defers the version-checked
-            // UPDATE to transaction commit — which happens after on()
-            // returns, outside this catch block's reach, so a concurrent
-            // fulfillment's ObjectOptimisticLockingFailureException would
-            // never trigger this handling.
-            reservationRepository.flush();
-        } catch (ObjectOptimisticLockingFailureException ex) {
-            log.info("Reservation {} is already being fulfilled by another run; " +
-                    "stepping aside without compensation.", reservationId);
-            throw ex;
-        }
-
         try {
             // ---- Step 1: Clerk account ----
-            // newlyCreated comes directly from createTenantUser's own result —
-            // no separate pre-check, so there's no check-then-create race.
             String password = generateTemporaryPassword();
             ClerkUserCreationResult clerkResult = clerkService.createTenantUser(
                     event.getFullName(),
@@ -169,12 +147,6 @@ public class ReservationFulfillmentOrchestrator {
             saga.clerkUserCreatedThisRun = clerkResult.newlyCreated();
 
             // ---- Step 2: SMS ----
-            // Deliberately NOT tracked for compensation — an SMS can't be
-            // un-sent, and sending one extra message on a later compensated
-            // retry is harmless compared to the complexity of suppressing it.
-            // Branches on clerkResult.newlyCreated() (not a separate check)
-            // so a REUSED account never receives a temp password that was
-            // never actually set on Clerk.
             if (clerkResult.newlyCreated()) {
                 smsService.sendCredentials(event.getPhone(), password);
             } else {
@@ -244,10 +216,6 @@ public class ReservationFulfillmentOrchestrator {
             saga.unitReserved = true;
 
             // ---- Step 6: Complete reservation ----
-            // Isolated version-conflict handling, same reasoning as step 0
-            // above — except by this point real work (Clerk/Lease/Unit)
-            // may have been created by this run, so compensate() IS
-            // invoked before rethrowing.
             try {
                 reservation.complete(clerkUserId);
                 reservation = reservationRepository.save(reservation);
@@ -265,16 +233,14 @@ public class ReservationFulfillmentOrchestrator {
                     reservation.getId(), lease.getId(), clerkUserId);
 
         } catch (ObjectOptimisticLockingFailureException ex) {
-            // Already handled and rethrown by the step 6 inner catch above
-            // (compensated, logged, session already dead) — nothing more
-            // to do here. Caught separately from Exception below purely
-            // so it doesn't fall into the generic branch and get a SECOND,
-            // redundant compensate() call.
             throw ex;
         } catch (Exception e) {
             log.error("Reservation fulfillment failed, beginning compensation. reservationId={}",
                     reservationId, e);
             compensationService.compensate(saga, reservationId, e);
+            throw new ReservationFulfillmentFailedException(
+                    "Reservation fulfillment failed after compensation; rolling back saga transaction. " +
+                            "reservationId=" + reservationId, e);
         }
     }
 
@@ -289,8 +255,6 @@ public class ReservationFulfillmentOrchestrator {
     }
 
     private String generateLeaseNumber(Unit unit) {
-        // TODO: confirm desired lease number format/uniqueness strategy —
-        // this is a placeholder, not validated against existing conventions.
         return "LSE-" + unit.getUnitNumber() + "-" + System.currentTimeMillis();
     }
 }

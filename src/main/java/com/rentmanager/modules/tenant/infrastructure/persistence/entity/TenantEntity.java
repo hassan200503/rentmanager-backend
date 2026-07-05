@@ -1,10 +1,11 @@
-package com.rentmanager.modules.tenant.renter.infrastructure.persistence.entity;
+package com.rentmanager.modules.tenant.infrastructure.persistence.entity;
 
 import com.rentmanager.domain.base.BaseEntity;
 import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;
 import com.rentmanager.modules.tenant.domain.enums.TenantStatus;
 import com.rentmanager.modules.tenant.domain.enums.TenantType;
 import com.rentmanager.modules.tenant.domain.valueobject.BrandingSettings;
+import com.rentmanager.modules.tenant.domain.valueobject.DarajaCredentials;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -28,6 +29,14 @@ public class TenantEntity extends BaseEntity {
 
     @Embedded
     private BrandingSettings brandingSettings = BrandingSettings.defaultSettings();
+
+    // Per-landlord M-Pesa Daraja credentials. Defaults to unconfigured() so
+    // every newly-persisted TenantEntity has a non-null embeddable, matching
+    // the brandingSettings pattern immediately above. See DarajaCredentials
+    // for why every field within it is individually encrypted at rest.
+    @Setter
+    @Embedded
+    private DarajaCredentials darajaCredentials = DarajaCredentials.unconfigured();
 
     @Setter
     @Column(name = "tenant_code", nullable = false, unique = true, length = 50)

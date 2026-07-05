@@ -1,11 +1,10 @@
 package com.rentmanager.shared.security.jwt;
 
-
-
 import com.rentmanager.modules.tenant.domain.model.Tenant;
 import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import com.rentmanager.modules.user.domain.model.User;
+import com.rentmanager.modules.user.domain.model.UserRole;
 import com.rentmanager.modules.user.domain.repository.UserRepository;
 import com.rentmanager.shared.security.context.TenantContext;
 import com.rentmanager.shared.security.principal.AuthenticatedUser;
@@ -16,6 +15,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -27,6 +27,9 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
     private static final String CLAIM_EMAIL = "email";
 
     private static final String ROLE_LANDLORD = "ROLE_LANDLORD";
+    private static final String ROLE_LANDLORD_OWNER = "ROLE_LANDLORD_OWNER";
+    private static final String ROLE_LANDLORD_MANAGER = "ROLE_LANDLORD_MANAGER";
+    private static final String ROLE_LANDLORD_STAFF = "ROLE_LANDLORD_STAFF";
     private static final String ROLE_TENANT = "ROLE_TENANT";
     // Authenticated via a valid Clerk token, but not yet linked to a landlord
     // account (Clerk Org) or a TenantProfile under any landlord. Route guards
@@ -59,7 +62,7 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
         User user = resolveOrProvisionUser(clerkUserId, email);
         UUID resolvedTenantId = resolveTenantId(clerkOrgId, user);
 
-        Set<SimpleGrantedAuthority> authorities = resolveAuthorities(clerkUserId, resolvedTenantId);
+        Set<SimpleGrantedAuthority> authorities = resolveAuthorities(clerkUserId, resolvedTenantId, user);
 
         AuthenticatedUser authenticatedUser = new AuthenticatedUser(
                 user.getId(),
@@ -76,24 +79,31 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
     }
 
     /**
-     * Role is derived from existing data rather than a stored field, so it
-     * can never drift out of sync with the underlying landlord/tenant records:
-     *
-     *   - resolvedTenantId present  -> this Clerk identity owns/belongs to a
-     *     landlord account (Clerk Org resolved to a local Tenant)            -> LANDLORD
-     *   - resolvedTenantId absent, but a TenantProfile exists for this
-     *     clerkUserId under ANY landlord                                     -> TENANT
-     *   - neither                                                            -> PENDING_ONBOARDING
+     * Coarse role (LANDLORD/TENANT/PENDING_ONBOARDING) is derived from
+     * existing data, exactly as before. Within LANDLORD, a fine-grained
+     * ROLE_LANDLORD_OWNER/_MANAGER/_STAFF authority is now also granted,
+     * sourced from User.role — set either by the staff/manager invite flow
+     * at User-creation time, or by first-user-of-tenant detection in
+     * resolveTenantId() below for organic signups. ROLE_LANDLORD itself is
+     * still granted alongside it for any guard that only cares "is this
+     * any member of a landlord org," regardless of tier.
      *
      * NOTE: a renter with profiles under multiple landlords still gets a
      * single ROLE_TENANT grant here. Per-landlord/per-lease authorization
      * (e.g. "can only view their own lease") must be enforced separately at
      * the service/controller layer, not at this JWT-conversion stage.
      */
-    private Set<SimpleGrantedAuthority> resolveAuthorities(String clerkUserId, UUID resolvedTenantId) {
+    private Set<SimpleGrantedAuthority> resolveAuthorities(String clerkUserId, UUID resolvedTenantId, User user) {
 
         if (resolvedTenantId != null) {
-            return Set.of(new SimpleGrantedAuthority(ROLE_LANDLORD));
+            Set<SimpleGrantedAuthority> authorities = new HashSet<>();
+            authorities.add(new SimpleGrantedAuthority(ROLE_LANDLORD));
+
+            UserRole role = user.getRole();
+            if (role != null) {
+                authorities.add(new SimpleGrantedAuthority(toAuthority(role)));
+            }
+            return Set.copyOf(authorities);
         }
 
         if (tenantProfileRepository.existsByClerkUserId(clerkUserId)) {
@@ -103,9 +113,25 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
         return Set.of(new SimpleGrantedAuthority(ROLE_PENDING_ONBOARDING));
     }
 
+    private String toAuthority(UserRole role) {
+        return switch (role) {
+            case OWNER -> ROLE_LANDLORD_OWNER;
+            case MANAGER -> ROLE_LANDLORD_MANAGER;
+            case STAFF -> ROLE_LANDLORD_STAFF;
+        };
+    }
+
     /**
      * Just-in-time provisioning for users: a verified Clerk identity always
      * gets a corresponding local User row, created on first sight.
+     *
+     * Role is intentionally NOT set here. An invited staff/manager user
+     * already exists by clerkUserId (created by the invite flow before
+     * they ever logged in, via User.createInvited()) and hits the
+     * `existing.isPresent()` branch below with role already populated.
+     * Only a genuinely new/organic signup falls through to
+     * User.createFromClerk(), with role resolved later in
+     * resolveTenantId().
      */
     private User resolveOrProvisionUser(String clerkUserId, String email) {
 
@@ -124,6 +150,17 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
      * If no local Tenant exists for this Clerk org yet, we authenticate
      * the user with a null tenantId, so middleware/route guards can route
      * them to an explicit onboarding flow instead.
+     *
+     * First-user-of-tenant detection: the FIRST user ever linked to a given
+     * tenantId is treated as its organic OWNER (e.g. the landlord who
+     * signed up and created the org themselves). This check MUST run
+     * before user.assignTenant(tenantId) — otherwise existsByTenantId()
+     * would see this user's own about-to-be-linked row and always report
+     * true, making every organic signup look like a non-first user.
+     *
+     * A user whose role is already set (invited via the staff/manager
+     * invite flow) never has its role overwritten here, regardless of
+     * first-user status.
      */
     private UUID resolveTenantId(String clerkOrgId, User user) {
 
@@ -138,10 +175,23 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
         }
 
         UUID tenantId = tenant.get().getId();
+        boolean tenantLinkChanged = user.getTenantId() == null || !user.getTenantId().equals(tenantId);
 
-        // Keep the user's tenant link in sync once a tenant exists.
-        if (user.getTenantId() == null || !user.getTenantId().equals(tenantId)) {
+        if (tenantLinkChanged) {
+
+            boolean tenantAlreadyHasUsers = userRepository.existsByTenantId(tenantId);
+
             user.assignTenant(tenantId);
+
+            if (user.getRole() == null) {
+                // Conservative default for the (should-be-rare) case of a
+                // non-first, non-invited user linking to an existing tenant
+                // — e.g. added to the Clerk Org directly via Clerk's own
+                // dashboard, bypassing our invite flow entirely: least
+                // privilege (STAFF), never OWNER, unless genuinely first.
+                user.assignRole(tenantAlreadyHasUsers ? UserRole.STAFF : UserRole.OWNER);
+            }
+
             userRepository.save(user);
         }
 

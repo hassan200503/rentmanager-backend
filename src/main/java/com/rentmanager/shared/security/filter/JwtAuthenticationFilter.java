@@ -9,16 +9,60 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
-import com.rentmanager.shared.security.context.TenantContext;
+
 import java.io.IOException;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
-@Component
+/**
+ * RETIRED — Addendum 3 §1.1, resolved this session.
+ *
+ * This filter is NO LONGER REGISTERED as a servlet filter. The @Component
+ * annotation has been deliberately removed so Spring Boot does not
+ * auto-detect and register it in the filter chain. The class is retained
+ * (not deleted) only for reference and rollback safety ahead of pilot launch.
+ * Do not re-add @Component without re-reading the findings below.
+ *
+ * BACKGROUND:
+ * This filter ran on every request via Spring Boot's default component-scan
+ * auto-registration, with no explicit @Order or FilterRegistrationBean,
+ * placing it after Spring Security's own FilterChainProxy (which performs
+ * the real, currently-relied-upon Clerk JWT verification via
+ * SecurityConfig's oauth2ResourceServer/JWKS setup).
+ *
+ * This created a theoretical confused-deputy risk: IF this filter's
+ * independent JwtProvider.isTokenValid(token) check ever returned true for
+ * a genuine Clerk-issued token, it would overwrite SecurityContextHolder's
+ * already-correct principal (set moments earlier by Clerk's own converter)
+ * with a differently-constructed AuthenticatedUser built from this filter's
+ * own claims extraction.
+ *
+ * EMPIRICAL FINDING (this session, real request logs, not static analysis):
+ * JwtProvider signs/verifies using a separate, legacy HS256 scheme with its
+ * own secret and issuer (see JwtProvider.java) — entirely unrelated to
+ * Clerk's RS256/JWKS-based tokens. Every real Clerk-issued token tested
+ * against jwtProvider.isTokenValid(token) returned false, across multiple
+ * real authenticated requests (/api/v1/properties, /api/v1/units/summary).
+ * The confused-deputy branch never executed even once.
+ *
+ * CONCLUSION: this filter provided zero function for real Clerk-based
+ * authenticated traffic — it appears to be a leftover from a pre-Clerk,
+ * self-issued JWT auth system (see JwtProvider.generateAccessToken /
+ * generateRefreshToken) that was never removed when Clerk was adopted.
+ * Retiring it removes dead/misleading code and closes the (theoretical,
+ * never-triggered) confused-deputy risk permanently, with no behavior
+ * change to real traffic.
+ *
+ * NOT YET DONE (see Addendum 3 §2, now unblocked by this decision):
+ * TenantContext's real ThreadLocals are still never cleared on this app's
+ * pooled thread executor. Since this filter's finally-block clear() call is
+ * being retired along with it, a dedicated replacement cleanup mechanism
+ * (a new, explicitly-ordered filter, or equivalent) is still required and
+ * has NOT been implemented yet. Do not consider tenant-context cleanup
+ * resolved until §2 is separately addressed.
+ */
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String AUTHORIZATION = "Authorization";
@@ -50,9 +94,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             boolean authenticated = false;
 
-            // =========================================================
-            // JWT AUTH PATH (FIXED: now explicitly guards failure cases)
-            // =========================================================
             if (StringUtils.hasText(token)
                     && jwtProvider.isTokenValid(token)
                     && jwtProvider.isAccessToken(token)) {

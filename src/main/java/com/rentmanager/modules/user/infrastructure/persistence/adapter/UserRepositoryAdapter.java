@@ -38,6 +38,14 @@ public class UserRepositoryAdapter implements UserRepository {
     }
 
     @Override
+    public boolean existsByTenantId(UUID tenantId) {
+        if (tenantId == null) {
+            return false;
+        }
+        return jpaRepository.existsByTenantId(tenantId);
+    }
+
+    @Override
     public User save(User user) {
         UserEntity entity = mapper.toJpaEntity(user);
         UserEntity saved = jpaRepository.save(entity);

@@ -27,7 +27,8 @@ public interface UserPersistenceMapper {
                 entity.getEmail(),
                 entity.getFirstName(),
                 entity.getLastName(),
-                entity.isActive()
+                entity.isActive(),
+                entity.getRole()
         );
     }
 }
