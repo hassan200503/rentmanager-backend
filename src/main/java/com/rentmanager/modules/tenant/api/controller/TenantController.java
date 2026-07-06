@@ -17,7 +17,8 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/tenants")
+
+@RequestMapping("/api/v1/tenants")
 public class TenantController {
 
     private final TenantCommandService tenantCommandService;
@@ -29,13 +30,6 @@ public class TenantController {
     // ------------------------------------------------------------
     // CREATE TENANT (SaaS entry point)
     // ------------------------------------------------------------
-    // Changed from resolveTenantId() to resolveStrictTenantId() — see
-    // Addendum 5 §1. Frontend/backend audit found no legitimate caller
-    // that depends on the fallback-to-default-tenant behavior (no
-    // frontend code calls this endpoint outside generated OpenAPI type
-    // stubs; no Clerk org-creation webhook exists in this backend).
-    // An unresolvable tenant context must now be rejected outright,
-    // never silently collapsed onto a shared fallback UUID.
     @PostMapping
     public ResponseEntity<ApiResponse<TenantResponse>> createTenant(
             @RequestBody CreateTenantRequest request
@@ -52,10 +46,6 @@ public class TenantController {
     // ------------------------------------------------------------
     // GET TENANT
     // ------------------------------------------------------------
-    // Changed from resolveTenantId() to resolveStrictTenantId() — same
-    // reasoning as createTenant() above. Previously, two different callers
-    // both hitting the fallback would collapse onto the same identity,
-    // letting one pass validateTenantAccess() against the other's record.
     @GetMapping("/{tenantId}")
     public ResponseEntity<ApiResponse<TenantResponse>> getTenant(
             @PathVariable UUID tenantId
@@ -65,6 +55,30 @@ public class TenantController {
 
         TenantResponse response =
                 tenantCommandService.getTenant(currentTenant, tenantId);
+
+        return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
+    // ------------------------------------------------------------
+    // GET DARAJA CREDENTIALS STATUS (NEW — additive only)
+    // ------------------------------------------------------------
+    // Read-only companion to configureDarajaCredentials() below. Returns
+    // only the boolean `configured` flag — never any credential material,
+    // consistent with DarajaCredentialsStatusResponse's existing "deliberately
+    // minimal" contract used on the PUT response. OWNER-gated to match the
+    // rest of this controller's Daraja/lifecycle actions; if the product
+    // decision is that MANAGER/STAFF should also be able to see whether
+    // Daraja is configured (without editing it), this @PreAuthorize should
+    // be relaxed — that's a product call, not made here.
+    @PreAuthorize("hasAuthority('ROLE_LANDLORD_OWNER')")
+    @GetMapping("/{tenantId}/daraja-credentials/status")
+    public ResponseEntity<ApiResponse<DarajaCredentialsStatusResponse>> getDarajaCredentialsStatus(
+            @PathVariable UUID tenantId
+    ) {
+        UUID currentTenant = resolveStrictTenantId();
+
+        DarajaCredentialsStatusResponse response =
+                tenantCommandService.getDarajaCredentialsStatus(currentTenant, tenantId);
 
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
@@ -120,11 +134,10 @@ public class TenantController {
     }
 
     /**
-     * Fail-closed tenant context resolution used by all five endpoints
-     * in this controller. An unresolvable tenant context results in a
-     * rejected request (403 via GlobalExceptionHandler's
-     * AccessDeniedException mapping), never a silently-applied fallback
-     * identity.
+     * Fail-closed tenant context resolution used by all endpoints in this
+     * controller. An unresolvable tenant context results in a rejected
+     * request (403 via GlobalExceptionHandler's AccessDeniedException
+     * mapping), never a silently-applied fallback identity.
      */
     private UUID resolveStrictTenantId() {
         UUID tenantId;

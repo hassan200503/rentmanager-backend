@@ -35,4 +35,8 @@ public interface TenantCommandService {
             UUID targetTenantId,
             ConfigureDarajaCredentialsRequest request
     );
+
+
+
+    DarajaCredentialsStatusResponse getDarajaCredentialsStatus(UUID tenantId, UUID targetTenantId);
 }

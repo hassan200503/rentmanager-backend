@@ -1,5 +1,6 @@
 package com.rentmanager.modules.property.infrastructure.persistence.adapter;
 
+import com.rentmanager.modules.property.domain.enums.PropertyStatus;
 import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.modules.property.infrastructure.persistence.entity.PropertyJpaEntity;
@@ -111,7 +112,11 @@ public class PropertyRepositoryAdapter implements PropertyRepository {
 
     @Override
     public List<Property> findByStatus(String status) {
-        return jpaRepository.findByStatus(status)
+        // FIX: convert String -> PropertyStatus enum before hitting the repository.
+        // Passing a raw String against an @Enumerated(EnumType.STRING) field threw
+        // Hibernate's QueryArgumentException under Hibernate 6.4's stricter binding.
+        PropertyStatus propertyStatus = PropertyStatus.valueOf(status);
+        return jpaRepository.findByStatus(propertyStatus)
                 .stream()
                 .map(persistenceMapper::toDomain)
                 .toList();
@@ -125,7 +130,9 @@ public class PropertyRepositoryAdapter implements PropertyRepository {
 
     @Override
     public List<Property> findByOwnerIdAndTenantId(UUID ownerId, UUID tenantId) {
-        return jpaRepository.findByOwnerId(ownerId)
+        // FIX: previously delegated to findByOwnerId(ownerId) alone, silently ignoring
+        // tenantId and returning properties across all tenants. Now properly scoped.
+        return jpaRepository.findByOwnerIdAndTenantId(ownerId, tenantId)
                 .stream()
                 .map(persistenceMapper::toDomain)
                 .toList();
@@ -133,7 +140,11 @@ public class PropertyRepositoryAdapter implements PropertyRepository {
 
     @Override
     public List<Property> findByStatusAndTenantId(String status, UUID tenantId) {
-        return jpaRepository.findByStatus(status)
+        // FIX: previously delegated to findByStatus(status) alone, silently ignoring
+        // tenantId (cross-tenant leak) AND passing a raw String against the enum
+        // column (Hibernate crash). Both fixed here: convert to enum, scope by tenant.
+        PropertyStatus propertyStatus = PropertyStatus.valueOf(status);
+        return jpaRepository.findByStatusAndTenantId(propertyStatus, tenantId)
                 .stream()
                 .map(persistenceMapper::toDomain)
                 .toList();

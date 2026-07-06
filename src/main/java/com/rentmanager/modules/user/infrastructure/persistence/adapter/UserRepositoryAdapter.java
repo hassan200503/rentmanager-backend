@@ -5,6 +5,8 @@ import com.rentmanager.modules.user.domain.repository.UserRepository;
 import com.rentmanager.modules.user.infrastructure.persistence.entity.UserEntity;
 import com.rentmanager.modules.user.infrastructure.persistence.mapper.UserPersistenceMapper;
 import com.rentmanager.modules.user.infrastructure.persistence.repository.UserJpaRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -43,6 +45,14 @@ public class UserRepositoryAdapter implements UserRepository {
             return false;
         }
         return jpaRepository.existsByTenantId(tenantId);
+    }
+
+    @Override
+    public Page<User> findByTenantId(UUID tenantId, Pageable pageable) {
+        if (tenantId == null) {
+            return Page.empty(pageable);
+        }
+        return jpaRepository.findByTenantId(tenantId, pageable).map(mapper::toDomain);
     }
 
     @Override

@@ -180,6 +180,29 @@ public class TenantCommandServiceImpl implements TenantCommandService {
     }
 
     // ------------------------------------------------------------
+    // GET DARAJA CREDENTIALS STATUS (NEW — additive only)
+    // ------------------------------------------------------------
+    // ASSUMPTION requiring verification against the real Tenant.java: this
+    // assumes Tenant exposes a `getDarajaCredentials()` accessor returning
+    // the embedded DarajaCredentials value object, the same way
+    // `configureDarajaCredentials()` below implies a settable field of that
+    // type exists on Tenant. If the actual accessor name differs, or if
+    // Tenant does not expose it directly (e.g. only via a package-private
+    // field), this line needs to be adjusted to match — I have not seen
+    // Tenant.java itself, so this is a best-effort mirror of the existing
+    // configureDarajaCredentials() pattern, not a confirmed contract.
+    @Override
+    public DarajaCredentialsStatusResponse getDarajaCredentialsStatus(UUID tenantId, UUID targetTenantId) {
+
+        Tenant tenant = findTenant(targetTenantId);
+        validateTenantAccess(tenantId, tenant);
+
+        boolean configured = tenant.getDarajaCredentials().isConfigured();
+
+        return new DarajaCredentialsStatusResponse(configured);
+    }
+
+    // ------------------------------------------------------------
     // HELPERS
     // ------------------------------------------------------------
     private Tenant findTenant(UUID targetTenantId) {
@@ -197,12 +220,9 @@ public class TenantCommandServiceImpl implements TenantCommandService {
         }
     }
 
-
-
-
     // ------------------------------------------------------------
-// CONFIGURE DARAJA CREDENTIALS
-// ------------------------------------------------------------
+    // CONFIGURE DARAJA CREDENTIALS
+    // ------------------------------------------------------------
     @Override
     public DarajaCredentialsStatusResponse configureDarajaCredentials(
             UUID tenantId,
@@ -224,8 +244,5 @@ public class TenantCommandServiceImpl implements TenantCommandService {
 
         return new DarajaCredentialsStatusResponse(true);
     }
-
-
-
 
 }

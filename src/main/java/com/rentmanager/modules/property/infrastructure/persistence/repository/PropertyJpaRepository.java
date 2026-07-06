@@ -1,5 +1,6 @@
 package com.rentmanager.modules.property.infrastructure.persistence.repository;
 
+import com.rentmanager.modules.property.domain.enums.PropertyStatus;
 import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.infrastructure.persistence.entity.PropertyJpaEntity;
 import org.springframework.data.domain.Page;
@@ -70,15 +71,27 @@ public interface PropertyJpaRepository
 
     List<PropertyJpaEntity> findByOwnerId(UUID ownerId);
 
-    List<PropertyJpaEntity> findByStatus(String status);
+    // FIX: was String — must match PropertyJpaEntity.status (@Enumerated(EnumType.STRING) PropertyStatus)
+    // Hibernate 6.4's stricter parameter binding rejects a String argument against an enum-typed field.
+    List<PropertyJpaEntity> findByStatus(PropertyStatus status);
+
+    // ---------------------------------------
+    // FIX: tenant-scoped status query
+    // Previously missing — adapter was calling findByStatus(status) alone and
+    // silently ignoring tenantId, leaking every tenant's properties across the app.
+    // ---------------------------------------
+    List<PropertyJpaEntity> findByStatusAndTenantId(PropertyStatus status, UUID tenantId);
+
+    // ---------------------------------------
+    // FIX: tenant-scoped owner query
+    // Previously missing — adapter was calling findByOwnerId(ownerId) alone and
+    // silently ignoring tenantId, same cross-tenant leak pattern as above.
+    // ---------------------------------------
+    List<PropertyJpaEntity> findByOwnerIdAndTenantId(UUID ownerId, UUID tenantId);
 
     Page<PropertyJpaEntity> searchByNameContainingIgnoreCase(
             String name,
             Pageable pageable
     );
-
-
-
-
 
 }
