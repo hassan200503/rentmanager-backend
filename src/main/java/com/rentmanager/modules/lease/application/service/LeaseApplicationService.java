@@ -56,9 +56,12 @@ public class LeaseApplicationService {
         // name, email, phone, national ID) to a lease on their own
         // property. This loads the profile and confirms it belongs to the
         // calling landlord before proceeding. Do not remove this check or
-        // replace it with an existence-only check (see the separate,
-        // still-open finding on CreateLeaseValidator's existsById() usage
-        // in the reservation-fulfillment saga path).
+        // replace it with an existence-only check. (NOTE: the reservation-
+        // fulfillment saga's own equivalent check, CreateLeaseValidator's
+        // existsById()-only usage, is now moot — that entire dead code
+        // path, including CreateLeaseValidator itself, has been removed
+        // from the codebase; see project handoff addendum for the
+        // confirmed-dead-code deletion record.)
         TenantProfile tenantProfile = tenantProfileRepository.findById(request.tenantProfileId())
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
@@ -152,6 +155,16 @@ public class LeaseApplicationService {
         switch (request.getAction()) {
 
             case APPROVE -> workflowEngine.approve(lease);
+
+            // FIX (this session): LeaseActionType already defined
+            // AWAITING_DEPOSIT, and LeaseWorkflowEngine already implemented
+            // markAwaitingDeposit(Lease), but this switch never called it.
+            // That left AWAITING_DEPOSIT completely unreachable via the API
+            // even though Lease.activate() requires the aggregate to be in
+            // that state first (see LeaseWorkflowValidator.validateActivation) —
+            // meaning ACTIVATE could never legitimately succeed on any lease
+            // that went through APPROVE first. Do not remove this case.
+            case AWAITING_DEPOSIT -> workflowEngine.markAwaitingDeposit(lease);
 
             case ACTIVATE -> workflowEngine.activate(lease);
 

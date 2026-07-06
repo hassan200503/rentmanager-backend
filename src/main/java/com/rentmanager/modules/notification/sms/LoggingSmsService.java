@@ -16,13 +16,13 @@ public class LoggingSmsService implements SmsService {
     @Override
     public void sendCredentials(String phone, String password) {
         log.warn("[SMS STUB] Would send credentials to {} (SmsService not wired to a real provider)",
-                phone);
+                PhoneMasker.mask(phone));
     }
 
     @Override
     public void sendReservationConfirmed(String phone) {
         log.warn("[SMS STUB] Would send reservation-confirmed (existing account) to {} " +
                         "(SmsService not wired to a real provider)",
-                phone);
+                PhoneMasker.mask(phone));
     }
 }

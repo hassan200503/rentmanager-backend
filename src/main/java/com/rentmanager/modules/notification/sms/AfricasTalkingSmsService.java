@@ -67,15 +67,15 @@ public class AfricasTalkingSmsService implements SmsService {
                     .anyMatch(r -> "Success".equalsIgnoreCase(r.status()));
 
             if (success) {
-                log.info("SMS sent. phone={}", mask(normalized));
+                log.info("SMS sent. phone={}", PhoneMasker.mask(normalized));
             } else {
                 log.warn("SMS provider did not confirm delivery. phone={}, response={}",
-                        mask(normalized), response);
+                        PhoneMasker.mask(normalized), response);
             }
 
         } catch (Exception ex) {
             // Intentionally swallowed: SMS delivery must never fail reservation fulfillment.
-            log.error("SMS send failed. phone={}, error={}", mask(normalized), ex.getMessage());
+            log.error("SMS send failed. phone={}, error={}", PhoneMasker.mask(normalized), ex.getMessage());
         }
     }
 
@@ -107,11 +107,6 @@ public class AfricasTalkingSmsService implements SmsService {
             return raw;
         }
         return "+254" + digits;
-    }
-
-    private String mask(String phone) {
-        if (phone == null || phone.length() < 4) return "****";
-        return phone.substring(0, phone.length() - 4).replaceAll(".", "*") + phone.substring(phone.length() - 4);
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

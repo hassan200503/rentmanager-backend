@@ -70,6 +70,47 @@ public class GlobalExceptionHandler {
     }
 
     // =========================================================
+    // PROPERTY NOT FOUND
+    // =========================================================
+    // FIX (this session): PropertyNotFoundException extends RuntimeException
+    // directly, NOT the shared ResourceNotFoundException — so without this
+    // handler, every "property not found" (including the correctly-enforced
+    // cross-tenant case in PropertyQueryServiceImpl.getById()) fell through
+    // to the generic Exception handler below and returned 500 Internal
+    // Server Error with INTERNAL_ERROR/SYSTEM telemetry, instead of the
+    // correct 404/NOT_FOUND/PROPERTY. Confirmed live via PropertyApiTest's
+    // shouldEnforceTenantIsolation test, which had encoded the 500 as
+    // expected behavior rather than catching it as a bug.
+    //
+    // NOTE: a cleaner long-term fix would be making PropertyNotFoundException
+    // extend ResourceNotFoundException directly, so it's covered by the
+    // handler above without a separate handler here — but that changes the
+    // exception's type hierarchy, and other callers may catch it as a plain
+    // RuntimeException elsewhere in the codebase (not audited this session).
+    // This additive handler achieves the same correct HTTP/telemetry outcome
+    // without that risk. Revisit consolidating the two exception types as a
+    // separate, deliberate cleanup if desired.
+    @ExceptionHandler(PropertyNotFoundException.class)
+    public ResponseEntity<ApiResponse<Object>> handlePropertyNotFound(
+            PropertyNotFoundException ex,
+            HttpServletRequest request
+    ) {
+
+        errorTrackingService.capture(
+                ex,
+                "NOT_FOUND",
+                ex.getErrorCode().name(),
+                resolveModule(request),
+                request,
+                Map.of()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.fail(ex.getMessage(), ex.getErrorCode().name()));
+    }
+
+    // =========================================================
     // VALIDATION
     // =========================================================
     @ExceptionHandler(MethodArgumentNotValidException.class)

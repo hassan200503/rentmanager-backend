@@ -5,9 +5,12 @@ import com.rentmanager.modules.unit.application.dto.response.UnitResponse;
 import com.rentmanager.modules.unit.application.query.service.UnitQueryService;
 import com.rentmanager.shared.error.ErrorTrackingService;
 import com.rentmanager.shared.exception.GlobalExceptionHandler;
+import com.rentmanager.shared.security.context.TenantContext;
 import com.rentmanager.shared.security.filter.JwtAuthenticationFilter;
 import com.rentmanager.shared.security.jwt.ClerkJwtAuthenticationConverter;
 import com.rentmanager.shared.security.jwt.JwtProvider;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
@@ -63,14 +66,35 @@ class UnitApiTest {
     @MockBean
     private ClerkJwtAuthenticationConverter clerkJwtAuthenticationConverter;
 
+    private static final UUID TENANT_ID = UUID.randomUUID();
+
+    // With addFilters = false, the real filter chain (including whatever
+    // normally derives tenant identity from an authenticated JWT and
+    // populates TenantContext) never runs. Previously this test tried to
+    // work around that by sending a raw X-Tenant-Id header — but that's
+    // exactly the client-trusted-header pattern the tenant-isolation audit
+    // closed off. resolveStrictTenantId() is now fail-closed and will not
+    // derive tenant identity from an unauthenticated header, so TenantContext
+    // is populated directly here instead, the same way TenantControllerSecurityTest
+    // does it. TenantContext is backed by a ThreadLocal, and Surefire reuses
+    // the same test thread across methods, so it must be cleared after each test.
+    @BeforeEach
+    void setUpTenantContext() {
+        TenantContext.setTenantId(TENANT_ID);
+    }
+
+    @AfterEach
+    void tearDownTenantContext() {
+        TenantContext.clear();
+    }
+
     @Test
     void shouldReturnUnitsWithApiResponseWrapper() throws Exception {
 
         when(service.getAll(any(), any()))
                 .thenReturn(new PageImpl<>(Collections.emptyList()));
 
-        mockMvc.perform(get("/api/v1/units")
-                        .header("X-Tenant-Id", UUID.randomUUID().toString()))
+        mockMvc.perform(get("/api/v1/units"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.message").value("Units retrieved successfully"))
@@ -83,8 +107,7 @@ class UnitApiTest {
         when(service.getById(any(), any()))
                 .thenReturn(new UnitResponse());
 
-        mockMvc.perform(get("/api/v1/units/" + UUID.randomUUID())
-                        .header("X-Tenant-Id", UUID.randomUUID().toString()))
+        mockMvc.perform(get("/api/v1/units/" + UUID.randomUUID()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.message").value("Unit retrieved successfully"))

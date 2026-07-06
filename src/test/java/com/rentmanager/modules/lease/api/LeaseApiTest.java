@@ -5,6 +5,12 @@ import com.jayway.jsonpath.JsonPath;
 import com.rentmanager.crossmodule.support.PostgresSpringBridge;
 import com.rentmanager.modules.support.MockTenantAuthentication;
 import com.rentmanager.modules.support.TestSecurityConfig;
+import com.rentmanager.modules.tenant.domain.enums.TenantType;
+import com.rentmanager.modules.tenant.domain.model.Tenant;
+import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
+import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
+import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -35,6 +41,8 @@ public class LeaseApiTest {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private ObjectMapper objectMapper;
+    @Autowired private TenantProfileRepository tenantProfileRepository;
+    @Autowired private TenantRepository tenantRepository;
 
     private static final UUID TENANT_A =
             UUID.fromString("11111111-1111-1111-1111-111111111111");
@@ -42,7 +50,51 @@ public class LeaseApiTest {
     private static final UUID TENANT_B =
             UUID.fromString("22222222-2222-2222-2222-222222222222");
 
-    private static final String TENANT_HEADER = "X-Tenant-Id";
+    // Must match the tenantProfileId hardcoded in the createLease() payload below.
+    private static final UUID TENANT_PROFILE_ID =
+            UUID.fromString("55555555-5555-5555-5555-555555555555");
+
+    @BeforeEach
+    void seedFixtures() {
+        // tenant_profile.tenant_id has an FK to tenants(id), so both landlord
+        // accounts referenced in this test (TENANT_A does the creating,
+        // TENANT_B does the cross-tenant read) must exist first. create()
+        // never assigns an id itself (BaseEntity only auto-generates one via
+        // @PrePersist if it's still null) so restoreId(...) is used to pin
+        // each Tenant to the fixed UUID these tests already reference
+        // throughout, before either row is persisted.
+        seedTenant(TENANT_A);
+        seedTenant(TENANT_B);
+
+        // LeaseApplicationService.create() looks this up and checks it belongs
+        // to the calling landlord (TENANT_A) before allowing lease creation.
+        // rehydrate() (rather than create()) is used because it lets us pin
+        // the id to the fixed UUID the test payload already references;
+        // create() always assigns a random id.
+        TenantProfile profile = TenantProfile.rehydrate(
+                TENANT_PROFILE_ID,
+                TENANT_A,
+                "clerk_test_user_" + TENANT_PROFILE_ID,
+                "Test Renter",
+                "renter@test.com",
+                "0700000000",
+                null
+        );
+        tenantProfileRepository.save(profile);
+    }
+
+    private void seedTenant(UUID id) {
+        Tenant tenant = Tenant.create(
+                "TC-" + id,
+                "Test Landlord " + id,
+                "test-landlord-" + id,
+                "landlord-" + id + "@test.com",
+                "0700000001",
+                TenantType.STANDARD
+        );
+        tenant.restoreId(id);
+        tenantRepository.save(tenant);
+    }
 
     private String createLease(UUID tenantId) throws Exception {
 
@@ -66,7 +118,6 @@ public class LeaseApiTest {
 
         MvcResult result = mockMvc.perform(post("/api/v1/leases")
                         .with(MockTenantAuthentication.asTenant(tenantId))
-                        .header(TENANT_HEADER, tenantId.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isOk())
@@ -90,7 +141,6 @@ public class LeaseApiTest {
 
         mockMvc.perform(post("/api/v1/leases/%s/action".formatted(leaseId))
                         .with(MockTenantAuthentication.asTenant(TENANT_A))
-                        .header(TENANT_HEADER, TENANT_A.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isOk());
@@ -110,8 +160,7 @@ public class LeaseApiTest {
         String leaseId = createLease(TENANT_A);
 
         mockMvc.perform(get("/api/v1/leases/" + leaseId)
-                        .with(MockTenantAuthentication.asTenant(TENANT_B))
-                        .header(TENANT_HEADER, TENANT_B.toString()))
+                        .with(MockTenantAuthentication.asTenant(TENANT_B)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.success").value(false));
     }
@@ -122,11 +171,11 @@ public class LeaseApiTest {
         String leaseId = createLease(TENANT_A);
 
         performAction(leaseId, "APPROVE");
+        performAction(leaseId, "AWAITING_DEPOSIT");
         performAction(leaseId, "ACTIVATE");
 
         mockMvc.perform(get("/api/v1/leases/" + leaseId)
-                        .with(MockTenantAuthentication.asTenant(TENANT_A))
-                        .header(TENANT_HEADER, TENANT_A.toString()))
+                        .with(MockTenantAuthentication.asTenant(TENANT_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"));

@@ -109,7 +109,6 @@ class PropertyApiTest {
 
         MvcResult result = mockMvc.perform(post("/api/v1/properties")
                         .with(MockTenantAuthentication.asTenant(tenantId))
-                        .header("X-Tenant-Id", tenantId.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -136,7 +135,6 @@ class PropertyApiTest {
 
         mockMvc.perform(put("/api/v1/properties/" + id)
                         .with(MockTenantAuthentication.asTenant(TENANT_A))
-                        .header("X-Tenant-Id", TENANT_A.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
                 .andExpect(status().isOk())
@@ -150,8 +148,7 @@ class PropertyApiTest {
         String id = createProperty(TENANT_A, "Activate House");
 
         mockMvc.perform(post("/api/v1/properties/" + id + "/activate")
-                        .with(MockTenantAuthentication.asTenant(TENANT_A))
-                        .header("X-Tenant-Id", TENANT_A.toString()))
+                        .with(MockTenantAuthentication.asTenant(TENANT_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
     }
@@ -162,8 +159,7 @@ class PropertyApiTest {
         String id = createProperty(TENANT_A, "Archive House");
 
         mockMvc.perform(post("/api/v1/properties/" + id + "/archive")
-                        .with(MockTenantAuthentication.asTenant(TENANT_A))
-                        .header("X-Tenant-Id", TENANT_A.toString()))
+                        .with(MockTenantAuthentication.asTenant(TENANT_A)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
     }
@@ -173,11 +169,21 @@ class PropertyApiTest {
 
         String propertyId = createProperty(TENANT_A, "Tenant A Property");
 
+        // FIX (this session): was isInternalServerError() / 500. That was
+        // masking a real bug — PropertyNotFoundException wasn't mapped in
+        // GlobalExceptionHandler, so it fell through to the generic 500
+        // handler. Now that GlobalExceptionHandler has a dedicated
+        // PropertyNotFoundException -> 404 mapping, this correctly reflects
+        // that a cross-tenant lookup returns 404 (the record is invisible
+        // to this tenant, same as if it never existed) rather than a
+        // 403/ACCESS_DENIED — consistent with how PropertyQueryServiceImpl
+        // enforces isolation via findByIdAndTenantId() returning empty,
+        // not via a separate ownership-check-then-deny step.
         mockMvc.perform(get("/api/v1/properties/" + propertyId)
-                        .with(MockTenantAuthentication.asTenant(TENANT_B))
-                        .header("X-Tenant-Id", TENANT_B.toString()))
-                .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.success").value(false));
+                        .with(MockTenantAuthentication.asTenant(TENANT_B)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.errorCode").value("PROPERTY_NOT_FOUND"));
     }
 
     @Test
@@ -192,7 +198,6 @@ class PropertyApiTest {
 
         mockMvc.perform(post("/api/v1/properties")
                         .with(MockTenantAuthentication.asTenant(TENANT_A))
-                        .header("X-Tenant-Id", TENANT_A.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(duplicate)))
                 .andExpect(status().isConflict())
@@ -212,14 +217,12 @@ class PropertyApiTest {
 
         mockMvc.perform(post("/api/v1/properties")
                         .with(MockTenantAuthentication.asTenant(TENANT_A))
-                        .header("X-Tenant-Id", TENANT_A.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(t1)))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/v1/properties")
                         .with(MockTenantAuthentication.asTenant(TENANT_B))
-                        .header("X-Tenant-Id", TENANT_B.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(t2)))
                 .andExpect(status().isOk());
@@ -231,13 +234,11 @@ class PropertyApiTest {
         String id = createProperty(TENANT_A, "Lifecycle Property");
 
         mockMvc.perform(post("/api/v1/properties/" + id + "/activate")
-                        .with(MockTenantAuthentication.asTenant(TENANT_A))
-                        .header("X-Tenant-Id", TENANT_A.toString()))
+                        .with(MockTenantAuthentication.asTenant(TENANT_A)))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/v1/properties/" + id + "/archive")
-                        .with(MockTenantAuthentication.asTenant(TENANT_A))
-                        .header("X-Tenant-Id", TENANT_A.toString()))
+                        .with(MockTenantAuthentication.asTenant(TENANT_A)))
                 .andExpect(status().isOk());
     }
 }
