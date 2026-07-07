@@ -60,6 +60,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(controllers = TenantController.class)
 class TenantControllerSecurityTest {
 
+    // FIX: TenantController is @RequestMapping("/api/v1/tenants") (confirmed
+    // against the actual controller source). Every request path below was
+    // "/api/tenants/..." — missing "/v1" — which would 404 rather than hit
+    // @PreAuthorize at all, silently defeating every assertion in this class.
+    private static final String TENANTS_BASE = "/api/v1/tenants";
+
     @TestConfiguration
     @EnableMethodSecurity
     static class MethodSecurityTestConfig {
@@ -178,7 +184,7 @@ class TenantControllerSecurityTest {
     @ParameterizedTest
     @ValueSource(strings = {"ROLE_LANDLORD_STAFF", "ROLE_LANDLORD_MANAGER"})
     void nonOwner_forbidden_onDarajaCredentials(String authority) throws Exception {
-        mockMvc.perform(put("/api/tenants/{tenantId}/daraja-credentials", TENANT_ID)
+        mockMvc.perform(put(TENANTS_BASE + "/{tenantId}/daraja-credentials", TENANT_ID)
                         .with(authentication(tokenWithAuthority(authority)))
                         .with(csrf())
                         .contentType("application/json")
@@ -189,7 +195,7 @@ class TenantControllerSecurityTest {
     @ParameterizedTest
     @ValueSource(strings = {"ROLE_LANDLORD_STAFF", "ROLE_LANDLORD_MANAGER"})
     void nonOwner_forbidden_onSuspend(String authority) throws Exception {
-        mockMvc.perform(put("/api/tenants/{tenantId}/suspend", TENANT_ID)
+        mockMvc.perform(put(TENANTS_BASE + "/{tenantId}/suspend", TENANT_ID)
                         .with(authentication(tokenWithAuthority(authority)))
                         .with(csrf())
                         .contentType("application/json")
@@ -200,7 +206,7 @@ class TenantControllerSecurityTest {
     @ParameterizedTest
     @ValueSource(strings = {"ROLE_LANDLORD_STAFF", "ROLE_LANDLORD_MANAGER"})
     void nonOwner_forbidden_onActivate(String authority) throws Exception {
-        mockMvc.perform(put("/api/tenants/{tenantId}/activate", TENANT_ID)
+        mockMvc.perform(put(TENANTS_BASE + "/{tenantId}/activate", TENANT_ID)
                         .with(authentication(tokenWithAuthority(authority)))
                         .with(csrf()))
                 .andExpect(status().isForbidden());
@@ -213,7 +219,7 @@ class TenantControllerSecurityTest {
         when(tenantCommandService.configureDarajaCredentials(any(), any(), any()))
                 .thenReturn(new DarajaCredentialsStatusResponse(true));
 
-        mockMvc.perform(put("/api/tenants/{tenantId}/daraja-credentials", TENANT_ID)
+        mockMvc.perform(put(TENANTS_BASE + "/{tenantId}/daraja-credentials", TENANT_ID)
                         .with(authentication(tokenWithAuthority("ROLE_LANDLORD_OWNER")))
                         .with(csrf())
                         .contentType("application/json")
@@ -228,7 +234,7 @@ class TenantControllerSecurityTest {
         response.setStatus("SUSPENDED");
         when(tenantCommandService.suspendTenant(any(), any(), any())).thenReturn(response);
 
-        mockMvc.perform(put("/api/tenants/{tenantId}/suspend", TENANT_ID)
+        mockMvc.perform(put(TENANTS_BASE + "/{tenantId}/suspend", TENANT_ID)
                         .with(authentication(tokenWithAuthority("ROLE_LANDLORD_OWNER")))
                         .with(csrf())
                         .contentType("application/json")
@@ -243,7 +249,7 @@ class TenantControllerSecurityTest {
         response.setStatus("ACTIVE");
         when(tenantCommandService.activateTenant(any(), any())).thenReturn(response);
 
-        mockMvc.perform(put("/api/tenants/{tenantId}/activate", TENANT_ID)
+        mockMvc.perform(put(TENANTS_BASE + "/{tenantId}/activate", TENANT_ID)
                         .with(authentication(tokenWithAuthority("ROLE_LANDLORD_OWNER")))
                         .with(csrf()))
                 .andExpect(status().isOk());

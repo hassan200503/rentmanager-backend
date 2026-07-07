@@ -59,6 +59,10 @@ public class TenantEntity extends BaseEntity {
     private String phoneNumber;
 
     @Setter
+    @Column(name = "address", length = 255)
+    private String address;
+
+    @Setter
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 50)
     private TenantStatus status;

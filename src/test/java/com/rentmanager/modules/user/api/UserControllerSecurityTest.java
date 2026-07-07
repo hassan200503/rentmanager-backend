@@ -41,7 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Covers §6.2 acceptance criteria for UserControllerSecurityTest from the
  * RBAC handoff doc:
- *  - STAFF authority -> 403 on POST /api/users/invite
+ *  - STAFF authority -> 403 on POST /api/v1/users/invite
  *  - OWNER and MANAGER authorities -> 200, passing the coarse controller
  *    gate (with UserCommandService mocked). The fine-grained matrix
  *    rejection (e.g. MANAGER inviting above STAFF) is already covered at
@@ -54,6 +54,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @WebMvcTest(controllers = UserController.class)
 class UserControllerSecurityTest {
+
+    // FIX: UserController is @RequestMapping("/api/v1/users") with the
+    // invite action at @PostMapping("/invite") (confirmed against the
+    // actual controller source) -> full path "/api/v1/users/invite".
+    // The original path "/api/users/invite" was missing "/v1", which would
+    // 404 instead of reaching @PreAuthorize, silently defeating every
+    // assertion in this class.
+    private static final String INVITE_PATH = "/api/v1/users/invite";
 
     @TestConfiguration
     @EnableMethodSecurity
@@ -137,7 +145,7 @@ class UserControllerSecurityTest {
 
     @Test
     void staff_forbidden_onInvite() throws Exception {
-        mockMvc.perform(post("/api/users/invite")
+        mockMvc.perform(post(INVITE_PATH)
                         .with(authentication(tokenWithAuthority("ROLE_LANDLORD_STAFF")))
                         .with(csrf())
                         .contentType("application/json")
@@ -151,7 +159,7 @@ class UserControllerSecurityTest {
         when(userCommandService.inviteUser(any()))
                 .thenReturn(new InviteUserResponse(UUID.randomUUID(), "newhire@example.com", UserRole.STAFF));
 
-        mockMvc.perform(post("/api/users/invite")
+        mockMvc.perform(post(INVITE_PATH)
                         .with(authentication(tokenWithAuthority(authority)))
                         .with(csrf())
                         .contentType("application/json")

@@ -64,7 +64,8 @@ public interface TenantPersistenceMapper {
                 entity.isOnboardingCompleted(),
                 entity.getClerkOrgId(),
                 entity.getCommissionRate(),
-                darajaCredentials
+                darajaCredentials,
+                entity.getAddress()
         );
     }
 }

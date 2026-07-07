@@ -42,6 +42,9 @@ public class Tenant extends BaseEntity {
  @Column(name = "phone_number", length = 50)
  private String phoneNumber;
 
+ @Column(name = "address", length = 255)
+ private String address;
+
  @Enumerated(EnumType.STRING)
  @Column(name = "status", nullable = false, length = 50)
  private TenantStatus status;
@@ -273,6 +276,19 @@ public class Tenant extends BaseEntity {
  }
 
  // ----------------------------------------------------------------
+ // ADDRESS
+ // ----------------------------------------------------------------
+
+ /**
+  * Optional. Not required at onboarding time — see
+  * CreateTenantCommandHandler, which calls this after Tenant.create() when
+  * an address is supplied rather than requiring it up front.
+  */
+ public void updateAddress(String address) {
+  this.address = address;
+ }
+
+ // ----------------------------------------------------------------
  // ONBOARDING
  // ----------------------------------------------------------------
 
@@ -306,7 +322,8 @@ public class Tenant extends BaseEntity {
          boolean onboardingCompleted,
          String clerkOrgId,
          BigDecimal commissionRate,
-         DarajaCredentials darajaCredentials
+         DarajaCredentials darajaCredentials,
+         String address
  ) {
   Tenant tenant = new Tenant();
 
@@ -334,6 +351,7 @@ public class Tenant extends BaseEntity {
   tenant.clerkOrgId = clerkOrgId;
   tenant.commissionRate = commissionRate;
   tenant.darajaCredentials = darajaCredentials != null ? darajaCredentials : DarajaCredentials.unconfigured();
+  tenant.address = address;
   return tenant;
  }
 
