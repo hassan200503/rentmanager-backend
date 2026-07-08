@@ -49,8 +49,6 @@ public interface PropertyJpaRepository
     // (optional legacy - keep if still used somewhere)
     List<PropertyJpaEntity> findAllByTenantId(UUID tenantId);
 
-
-
     // ✅ ADD THIS (CRITICAL FIX)
     void deleteByIdAndTenantId(UUID id, UUID tenantId);
 
@@ -60,18 +58,15 @@ public interface PropertyJpaRepository
             Pageable pageable
     );
 
-
-
     Page<PropertyJpaEntity> findByTenantIdAndNameContainingIgnoreCase(
             UUID tenantId,
             String name,
             Pageable pageable
     );
 
-
     List<PropertyJpaEntity> findByOwnerId(UUID ownerId);
 
-    // FIX: was String — must match PropertyJpaEntity.status (@Enumerated(EnumType.STRING) PropertyStatus)
+    // FIX: was String — must match PropertyJpaEntity.status (@Enumerated(EnumType.STRING)).
     // Hibernate 6.4's stricter parameter binding rejects a String argument against an enum-typed field.
     List<PropertyJpaEntity> findByStatus(PropertyStatus status);
 
@@ -94,4 +89,20 @@ public interface PropertyJpaRepository
             Pageable pageable
     );
 
+    // =====================================================
+    // PUBLIC LISTING HARDENING (2026-07-08)
+    // Status-filtered equivalents of the unscoped public read paths
+    // (findAll/search/findById), which previously exposed DRAFT/INACTIVE/
+    // UNDER_MAINTENANCE/ARCHIVED properties to unauthenticated callers.
+    // =====================================================
+
+    Page<PropertyJpaEntity> findByStatus(PropertyStatus status, Pageable pageable);
+
+    Page<PropertyJpaEntity> findByStatusAndNameContainingIgnoreCase(
+            PropertyStatus status,
+            String name,
+            Pageable pageable
+    );
+
+    Optional<PropertyJpaEntity> findByIdAndStatus(UUID id, PropertyStatus status);
 }

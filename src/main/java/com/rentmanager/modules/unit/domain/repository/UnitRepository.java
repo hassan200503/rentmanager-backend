@@ -41,11 +41,12 @@ public interface UnitRepository {
 
     void delete(Unit unit);
 
-
-
-
-
-
+    // NOTE: retained for backward compatibility — TODO confirm whether these
+    // occupancy-only public methods still have callers anywhere before
+    // removing them. Public read paths now use the *PubliclyVisible*
+    // methods below (see RentManager Public Listings Hardening handoff,
+    // 2026-07-08), which additionally enforce UnitStatus.ACTIVE and the
+    // parent Property's PropertyStatus.ACTIVE.
     Page<Unit> findByOccupancyStatus(UnitOccupancyStatus occupancyStatus, Pageable pageable);
     Page<Unit> searchPublic(String keyword, UnitOccupancyStatus occupancyStatus, Pageable pageable);
     Optional<Unit> findById(UUID id); // tenant-agnostic — needed for public unit detail page
@@ -64,11 +65,21 @@ public interface UnitRepository {
 
     Page<Unit> findByPropertyIdAndOccupancyStatus(UUID propertyId, UnitOccupancyStatus occupancyStatus, Pageable pageable);
 
-
-
     long countByTenantId(UUID tenantId);
     long countByTenantIdAndOccupancyStatus(UUID tenantId, UnitOccupancyStatus occupancyStatus);
 
-
     Optional<Unit> findLongestVacant();
+
+    // =========================
+    // PUBLIC LISTING HARDENING (2026-07-08)
+    //
+    // A unit is publicly visible only if its own status is ACTIVE, its
+    // occupancyStatus is VACANT, AND its parent property's status is
+    // ACTIVE. Deliberate defense-in-depth — do not simplify to a single
+    // check (see handoff doc §4).
+    // =========================
+    Page<Unit> findPubliclyVisibleVacantUnits(String keyword, Pageable pageable);
+    Page<Unit> findPubliclyVisibleVacantUnitsByProperty(UUID propertyId, Pageable pageable);
+    Optional<Unit> findPubliclyVisibleVacantUnitById(UUID unitId);
+    Optional<Unit> findPubliclyVisibleLongestVacantUnit();
 }

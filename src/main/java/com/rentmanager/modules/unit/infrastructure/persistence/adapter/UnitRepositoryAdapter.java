@@ -1,5 +1,6 @@
 package com.rentmanager.modules.unit.infrastructure.persistence.adapter;
 
+import com.rentmanager.modules.property.domain.enums.PropertyStatus;
 import com.rentmanager.modules.unit.domain.enums.UnitOccupancyStatus;
 import com.rentmanager.modules.unit.domain.enums.UnitStatus;
 import com.rentmanager.modules.unit.domain.model.Unit;
@@ -97,9 +98,6 @@ public class UnitRepositoryAdapter implements UnitRepository {
         jpaRepository.deleteById(unit.getId());
     }
 
-
-
-
     @Override
     public Page<Unit> findByOccupancyStatus(
             UnitOccupancyStatus occupancyStatus,
@@ -152,7 +150,6 @@ public class UnitRepositoryAdapter implements UnitRepository {
                 .map(mapper::toDomain);
     }
 
-
     @Override
     public long countByTenantId(UUID tenantId) {
         return jpaRepository.countByTenantId(tenantId);
@@ -163,8 +160,6 @@ public class UnitRepositoryAdapter implements UnitRepository {
         return jpaRepository.countByTenantIdAndOccupancyStatus(tenantId, occupancyStatus);
     }
 
-
-
     @Override
     public Optional<Unit> findLongestVacant() {
         Page<UnitJpaEntity> page = jpaRepository.findLongestVacant(
@@ -174,4 +169,56 @@ public class UnitRepositoryAdapter implements UnitRepository {
         return page.getContent().stream().findFirst().map(mapper::toDomain);
     }
 
+    // =====================================================
+    // PUBLIC LISTING HARDENING (2026-07-08)
+    // See UnitJpaRepository for the join-query rationale and the
+    // defense-in-depth visibility rule (unit ACTIVE + VACANT AND parent
+    // property ACTIVE).
+    // =====================================================
+
+    @Override
+    public Page<Unit> findPubliclyVisibleVacantUnits(String keyword, Pageable pageable) {
+        return jpaRepository.searchPubliclyVisible(
+                        keyword,
+                        UnitOccupancyStatus.VACANT,
+                        UnitStatus.ACTIVE,
+                        PropertyStatus.ACTIVE,
+                        pageable
+                )
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    public Page<Unit> findPubliclyVisibleVacantUnitsByProperty(UUID propertyId, Pageable pageable) {
+        return jpaRepository.findPubliclyVisibleByProperty(
+                        propertyId,
+                        UnitOccupancyStatus.VACANT,
+                        UnitStatus.ACTIVE,
+                        PropertyStatus.ACTIVE,
+                        pageable
+                )
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    public Optional<Unit> findPubliclyVisibleVacantUnitById(UUID unitId) {
+        return jpaRepository.findPubliclyVisibleById(
+                        unitId,
+                        UnitOccupancyStatus.VACANT,
+                        UnitStatus.ACTIVE,
+                        PropertyStatus.ACTIVE
+                )
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    public Optional<Unit> findPubliclyVisibleLongestVacantUnit() {
+        Page<UnitJpaEntity> page = jpaRepository.findLongestVacantPubliclyVisible(
+                UnitOccupancyStatus.VACANT,
+                UnitStatus.ACTIVE,
+                PropertyStatus.ACTIVE,
+                PageRequest.of(0, 1)
+        );
+        return page.getContent().stream().findFirst().map(mapper::toDomain);
+    }
 }

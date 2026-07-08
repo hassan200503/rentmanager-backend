@@ -3,7 +3,6 @@ package com.rentmanager.modules.unit.application.query.service;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.modules.unit.application.dto.response.PublicUnitResponse;
 import com.rentmanager.modules.unit.application.mapper.UnitMapper;
-import com.rentmanager.modules.unit.domain.enums.UnitOccupancyStatus;
 import com.rentmanager.modules.unit.domain.model.Unit;
 import com.rentmanager.modules.unit.domain.model.UnitMedia;
 import com.rentmanager.modules.unit.domain.repository.UnitMediaRepository;
@@ -27,38 +26,41 @@ public class PublicUnitQueryServiceImpl implements PublicUnitQueryService {
     private final UnitRepository unitRepository;
     private final UnitMediaRepository unitMediaRepository;
     private final UnitMapper unitMapper;
-    private final PropertyRepository propertyRepository; // ADD to constructor deps
+    private final PropertyRepository propertyRepository;
+
+    // =====================================================
+    // PUBLIC LISTING HARDENING (2026-07-08)
+    // All methods below now go through the *PubliclyVisible* repository
+    // methods, which additionally require UnitStatus.ACTIVE on the unit AND
+    // PropertyStatus.ACTIVE on its parent property, on top of the existing
+    // UnitOccupancyStatus.VACANT filter. See handoff doc §4 for why this is
+    // deliberately a two-condition check rather than parent-inherits-only.
+    // =====================================================
 
     @Override
     public Page<PublicUnitResponse> getVacantUnits(String keyword, Pageable pageable) {
-        Page<Unit> units = (keyword == null || keyword.isBlank())
-                ? unitRepository.findByOccupancyStatus(UnitOccupancyStatus.VACANT, pageable)
-                : unitRepository.searchPublic(keyword, UnitOccupancyStatus.VACANT, pageable);
-
+        Page<Unit> units = unitRepository.findPubliclyVisibleVacantUnits(keyword, pageable);
         return attachImages(units);
     }
 
     @Override
     public Page<PublicUnitResponse> getVacantUnitsByProperty(UUID propertyId, Pageable pageable) {
-        Page<Unit> units = unitRepository.findByPropertyIdAndOccupancyStatus(
-                propertyId,
-                UnitOccupancyStatus.VACANT,
-                pageable
-        );
-
+        Page<Unit> units = unitRepository.findPubliclyVisibleVacantUnitsByProperty(propertyId, pageable);
         return attachImages(units);
     }
 
     @Override
     public PublicUnitResponse getVacantUnitById(UUID unitId) {
-        Unit unit = unitRepository.findById(unitId)
+        // Query already enforces status ACTIVE + occupancy VACANT + parent
+        // property ACTIVE, so a miss here is a single, consistent 404 —
+        // deliberately not distinguishing "doesn't exist" from "exists but
+        // isn't publicly visible," same principle as the M-Pesa callback
+        // secret check elsewhere in this codebase (404, not 403, to avoid
+        // confirming existence to a prober).
+        Unit unit = unitRepository.findPubliclyVisibleVacantUnitById(unitId)
                 .orElseThrow(() ->
                         new ResourceNotFoundException("Unit not found", ErrorCode.UNIT_NOT_FOUND)
                 );
-
-        if (unit.getOccupancyStatus() != UnitOccupancyStatus.VACANT) {
-            throw new ResourceNotFoundException("Unit not found", ErrorCode.UNIT_NOT_FOUND);
-        }
 
         PublicUnitResponse response = unitMapper.toPublicResponse(unit);
 
@@ -95,23 +97,19 @@ public class PublicUnitQueryServiceImpl implements PublicUnitQueryService {
         });
     }
 
-
-
-
     @Override
     public PublicUnitResponse getLongestVacantUnit() {
-        Unit unit = unitRepository.findLongestVacant()
+        Unit unit = unitRepository.findPubliclyVisibleLongestVacantUnit()
                 .orElseThrow(() ->
                         new ResourceNotFoundException("No vacant units available", ErrorCode.UNIT_NOT_FOUND)
                 );
 
         PublicUnitResponse response = unitMapper.toPublicResponse(unit);
 
+        // Parent property is already confirmed ACTIVE by the query above;
+        // this lookup is purely to pull display fields (name/area).
         propertyRepository.findById(unit.getPropertyId()).ifPresent(property -> {
             response.setPropertyName(property.getName());
-
-
-
 
             if (property.getAddress() != null) {
                 String city = property.getAddress().getCity();
@@ -136,6 +134,10 @@ public class PublicUnitQueryServiceImpl implements PublicUnitQueryService {
         return response;
     }
 
-
-
+    // TODO (out of scope for this task, flagged not forgotten):
+    // PublicUnitQueryController also exposes GET /{unitId}/summary via
+    // UnitReservationSummaryQueryService, a separate service not reviewed
+    // in this pass. If it doesn't independently check Unit.status == ACTIVE
+    // and parent Property.status == ACTIVE, it has the same exposure this
+    // task just fixed for the other four public methods.
 }

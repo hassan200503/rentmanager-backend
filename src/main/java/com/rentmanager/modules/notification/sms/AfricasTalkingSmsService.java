@@ -1,6 +1,7 @@
 package com.rentmanager.modules.notification.sms;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpHeaders;
@@ -109,12 +110,29 @@ public class AfricasTalkingSmsService implements SmsService {
         return "+254" + digits;
     }
 
+    // Africa's Talking's response casing is inconsistent between levels:
+    // the outer envelope and Message/Recipients keys are PascalCase, while
+    // fields inside each recipient (cost, messageId, number, status) are
+    // camelCase. Confirmed against a real sandbox response on 2026-07-08:
+    // {"SMSMessageData":{"Message":"...","Recipients":[{"cost":"KES 1.6000",
+    // "messageId":"...","number":"...","status":"Success","statusCode":101}]}}
+    //
+    // Note: "cost" is a formatted currency STRING (e.g. "KES 1.6000"), not a
+    // numeric type — confirmed by a real deserialization failure when this
+    // field was typed as Double. If a numeric amount is ever needed, parse
+    // this string explicitly (strip currency code, parse remainder) rather
+    // than relying on Jackson to coerce it.
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record AfricasTalkingResponse(SmsMessageData smsMessageData) {
+    private record AfricasTalkingResponse(
+            @JsonProperty("SMSMessageData") SmsMessageData smsMessageData
+    ) {
         @JsonIgnoreProperties(ignoreUnknown = true)
-        record SmsMessageData(String message, List<Recipient> recipients) {}
+        record SmsMessageData(
+                @JsonProperty("Message") String message,
+                @JsonProperty("Recipients") List<Recipient> recipients
+        ) {}
 
         @JsonIgnoreProperties(ignoreUnknown = true)
-        record Recipient(String number, String status, String messageId, Double cost) {}
+        record Recipient(String number, String status, String messageId, String cost) {}
     }
 }

@@ -149,4 +149,26 @@ public class PropertyRepositoryAdapter implements PropertyRepository {
                 .map(persistenceMapper::toDomain)
                 .toList();
     }
+
+    // =====================================================
+    // PUBLIC LISTING HARDENING (2026-07-08)
+    // =====================================================
+
+    @Override
+    public Page<Property> findByStatus(PropertyStatus status, Pageable pageable) {
+        return jpaRepository.findByStatus(status, pageable)
+                .map(persistenceMapper::toDomain);
+    }
+
+    @Override
+    public Page<Property> searchByStatus(String keyword, PropertyStatus status, Pageable pageable) {
+        return jpaRepository.findByStatusAndNameContainingIgnoreCase(status, keyword, pageable)
+                .map(persistenceMapper::toDomain);
+    }
+
+    @Override
+    public Optional<Property> findByIdAndStatus(UUID id, PropertyStatus status) {
+        return jpaRepository.findByIdAndStatus(id, status)
+                .map(persistenceMapper::toDomain);
+    }
 }

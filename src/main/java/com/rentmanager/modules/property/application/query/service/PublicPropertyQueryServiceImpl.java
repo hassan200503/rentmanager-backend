@@ -2,6 +2,7 @@ package com.rentmanager.modules.property.application.query.service;
 
 import com.rentmanager.modules.property.application.dto.response.PublicPropertyResponse;
 import com.rentmanager.modules.property.application.mapper.PropertyMapper;
+import com.rentmanager.modules.property.domain.enums.PropertyStatus;
 import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.domain.model.PropertyMedia;
 import com.rentmanager.modules.property.domain.repository.PropertyMediaRepository;
@@ -28,9 +29,13 @@ public class PublicPropertyQueryServiceImpl implements PublicPropertyQueryServic
 
     @Override
     public Page<PublicPropertyResponse> getProperties(String keyword, Pageable pageable) {
+        // FIX (Public Listings Hardening, 2026-07-08): previously findAll/
+        // search with no status filter — a DRAFT/INACTIVE/UNDER_MAINTENANCE/
+        // ARCHIVED property was fully visible to the public. Now scoped to
+        // PropertyStatus.ACTIVE only.
         Page<Property> properties = (keyword == null || keyword.isBlank())
-                ? propertyRepository.findAll(pageable)
-                : propertyRepository.search(keyword, pageable);
+                ? propertyRepository.findByStatus(PropertyStatus.ACTIVE, pageable)
+                : propertyRepository.searchByStatus(keyword, PropertyStatus.ACTIVE, pageable);
 
         List<UUID> propertyIds = properties.getContent().stream()
                 .map(Property::getId)
@@ -64,7 +69,14 @@ public class PublicPropertyQueryServiceImpl implements PublicPropertyQueryServic
 
     @Override
     public PublicPropertyResponse getProperty(UUID propertyId) {
-        Property property = propertyRepository.findById(propertyId)
+        // FIX (Public Listings Hardening, 2026-07-08): previously findById
+        // with no status filter. Now requires PropertyStatus.ACTIVE; a
+        // non-active or nonexistent property both produce the same 404 —
+        // deliberately not distinguishing "doesn't exist" from "exists but
+        // isn't active," same principle as the M-Pesa callback secret check
+        // elsewhere in this codebase (404, not 403, to avoid confirming
+        // existence to a prober).
+        Property property = propertyRepository.findByIdAndStatus(propertyId, PropertyStatus.ACTIVE)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "Property not found",

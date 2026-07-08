@@ -1,5 +1,6 @@
 package com.rentmanager.modules.property.domain.repository;
 
+import com.rentmanager.modules.property.domain.enums.PropertyStatus;
 import com.rentmanager.modules.property.domain.model.Property;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -42,15 +43,25 @@ public interface PropertyRepository {
                 );
     }
 
-
     Page<Property> search(String tenantId, String keyword, Pageable pageable);
-
-
 
     Page<Property> searchByTenantId(UUID tenantId, String keyword, Pageable pageable);
 
     List<Property> findByOwnerIdAndTenantId(UUID ownerId, UUID tenantId);
 
     List<Property> findByStatusAndTenantId(String status, UUID tenantId);
-}
 
+    // =====================================================
+    // PUBLIC LISTING HARDENING (2026-07-08)
+    // Status-filtered equivalents used by the public read path. Uses the
+    // domain PropertyStatus enum directly (unlike the legacy findByStatus
+    // above, which takes a String) since these are new methods with no
+    // pre-existing String-typed callers to stay compatible with.
+    // =====================================================
+
+    Page<Property> findByStatus(PropertyStatus status, Pageable pageable);
+
+    Page<Property> searchByStatus(String keyword, PropertyStatus status, Pageable pageable);
+
+    Optional<Property> findByIdAndStatus(UUID id, PropertyStatus status);
+}
