@@ -33,7 +33,13 @@ public class PropertyPersistenceMapper {
             throw new IllegalStateException("TenantId must be set before persistence");
         }
 
-        entity.assignTenant(tenantId);
+        // FIX: was assignTenant(tenantId), which throws IllegalStateException
+        // if tenantId is already set on the instance. toJpaEntity() only ever
+        // builds a brand-new PropertyJpaEntity today, so that path was never
+        // hit — but assignTenantIfUnset(...) makes this safe even if
+        // toJpaEntity() is ever reused on a resave/re-map path later, matching
+        // the same fix already applied to RentLedgerEntry/RentTransaction.
+        entity.assignTenantIfUnset(tenantId);
 
         // ============================
         // 🔥 FIX: SAFE DEFAULTS

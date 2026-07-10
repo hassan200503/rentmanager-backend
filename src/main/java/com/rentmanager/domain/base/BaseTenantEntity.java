@@ -32,6 +32,18 @@ public abstract class BaseTenantEntity extends BaseEntity {
 
 
 
+    // in BaseTenantEntity.java — new method, existing assignTenant() untouched
+    public void assignTenantIfUnset(UUID tenantId) {
+        if (this.getTenantId() == null) {
+            assignTenant(tenantId);
+        } else if (!this.getTenantId().equals(tenantId)) {
+            // Defends against a mapper bug that would silently move a row to a
+            // different tenant on update — fails loudly instead.
+            throw new IllegalStateException("Tenant mismatch: cannot reassign entity to a different tenant");
+        }
+        // else: same tenantId re-supplied on an update path — no-op, allowed.
+    }
+
     /**
      *
      * FIX: removed public setter to prevent tenant override

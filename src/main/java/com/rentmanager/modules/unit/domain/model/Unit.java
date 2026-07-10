@@ -16,7 +16,6 @@ import java.util.UUID;
 @Builder
 public class Unit extends AggregateRoot {
 
-    private UUID tenantId;
     private UUID propertyId;
     private String unitNumber;
     private String label;
@@ -37,7 +36,6 @@ public class Unit extends AggregateRoot {
     ) {
 
         Unit unit = Unit.builder()
-                .tenantId(tenantId)
                 .propertyId(propertyId)
                 .unitNumber(unitNumber)
                 .label(label)
@@ -49,6 +47,7 @@ public class Unit extends AggregateRoot {
                 .build();
 
         unit.setId(UUID.randomUUID());
+        unit.assignTenant(tenantId);
 
         unit.registerEvent(new UnitCreatedEvent(
                 tenantId,
@@ -73,7 +72,7 @@ public class Unit extends AggregateRoot {
         this.description = description;
 
         registerEvent(new UnitUpdatedEvent(
-                tenantId,
+                getTenantId(),
                 getId(),
                 correlationId,
                 getId(),
@@ -90,7 +89,7 @@ public class Unit extends AggregateRoot {
         this.status = UnitStatus.ACTIVE;
 
         registerEvent(new UnitActivatedEvent(
-                tenantId,
+                getTenantId(),
                 getId(),
                 correlationId,
                 getId()
@@ -103,7 +102,7 @@ public class Unit extends AggregateRoot {
         this.status = UnitStatus.INACTIVE;
 
         registerEvent(new UnitDeactivatedEvent(
-                tenantId,
+                getTenantId(),
                 getId(),
                 correlationId,
                 getId()
@@ -118,7 +117,7 @@ public class Unit extends AggregateRoot {
         this.vacatedAt = null;
 
         registerEvent(new UnitOccupancyChangedEvent(
-                tenantId,
+                getTenantId(),
                 getId(),
                 correlationId,
                 getId(),
@@ -135,7 +134,7 @@ public class Unit extends AggregateRoot {
         this.vacatedAt = LocalDateTime.now();
 
         registerEvent(new UnitOccupancyChangedEvent(
-                tenantId,
+                getTenantId(),
                 getId(),
                 correlationId,
                 getId(),
@@ -149,7 +148,7 @@ public class Unit extends AggregateRoot {
         this.status = UnitStatus.ARCHIVED;
 
         registerEvent(new UnitArchivedEvent(
-                tenantId,
+                getTenantId(),
                 getId(),
                 correlationId,
                 "SYSTEM"
@@ -169,7 +168,6 @@ public class Unit extends AggregateRoot {
             LocalDateTime vacatedAt
     ) {
         Unit unit = Unit.builder()
-                .tenantId(tenantId)
                 .propertyId(propertyId)
                 .unitNumber(unitNumber)
                 .label(label)
@@ -181,6 +179,7 @@ public class Unit extends AggregateRoot {
                 .build();
 
         unit.setId(id);
+        unit.assignTenant(tenantId);
         return unit;
     }
 
@@ -200,16 +199,10 @@ public class Unit extends AggregateRoot {
         this.vacatedAt = null;
 
         registerEvent(new UnitOccupancyChangedEvent(
-                tenantId, getId(), correlationId, getId(), previous, this.occupancyStatus
+                getTenantId(), getId(), correlationId, getId(), previous, this.occupancyStatus
         ));
     }
 
-    /**
-     * Compensating action for a failed reservation fulfillment saga.
-     * Reverts a RESERVED unit back to VACANT so it can be reserved again.
-     * No-op if the unit isn't currently RESERVED (e.g. compensation running
-     * twice, or this step never actually completed before the failure).
-     */
     public void releaseReservation(String correlationId) {
         if (this.occupancyStatus != UnitOccupancyStatus.RESERVED) return;
 
@@ -218,26 +211,10 @@ public class Unit extends AggregateRoot {
         this.vacatedAt = LocalDateTime.now();
 
         registerEvent(new UnitOccupancyChangedEvent(
-                tenantId, getId(), correlationId, getId(), previous, this.occupancyStatus
+                getTenantId(), getId(), correlationId, getId(), previous, this.occupancyStatus
         ));
     }
 
-    /**
-     * Marks the unit as held while an M-Pesa STK push is in flight for a
-     * reservation attempt. Must only be called from within a transaction
-     * that holds a pessimistic write lock on this unit's row (see
-     * UnitRepository#findByIdForUpdate), so that two concurrent reservation
-     * attempts on the same unit cannot both observe VACANT and both
-     * transition through here.
-     *
-     * Throws rather than no-oping on an illegal starting state: unlike the
-     * other transitions on this aggregate, reaching this method with the
-     * unit already in PENDING_PAYMENT/RESERVED/OCCUPIED means the guard
-     * this method exists to provide has already failed upstream (e.g. the
-     * pessimistic lock wasn't actually acquired, or a caller bypassed the
-     * lock), and that should surface loudly rather than be silently
-     * absorbed.
-     */
     public void markPendingPayment(String correlationId) {
         if (this.occupancyStatus != UnitOccupancyStatus.VACANT) {
             throw new IllegalStateException(
@@ -250,19 +227,10 @@ public class Unit extends AggregateRoot {
         this.occupancyStatus = UnitOccupancyStatus.PENDING_PAYMENT;
 
         registerEvent(new UnitOccupancyChangedEvent(
-                tenantId, getId(), correlationId, getId(), previous, this.occupancyStatus
+                getTenantId(), getId(), correlationId, getId(), previous, this.occupancyStatus
         ));
     }
 
-    /**
-     * Compensating action for a failed or expired STK push: reverts a
-     * PENDING_PAYMENT unit back to VACANT so it becomes reservable again.
-     * No-op if the unit isn't currently PENDING_PAYMENT — in particular,
-     * this deliberately does NOT touch a RESERVED or OCCUPIED unit, since a
-     * stale or duplicate M-Pesa callback firing this after the unit has
-     * legitimately moved on must never vacate it out from under a real
-     * tenant.
-     */
     public void releasePendingPayment(String correlationId) {
         if (this.occupancyStatus != UnitOccupancyStatus.PENDING_PAYMENT) return;
 
@@ -271,7 +239,7 @@ public class Unit extends AggregateRoot {
         this.vacatedAt = LocalDateTime.now();
 
         registerEvent(new UnitOccupancyChangedEvent(
-                tenantId, getId(), correlationId, getId(), previous, this.occupancyStatus
+                getTenantId(), getId(), correlationId, getId(), previous, this.occupancyStatus
         ));
     }
 }
