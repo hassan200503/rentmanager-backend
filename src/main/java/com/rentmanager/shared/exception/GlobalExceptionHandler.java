@@ -1,6 +1,7 @@
 package com.rentmanager.shared.exception;
 
 import com.rentmanager.contract.common.ApiResponse;
+import com.rentmanager.modules.rentledger.domain.exception.RentLedgerEntryNotFoundException;
 import com.rentmanager.shared.error.ErrorTrackingService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
@@ -109,6 +110,51 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.NOT_FOUND)
                 .body(ApiResponse.fail(ex.getMessage(), ex.getErrorCode().name()));
     }
+
+
+
+
+
+
+
+
+
+    // =========================================================
+    // RENT LEDGER ENTRY NOT FOUND
+    // =========================================================
+    // Same treatment as PropertyNotFoundException above: a dedicated
+    // RuntimeException (not BusinessException) so a missing rent ledger
+    // entry correctly returns 404/NOT_FOUND instead of falling into the
+    // BusinessException handler's 400, which rent-ledger's other exception
+    // (RentLedgerStateException) intentionally still uses for actual
+    // invariant violations.
+    @ExceptionHandler(RentLedgerEntryNotFoundException.class)
+    public ResponseEntity<ApiResponse<Object>> handleRentLedgerEntryNotFound(
+            RentLedgerEntryNotFoundException ex,
+            HttpServletRequest request
+    ) {
+
+        errorTrackingService.capture(
+                ex,
+                "NOT_FOUND",
+                ErrorCode.RENT_LEDGER_ENTRY_NOT_FOUND.name(),
+                resolveModule(request),
+                request,
+                Map.of()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.fail(ex.getMessage(), ErrorCode.RENT_LEDGER_ENTRY_NOT_FOUND.name()));
+    }
+
+
+
+
+
+
+
+
 
     // =========================================================
     // VALIDATION
@@ -306,6 +352,7 @@ public class GlobalExceptionHandler {
         if (uri.contains("/properties")) return "PROPERTY";
         if (uri.contains("/leases")) return "LEASE";
         if (uri.contains("/tenants")) return "TENANT";
+        if (uri.contains("/rent-ledger")) return "RENT_LEDGER";
 
         return "SYSTEM";
     }

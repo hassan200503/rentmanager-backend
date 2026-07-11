@@ -10,6 +10,7 @@ import com.rentmanager.shared.security.context.TenantContext;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -23,6 +24,17 @@ import java.util.UUID;
  * any equivalent client-trusted tenant parameter on this controller — doing so
  * previously allowed any authenticated user to read/write any other tenant's
  * unit data by simply setting a header (confirmed cross-tenant IDOR).
+ *
+ * RBAC (added this session, per Addendum 2 §4.1 resolution):
+ * create/update/activate/archive are structural changes to a unit's identity
+ * and lifecycle -- gated OWNER+MANAGER, same tier as Property.
+ * markOccupied/markVacant are deliberately the exception: this is the
+ * on-site caretaker/agent confirming a tenant physically moved in or out --
+ * the same "day-to-day operational action performed by whoever is actually
+ * on site" reasoning that keeps RentLedger's ordinary rent-recording
+ * endpoints open to STAFF. Gating occupancy toggles to MANAGER+ would
+ * recreate that exact bottleneck for no security benefit -- an occupancy
+ * flag is not money and not structurally destructive.
  */
 @RestController
 @RequiredArgsConstructor
@@ -32,6 +44,7 @@ public class UnitCommandController {
     private final UnitCommandService unitCommandService;
 
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER')")
     public ResponseEntity<ApiResponse<UnitResponse>> createUnit(
             @Valid @RequestBody CreateUnitRequest request
     ) {
@@ -45,6 +58,7 @@ public class UnitCommandController {
     }
 
     @PutMapping("/{unitId}")
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER')")
     public ResponseEntity<ApiResponse<UnitResponse>> updateUnit(
             @PathVariable UUID unitId,
             @Valid @RequestBody UpdateUnitRequest request
@@ -59,6 +73,7 @@ public class UnitCommandController {
     }
 
     @PatchMapping("/{unitId}/activate")
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER')")
     public ResponseEntity<ApiResponse<String>> activateUnit(
             @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
             @PathVariable UUID unitId
@@ -73,6 +88,7 @@ public class UnitCommandController {
     }
 
     @PatchMapping("/{unitId}/archive")
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER')")
     public ResponseEntity<ApiResponse<String>> archiveUnit(
             @PathVariable UUID unitId
     ) {
@@ -86,6 +102,7 @@ public class UnitCommandController {
     }
 
     @PatchMapping("/{unitId}/occupied")
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
     public ResponseEntity<ApiResponse<String>> markOccupied(
             @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
             @PathVariable UUID unitId
@@ -100,6 +117,7 @@ public class UnitCommandController {
     }
 
     @PatchMapping("/{unitId}/vacant")
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
     public ResponseEntity<ApiResponse<String>> markVacant(
             @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
             @PathVariable UUID unitId

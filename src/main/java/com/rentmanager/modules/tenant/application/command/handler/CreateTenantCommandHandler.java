@@ -33,6 +33,14 @@ import java.util.UUID;
  *  - Defaults set for the Kenyan market: KES currency, Africa/Nairobi
  *    timezone, en-KE locale, so downstream billing/reporting/M-Pesa flows
  *    don't hit null locale data.
+ *  - tenant.assignTenant(id) call updated to tenant.assignOrganization(id)
+ *    (broader event-publish sweep, item 4.3): Tenant's own assignTenant(UUID)
+ *    method was removed — it collided in name/signature with
+ *    BaseTenantEntity.assignTenant(UUID), the once-only isolation-enforcing
+ *    method other aggregates in this codebase rely on. assignOrganization(UUID)
+ *    does the same organizationId assignment (with an added null check);
+ *    behavior here is unchanged since id is always a freshly-generated,
+ *    non-null UUID at this call site.
  */
 @Component
 public class CreateTenantCommandHandler {
@@ -107,7 +115,7 @@ public class CreateTenantCommandHandler {
         UUID id = UUID.randomUUID();
         tenant.setId(id);
 
-        tenant.assignTenant(id);              // organizationId = self
+        tenant.assignOrganization(id);         // organizationId = self
         tenant.assignClerkOrgId(clerkOrgId);
         tenant.updateLocalization(DEFAULT_TIMEZONE, DEFAULT_CURRENCY, DEFAULT_LOCALE);
 

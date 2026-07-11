@@ -229,14 +229,21 @@ public class Tenant extends BaseEntity {
  // SERVICE COMPATIBILITY METHODS
  // ----------------------------------------------------------------
 
- public void assignTenant(UUID tenantId) {
-
-  if (tenantId == null) {
-   throw new IllegalArgumentException("Tenant ID cannot be null");
-  }
-
-  this.organizationId = tenantId;
- }
+ // NOTE: assignTenant(UUID) removed as part of the broader event-publish
+ // sweep (item 4.3). It collided in name and signature with
+ // BaseTenantEntity.assignTenant(UUID) — the once-only, isolation-enforcing
+ // method every other aggregate in this codebase relies on — while doing
+ // something unrelated (setting organizationId, no guard). Tenant does not
+ // extend BaseTenantEntity/AggregateRoot, so this was not yet a live
+ // override, but converting Tenant to an AggregateRoot in the future
+ // (e.g. to support tenant lifecycle domain events) would have silently
+ // shadowed the isolation guard with this method instead.
+ // assignOrganization(UUID) below already does what this method did, with
+ // a null check this method lacked, and is now the one method for this
+ // purpose. Only known caller (TenantCommandServiceImpl.createTenant) has
+ // been updated to call assignOrganization(...) instead — TODO: verify no
+ // other caller of the old assignTenant(UUID) exists elsewhere in the
+ // codebase before merging this change.
 
  public void updateStatus(TenantStatus status) {
 

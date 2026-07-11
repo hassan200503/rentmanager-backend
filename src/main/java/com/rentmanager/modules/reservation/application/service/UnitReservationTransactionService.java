@@ -10,6 +10,7 @@ import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import com.rentmanager.modules.tenant.domain.valueobject.DarajaCredentials;
 import com.rentmanager.modules.unit.domain.model.Unit;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
+import com.rentmanager.shared.events.DomainEventPublisher;
 import com.rentmanager.shared.exception.ErrorCode;
 import com.rentmanager.shared.exception.ResourceNotFoundException;
 import jakarta.persistence.EntityManager;
@@ -36,6 +37,27 @@ import java.util.UUID;
  * across a slow external call would serialize all reservation attempts on
  * that unit for the duration of that call, turning a Safaricom slowdown
  * into a platform-wide reservation outage for that unit.
+ *
+ * ---- Event-publishing fix (broader event-publish sweep, item 4.3) ----
+ *
+ * unit.markPendingPayment(...) and unit.releasePendingPayment(...) both
+ * correctly register a UnitOccupancyChangedEvent on the aggregate (see
+ * Unit.java), but this class previously had no DomainEventPublisher at all
+ * and never called saved.pullDomainEvents() after either save — the events
+ * were registered and then silently discarded at commit. This was the same
+ * shape as the pre-fix lease bug (project handoff §2.9): the aggregate
+ * looked clean in isolation, and the gap only surfaced by checking the
+ * calling service.
+ *
+ * This was also an inconsistency in its own right: releasePendingPayment is
+ * called from two call sites for the same aggregate — MpesaCallbackService
+ * (which did publish) and releaseUnitAndFailIntent below (which did not).
+ * Both call sites now publish identically.
+ *
+ * eventPublisher.publishAll(unit.pullDomainEvents()) is added directly after
+ * each unitRepository.save(unit) call, inside the same transaction boundary,
+ * matching the convention used by every other command service in this
+ * sweep (Property, Unit's other methods, Deposit, and the fixed Lease path).
  */
 @Slf4j
 @Service
@@ -47,6 +69,7 @@ public class UnitReservationTransactionService {
     private final PaymentIntentRepository paymentIntentRepository;
     private final ObjectMapper objectMapper;
     private final EntityManager entityManager;
+    private final DomainEventPublisher eventPublisher;
 
     private static final int DEPOSIT_MONTHS = 2;
 
@@ -131,7 +154,9 @@ public class UnitReservationTransactionService {
         // UnitOccupancyChangedEvent for this reservation attempt a stable,
         // traceable id from the very first state transition.
         unit.markPendingPayment(intent.getId().toString());
-        unitRepository.save(unit);
+        Unit savedUnit = unitRepository.save(unit);
+
+        eventPublisher.publishAll(savedUnit.pullDomainEvents());
 
         // Force the flush inside this transaction so the row-lock-protected
         // write (and any constraint violation) surfaces here, under this
@@ -185,7 +210,9 @@ public class UnitReservationTransactionService {
                         "Unit vanished during failure compensation: " + intent.getUnitId()));
 
         unit.releasePendingPayment(intent.getId().toString());
-        unitRepository.save(unit);
+        Unit savedUnit = unitRepository.save(unit);
+
+        eventPublisher.publishAll(savedUnit.pullDomainEvents());
 
         entityManager.flush();
 

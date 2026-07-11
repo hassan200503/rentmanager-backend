@@ -34,18 +34,16 @@ import java.util.UUID;
  * are registered by {@link RentLedgerEntry} in the same application-service
  * call that creates this transaction.
  *
- * {@code version}, {@code createdAt}, and {@code updatedAt} are populated
- * only on {@link #rehydrate}, never on {@link #create}. A freshly created
- * transaction has no persisted version or timestamps yet — those are
- * assigned by the persistence layer on first save, mirroring how
- * {@code RentLedgerEntry} handles the same three fields.
- *
- * {@code createdAt}/{@code updatedAt} are {@link Instant} (not
- * {@link LocalDateTime}) to match {@code BaseEntity}'s audit-timestamp
- * contract — a fixed, timezone-agnostic point on the UTC timeline, which
- * matters for a multi-tenant system where tenants span timezones.
- * {@code occurredAt} remains a {@code LocalDateTime}: it's a
- * business-domain timestamp supplied by the recorder, not an audit field.
+ * FIX (this session): declares its own {@code version}/{@code createdAt}/
+ * {@code updatedAt} fields, shadowing the ones inherited from
+ * {@code BaseEntity}, mirroring the pattern already established on
+ * {@link RentLedgerEntry}. Without this, two problems existed:
+ * (1) there was no legal way to set {@code createdAt}/{@code updatedAt} on
+ * rehydration, since {@code BaseEntity} exposes no public setter for
+ * either; (2) {@code BaseEntity.getCreatedAt()}/{@code getUpdatedAt()}
+ * silently fall back to {@code Instant.now()} when null instead of
+ * returning null, which is wrong for a domain object that hasn't been
+ * persisted yet and doesn't have a real timestamp assigned.
  */
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -61,6 +59,8 @@ public class RentTransaction extends AggregateRoot {
     private RentTransactionSource source;
     private String recordedBy;
     private LocalDateTime occurredAt;
+
+    // Shadows BaseEntity's fields — see class javadoc FIX note.
     private Long version;
     private Instant createdAt;
     private Instant updatedAt;
@@ -111,6 +111,10 @@ public class RentTransaction extends AggregateRoot {
         // application-layer concern (the calling service knows its source),
         // not a domain invariant of the transaction itself.
 
+        // version/createdAt/updatedAt intentionally left unset (null) here
+        // — they are only meaningful once this row has actually been
+        // persisted. Set explicitly by rehydrate() when restoring a
+        // previously-persisted transaction from the DB.
         RentTransaction transaction = RentTransaction.builder()
                 .ledgerEntryId(ledgerEntryId)
                 .leaseId(leaseId)
@@ -120,10 +124,6 @@ public class RentTransaction extends AggregateRoot {
                 .source(source)
                 .recordedBy(recordedBy)
                 .occurredAt(occurredAt)
-                // version, createdAt, updatedAt intentionally left unset
-                // (null) here — this is a brand-new, not-yet-persisted
-                // transaction. The persistence layer assigns these on
-                // first save; see class javadoc.
                 .build();
 
         transaction.setId(UUID.randomUUID());

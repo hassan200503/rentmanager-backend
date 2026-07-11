@@ -263,6 +263,16 @@ public class Lease extends AggregateRoot {
         this.status = LeaseStatus.TERMINATED;
         this.terminatedAt = LocalDateTime.now();
         this.terminationReason = reason;
+
+        registerEvent(new LeaseCancelledEvent(
+                getTenantId(),
+                getId(),
+                "SYSTEM",
+                propertyId,
+                unitId,
+                tenantProfileId,
+                reason
+        ));
     }
 
     public void terminate(TerminationType type, String reason, String actor, UUID tenantId) {

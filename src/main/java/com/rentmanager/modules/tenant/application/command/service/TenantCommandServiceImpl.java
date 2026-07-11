@@ -54,7 +54,13 @@ public class TenantCommandServiceImpl implements TenantCommandService {
             );
         }
 
-        tenant.assignTenant(tenantId);
+        // Was tenant.assignTenant(tenantId) — renamed call, same behavior.
+        // See Tenant.java's "SERVICE COMPATIBILITY METHODS" note: the old
+        // assignTenant(UUID) collided in name/signature with
+        // BaseTenantEntity.assignTenant(UUID) and has been removed;
+        // assignOrganization(UUID) does the same assignment with an added
+        // null check.
+        tenant.assignOrganization(tenantId);
 
         return tenantMapper.toResponse(tenantRepository.save(tenant));
     }
@@ -180,17 +186,8 @@ public class TenantCommandServiceImpl implements TenantCommandService {
     }
 
     // ------------------------------------------------------------
-    // GET DARAJA CREDENTIALS STATUS (NEW — additive only)
+    // GET DARAJA CREDENTIALS STATUS
     // ------------------------------------------------------------
-    // ASSUMPTION requiring verification against the real Tenant.java: this
-    // assumes Tenant exposes a `getDarajaCredentials()` accessor returning
-    // the embedded DarajaCredentials value object, the same way
-    // `configureDarajaCredentials()` below implies a settable field of that
-    // type exists on Tenant. If the actual accessor name differs, or if
-    // Tenant does not expose it directly (e.g. only via a package-private
-    // field), this line needs to be adjusted to match — I have not seen
-    // Tenant.java itself, so this is a best-effort mirror of the existing
-    // configureDarajaCredentials() pattern, not a confirmed contract.
     @Override
     public DarajaCredentialsStatusResponse getDarajaCredentialsStatus(UUID tenantId, UUID targetTenantId) {
 

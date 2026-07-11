@@ -1,6 +1,7 @@
 package com.rentmanager.modules.tenant.renter.domain.model;
 
 import com.rentmanager.domain.base.AggregateRoot;
+import com.rentmanager.modules.tenant.renter.domain.event.TenantProfileCreatedEvent;
 
 import java.util.UUID;
 
@@ -27,6 +28,12 @@ public class TenantProfile extends AggregateRoot {
      * account has been created.
      *
      * @param landlordTenantId the SaaS account (landlord) this profile belongs under
+     * @param correlationId    ties this creation event to the originating saga
+     *                         (e.g. the reservation id) — added as part of the
+     *                         event-publish sweep; see ReservationFulfillmentOrchestrator,
+     *                         which now passes reservation.getId().toString(), matching
+     *                         the correlation id already used for the sibling Unit/Lease
+     *                         events registered in that same saga step.
      */
     public static TenantProfile create(
             UUID landlordTenantId,
@@ -34,7 +41,8 @@ public class TenantProfile extends AggregateRoot {
             String fullName,
             String email,
             String phone,
-            String nationalId
+            String nationalId,
+            String correlationId
     ) {
         if (landlordTenantId == null) {
             throw new IllegalArgumentException("landlordTenantId is required");
@@ -60,6 +68,13 @@ public class TenantProfile extends AggregateRoot {
         profile.email = email;
         profile.phone = phone;
         profile.nationalId = nationalId;
+
+        profile.registerEvent(new TenantProfileCreatedEvent(
+                landlordTenantId,
+                profile.getId(),
+                correlationId,
+                profile.getId()
+        ));
 
         return profile;
     }

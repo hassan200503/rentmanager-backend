@@ -9,11 +9,24 @@ import com.rentmanager.modules.property.application.dto.response.PropertyRespons
 import com.rentmanager.shared.security.principal.AuthenticatedUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
+/**
+ * RBAC (added this session, per Addendum 2 §4.1 resolution): all four
+ * mutating endpoints are gated OWNER+MANAGER. STAFF is deliberately
+ * excluded across the whole controller -- unlike Unit's occupancy toggles
+ * (markOccupied/markVacant), there is no on-site/operational analog for
+ * property create/update/activate/archive; every action here is a
+ * structural portfolio decision. This mirrors UserController's tier
+ * (hasAnyAuthority ROLE_LANDLORD_OWNER, ROLE_LANDLORD_MANAGER), not
+ * TenantController's OWNER-only tier -- property lifecycle actions are
+ * reversible/operational in a way TenantController's suspend/Daraja-config
+ * actions are not.
+ */
 @RestController
 @RequestMapping(PropertyRoutes.BASE)
 @RequiredArgsConstructor
@@ -23,6 +36,7 @@ public class PropertyCommandController {
 
     // ---------------- CREATE ----------------
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER')")
     public ApiResponse<PropertyResponse> createProperty(
             @AuthenticationPrincipal AuthenticatedUser user,
             @RequestBody CreatePropertyRequest request
@@ -40,6 +54,7 @@ public class PropertyCommandController {
 
     // ---------------- UPDATE ----------------
     @PutMapping("/{propertyId}")
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER')")
     public ApiResponse<PropertyResponse> updateProperty(
             @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable UUID propertyId,
@@ -56,6 +71,7 @@ public class PropertyCommandController {
 
     // ---------------- ACTIVATE ----------------
     @PostMapping("/{propertyId}/activate")
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER')")
     public ApiResponse<PropertyResponse> activateProperty(
             @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable UUID propertyId
@@ -67,6 +83,7 @@ public class PropertyCommandController {
 
     // ---------------- ARCHIVE ----------------
     @PostMapping("/{propertyId}/archive")
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER')")
     public ApiResponse<PropertyResponse> archiveProperty(
             @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable UUID propertyId

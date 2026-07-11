@@ -6,18 +6,21 @@ import com.rentmanager.modules.lease.application.dto.response.*;
 import com.rentmanager.modules.lease.application.dto.request.CreateLeaseRequest;
 import com.rentmanager.modules.lease.application.dto.request.LeaseActionRequest;
 import com.rentmanager.modules.lease.application.dto.request.UpdateLeaseRequest;
+import com.rentmanager.modules.lease.application.orchestration.LeaseActivationOrchestrator;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowEngine;
 import com.rentmanager.modules.lease.domain.enums.*;
 import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
 import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
+import com.rentmanager.shared.events.DomainEventPublisher;
 import com.rentmanager.shared.security.context.TenantContext;
 import com.rentmanager.shared.exception.ErrorCode;
 import com.rentmanager.shared.exception.ResourceNotFoundException;
 import jakarta.validation.Valid;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -31,37 +34,37 @@ public class LeaseApplicationService {
     private final LeaseRepository leaseRepository;
     private final LeaseWorkflowEngine workflowEngine;
     private final TenantProfileRepository tenantProfileRepository;
+    private final LeaseActivationOrchestrator leaseActivationOrchestrator;
+    private final DomainEventPublisher eventPublisher;
 
     public LeaseApplicationService(
             LeaseRepository leaseRepository,
             LeaseWorkflowEngine workflowEngine,
-            TenantProfileRepository tenantProfileRepository
+            TenantProfileRepository tenantProfileRepository,
+            LeaseActivationOrchestrator leaseActivationOrchestrator,
+            DomainEventPublisher eventPublisher
     ) {
         this.leaseRepository = leaseRepository;
         this.workflowEngine = workflowEngine;
         this.tenantProfileRepository = tenantProfileRepository;
+        this.leaseActivationOrchestrator = leaseActivationOrchestrator;
+        this.eventPublisher = eventPublisher;
     }
 
     // =========================================================
     // CREATE
     // =========================================================
+    // FIX (this session): Lease.create() registers LeaseCreatedEvent, but
+    // nothing previously called pullDomainEvents()/publishAll() after the
+    // save — confirmed by cross-referencing LeaseActionScheduler.activateOne(),
+    // which DOES call eventPublisher.publishAll(lease.pullDomainEvents())
+    // after its save, making this method's prior omission an inconsistency
+    // rather than a deliberate design choice. Every lease created via this
+    // path had its LeaseCreatedEvent silently discarded.
     public LeaseResponse create(@Valid @org.checkerframework.checker.nullness.qual.MonotonicNonNull CreateLeaseRequest request) {
 
         UUID tenantId = TenantContext.getTenantId(); // ✅ HERE (MANDATORY)
 
-        // SECURITY FIX (this session): tenantProfileId is client-supplied
-        // and was previously passed straight into Lease.create() with no
-        // check of any kind — not even existence. Any authenticated
-        // landlord could bind another landlord's renter profile (real PII:
-        // name, email, phone, national ID) to a lease on their own
-        // property. This loads the profile and confirms it belongs to the
-        // calling landlord before proceeding. Do not remove this check or
-        // replace it with an existence-only check. (NOTE: the reservation-
-        // fulfillment saga's own equivalent check, CreateLeaseValidator's
-        // existsById()-only usage, is now moot — that entire dead code
-        // path, including CreateLeaseValidator itself, has been removed
-        // from the codebase; see project handoff addendum for the
-        // confirmed-dead-code deletion record.)
         TenantProfile tenantProfile = tenantProfileRepository.findById(request.tenantProfileId())
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
@@ -93,11 +96,19 @@ public class LeaseApplicationService {
                 request.autoRenew() != null ? request.autoRenew() : false
         );
 
-        return toResponse(leaseRepository.save(lease));
+        Lease saved = leaseRepository.save(lease);
+        eventPublisher.publishAll(saved.pullDomainEvents());
+
+        return toResponse(saved);
     }
 
     // =========================================================
     // UPDATE
+    // =========================================================
+    // NOTE: updateContractTerms() registers no domain event today (verified
+    // against Lease.java — the method body has no registerEvent() call), so
+    // no publishAll() is added here. Nothing to fix, flagging only so this
+    // isn't mistaken for an oversight later.
     public LeaseResponse update(UUID leaseId, @Valid @org.checkerframework.checker.nullness.qual.MonotonicNonNull UpdateLeaseRequest request) {
 
         Lease lease = load(leaseId, TenantContext.getTenantId());
@@ -126,8 +137,6 @@ public class LeaseApplicationService {
         UUID tenantId = TenantContext.getTenantId();
 
         var result = leaseRepository.findAllByTenant(tenantId)
-
-
                 .stream()
                 .map(this::toSummary)
                 .toList();
@@ -144,6 +153,31 @@ public class LeaseApplicationService {
     }
 
     // =========================================================
+    /**
+     * @Transactional added (earlier session): the ACTIVATE branch calls
+     * LeaseActivationOrchestrator.onLeaseActivated(...), which posts the
+     * lease's opening rent charge via RentLedgerApplicationService.
+     * postCharge(). postCharge()'s own @Transactional uses Spring's default
+     * REQUIRED propagation, so it joins this method's transaction.
+     *
+     * FIX (this session): every branch (APPROVE, AWAITING_DEPOSIT, ACTIVATE,
+     * REJECT, TERMINATE, RENEW) registers its own domain event on the Lease
+     * aggregate, but this method never pulled or published any of them —
+     * confirmed by comparing against LeaseActionScheduler.activateOne(),
+     * which does call eventPublisher.publishAll(lease.pullDomainEvents())
+     * after its save. Added the same call here, after save, inside the
+     * same transaction boundary, so this REST-triggered path has the same
+     * event-publishing guarantee as the scheduler path instead of silently
+     * discarding LeaseApprovedEvent / LeaseActivatedEvent / LeaseRejected
+     * (via reject(), which registers none today — see note below) /
+     * LeaseTerminatedEvent / LeaseRenewedEvent / LeaseCancelledEvent.
+     *
+     * NOTE: reject() in Lease.java registers no event currently (verified —
+     * no registerEvent() call in that method body), so REJECT will publish
+     * an empty list via this call; not a bug, just confirming the fix is
+     * complete rather than partial.
+     */
+    @Transactional
     public LeaseActionResponse executeAction(UUID leaseId, @Valid @org.checkerframework.checker.nullness.qual.MonotonicNonNull LeaseActionRequest request) {
 
         UUID tenantId = TenantContext.getTenantId();
@@ -156,17 +190,12 @@ public class LeaseApplicationService {
 
             case APPROVE -> workflowEngine.approve(lease);
 
-            // FIX (this session): LeaseActionType already defined
-            // AWAITING_DEPOSIT, and LeaseWorkflowEngine already implemented
-            // markAwaitingDeposit(Lease), but this switch never called it.
-            // That left AWAITING_DEPOSIT completely unreachable via the API
-            // even though Lease.activate() requires the aggregate to be in
-            // that state first (see LeaseWorkflowValidator.validateActivation) —
-            // meaning ACTIVATE could never legitimately succeed on any lease
-            // that went through APPROVE first. Do not remove this case.
             case AWAITING_DEPOSIT -> workflowEngine.markAwaitingDeposit(lease);
 
-            case ACTIVATE -> workflowEngine.activate(lease);
+            case ACTIVATE -> {
+                workflowEngine.activate(lease);
+                leaseActivationOrchestrator.onLeaseActivated(tenantId, lease);
+            }
 
             case REJECT -> workflowEngine.reject(
                     lease,
@@ -175,7 +204,7 @@ public class LeaseApplicationService {
 
             case TERMINATE -> workflowEngine.terminate(
                     lease,
-                    request.getTerminationType(),   // ✅ FIXED (no string parsing)
+                    request.getTerminationType(),
                     request.getReason()
             );
 
@@ -187,6 +216,7 @@ public class LeaseApplicationService {
         }
 
         Lease saved = leaseRepository.save(lease);
+        eventPublisher.publishAll(saved.pullDomainEvents());
 
         return new LeaseActionResponse(
                 saved.getId(),
@@ -196,25 +226,14 @@ public class LeaseApplicationService {
         );
     }
 
-
     // =========================================================
     public void delete(UUID leaseId) {
         UUID tenantId = TenantContext.getTenantId();
 
-        // SECURITY (Addendum 3 §1.7 — confirmed, this session):
-        // load() enforces tenant ownership (throws AccessDeniedException on
-        // mismatch) before delete proceeds. Do NOT replace this with a direct
-        // leaseRepository.delete(leaseId) call — that previously allowed any
-        // authenticated user, from any tenant, to hard-delete any tenant's
-        // lease by ID alone. No header trick or auth bypass was even
-        // required; this was the single most severe finding of the session.
         Lease lease = load(leaseId, tenantId);
 
         leaseRepository.delete(lease.getId());
     }
-
-
-
 
     private Lease load(UUID leaseId, UUID tenantId) {
 
@@ -234,7 +253,6 @@ public class LeaseApplicationService {
 
         return lease;
     }
-
 
     // =========================================================
     private LeaseResponse toResponse(Lease lease) {
@@ -278,8 +296,6 @@ public class LeaseApplicationService {
                 lease.isAutoRenew(),
                 lease.getCreatedAt().atZone(java.time.ZoneId.systemDefault()).toLocalDate(),
                 lease.getUpdatedAt().atZone(java.time.ZoneId.systemDefault()).toLocalDate(),
-
-
                 lease.getVersion()
         );
     }
@@ -309,12 +325,9 @@ public class LeaseApplicationService {
         return LeaseStatusDTO.valueOf(status.name());
     }
 
-
     private OffsetDateTime toOffset(Instant instant) {
         return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
     }
-
-
 
     private LocalDate calculateRenewalEndDate(Lease lease, LeaseActionRequest request) {
 

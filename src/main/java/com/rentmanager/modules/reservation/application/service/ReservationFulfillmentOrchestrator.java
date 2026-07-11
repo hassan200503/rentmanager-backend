@@ -79,6 +79,19 @@ import java.util.UUID;
  *   TransactionSynchronizationUtils catches and logs Throwable from
  *   listener callbacks without affecting the already-committed outer
  *   transaction.
+ *
+ * ---- Event-publishing fix (broader event-publish sweep, item 4.3) ----
+ *
+ * Step 3 now passes reservationId.toString() as TenantProfile.create()'s
+ * new correlationId parameter (matching the correlation id already used
+ * for the sibling Unit/Lease events in this same saga step) and calls
+ * eventPublisher.publishAll(tenantProfile.pullDomainEvents()) immediately
+ * after save. TenantProfile.create() now registers a TenantProfileCreatedEvent
+ * that previously did not exist; without this publish call it would have
+ * been registered and silently discarded at commit, the same shape as the
+ * pre-fix lease bug (project handoff §2.9). The existingProfile branch
+ * intentionally does not publish — reusing an existing profile registers
+ * no event, so there's nothing to pull there.
  */
 @Slf4j
 @Service
@@ -174,8 +187,15 @@ public class ReservationFulfillmentOrchestrator {
                         event.getFullName(),
                         event.getEmail(),
                         event.getPhone(),
-                        event.getNationalId()
+                        event.getNationalId(),
+                        reservationId.toString()
                 ));
+                // TenantProfileCreatedEvent is only ever registered on this
+                // newly-created branch (existingProfile never registers
+                // one), so publishing here is safe and correct regardless
+                // of which branch ran, matching the save -> publishAll
+                // convention used for Lease/Unit below.
+                eventPublisher.publishAll(tenantProfile.pullDomainEvents());
                 saga.tenantProfileCreatedThisRun = true;
             }
             saga.tenantProfileId = tenantProfile.getId();
