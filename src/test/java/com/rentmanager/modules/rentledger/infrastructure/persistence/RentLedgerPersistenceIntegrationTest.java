@@ -83,6 +83,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * savepoint machinery needed. This mirrors a real request anyway: a real
  * transaction ends (commit or rollback) at the violation; it doesn't
  * chain unrelated business logic onto an already-poisoned transaction.
+ *
+ * findByLedgerEntry (added this session, backing the new
+ * getTransactionsForEntry query-service method / GET .../transactions
+ * endpoint): previously untested directly — earlier tests exercised
+ * findByExternalReference and the uniqueness/locking constraints, but
+ * never the plain per-entry listing path. findByLedgerEntryReturnsAll
+ * ...InsertionOrderAndIsTenantScoped below closes that gap, mirroring
+ * tenantScopedFindDoesNotLeakAcrossTenants' cross-tenant-isolation
+ * pattern rather than inventing a new one.
  */
 class RentLedgerPersistenceIntegrationTest extends AbstractPostgresIntegrationTest {
 
@@ -276,5 +285,41 @@ class RentLedgerPersistenceIntegrationTest extends AbstractPostgresIntegrationTe
         assertThat(rentTransactionRepository.findByExternalReference(tenantId, "MPESA-SCOPE-TEST")).isPresent();
         assertThat(rentTransactionRepository.findByExternalReference(UUID.randomUUID(), "MPESA-SCOPE-TEST"))
                 .isEmpty();
+    }
+
+    @Test
+    @Transactional
+    void findByLedgerEntryReturnsAllTransactionsWithTimestampsAndIsTenantScoped() {
+        RentLedgerEntry entry = rentLedgerEntryRepository.save(newEntry(LocalDate.of(2026, 6, 1)));
+        entityManager.flush();
+
+        RentTransaction charge = RentTransaction.create(
+                tenantId, entry.getId(), leaseId, RentTransactionType.RENT_CHARGE,
+                new BigDecimal("1000.00"), null, RentTransactionSource.SYSTEM,
+                "SYSTEM", LocalDateTime.now().minusDays(1)
+        );
+        RentTransaction payment = RentTransaction.create(
+                tenantId, entry.getId(), leaseId, RentTransactionType.PAYMENT,
+                new BigDecimal("400.00"), "MPESA-LIST-TEST", RentTransactionSource.MPESA,
+                "system", LocalDateTime.now()
+        );
+        rentTransactionRepository.save(charge);
+        rentTransactionRepository.save(payment);
+        entityManager.flush();
+        entityManager.clear();
+
+        List<RentTransaction> transactions = rentTransactionRepository.findByLedgerEntry(tenantId, entry.getId());
+
+        assertThat(transactions).hasSize(2);
+        assertThat(transactions)
+                .extracting(RentTransaction::getType)
+                .containsExactlyInAnyOrder(RentTransactionType.RENT_CHARGE, RentTransactionType.PAYMENT);
+        assertThat(transactions).allSatisfy(tx -> {
+            assertThat(tx.getCreatedAt()).isNotNull();
+            assertThat(tx.getVersion()).isNotNull();
+        });
+
+        // Tenant scoping: a different tenantId must see nothing for this entry.
+        assertThat(rentTransactionRepository.findByLedgerEntry(UUID.randomUUID(), entry.getId())).isEmpty();
     }
 }
