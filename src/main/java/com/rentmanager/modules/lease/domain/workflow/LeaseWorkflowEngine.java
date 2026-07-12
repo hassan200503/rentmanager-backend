@@ -94,7 +94,7 @@ public class LeaseWorkflowEngine {
     public void reject(Lease lease, String reason) {
 
         if (lease.getStatus() != LeaseStatus.DRAFT &&
-            lease.getStatus() != LeaseStatus.PENDING_APPROVAL) {
+                lease.getStatus() != LeaseStatus.PENDING_APPROVAL) {
             throw new IllegalStateException("Invalid rejection state");
         }
 
@@ -148,6 +148,11 @@ public class LeaseWorkflowEngine {
 
     public void expire(Lease lease) {
 
+        // NEW: was previously unguarded — only method in the engine with no
+        // precondition check, inconsistent with every sibling. Now mirrors
+        // Lease.expire()'s own guard, matching the rest of this class.
+        validator.validateExpiry(lease);
+
         lease.expire();
 
         eventPublisher.publish(new LeaseExpiredEvent(
@@ -157,6 +162,27 @@ public class LeaseWorkflowEngine {
                 lease.getPropertyId(),
                 lease.getUnitId(),
                 lease.getTenantProfileId()
+        ));
+    }
+
+    // =========================================================
+    // CANCELLATION FLOW (NEW)
+    // =========================================================
+
+    public void cancel(Lease lease, String reason) {
+
+        validator.validateCancellation(lease);
+
+        lease.cancel(reason);
+
+        eventPublisher.publish(new LeaseCancelledEvent(
+                lease.getTenantId(),
+                lease.getId(),
+                "SYSTEM",
+                lease.getPropertyId(),
+                lease.getUnitId(),
+                lease.getTenantProfileId(),
+                reason
         ));
     }
 

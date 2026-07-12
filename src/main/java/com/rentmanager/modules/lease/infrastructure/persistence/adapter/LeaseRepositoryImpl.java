@@ -1,6 +1,7 @@
 package com.rentmanager.modules.lease.infrastructure.persistence.adapter;
 
 import com.rentmanager.modules.lease.domain.enums.LeaseStatus;
+import com.rentmanager.modules.lease.domain.enums.LeaseType;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.lease.infrastructure.persistence.entity.LeaseEntity;
@@ -133,6 +134,20 @@ public class LeaseRepositoryImpl implements LeaseRepository {
     ) {
         return jpaRepository
                 .findAllByStatusAndStartDateLessThanEqual(status, date)
+                .stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Lease> findAllByStatusInAndLeaseTypeInAndEndDateLessThanEqual(
+            List<LeaseStatus> statuses,
+            List<LeaseType> leaseTypes,
+            LocalDate date
+    ) {
+        return jpaRepository
+                .findAllByStatusInAndLeaseTypeInAndEndDateLessThanEqual(statuses, leaseTypes, date)
                 .stream()
                 .map(mapper::toDomain)
                 .toList();

@@ -1,6 +1,7 @@
 package com.rentmanager.modules.lease.infrastructure.persistence.repository;
 
 import com.rentmanager.modules.lease.domain.enums.LeaseStatus;
+import com.rentmanager.modules.lease.domain.enums.LeaseType;
 import com.rentmanager.modules.lease.infrastructure.persistence.entity.LeaseEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -29,6 +30,12 @@ public interface JpaLeaseRepository extends JpaRepository<LeaseEntity, UUID>,
 
     List<LeaseEntity> findAllByStatusAndStartDateLessThanEqual(
             LeaseStatus status,
+            LocalDate date
+    );
+
+    List<LeaseEntity> findAllByStatusInAndLeaseTypeInAndEndDateLessThanEqual(
+            List<LeaseStatus> statuses,
+            List<LeaseType> leaseTypes,
             LocalDate date
     );
 

@@ -2,9 +2,13 @@ package com.rentmanager.modules.lease.application.scheduler;
 
 import com.rentmanager.modules.lease.application.orchestration.LeaseActivationOrchestrator;
 import com.rentmanager.modules.lease.domain.enums.LeaseStatus;
+import com.rentmanager.modules.lease.domain.enums.LeaseType;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
+import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowEngine;
 import com.rentmanager.shared.events.DomainEventPublisher;
+import com.rentmanager.shared.exception.ErrorCode;
+import com.rentmanager.shared.exception.LeaseStateException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -22,6 +26,7 @@ public class LeaseActionScheduler {
     private final LeaseRepository leaseRepository;
     private final DomainEventPublisher eventPublisher;
     private final LeaseActivationOrchestrator leaseActivationOrchestrator;
+    private final LeaseWorkflowEngine leaseWorkflowEngine;
 
     /**
      * Runs daily — activates leases whose move-in date has arrived.
@@ -49,22 +54,6 @@ public class LeaseActionScheduler {
 
     /**
      * Each lease gets its own transaction so one failure doesn't roll back others.
-     *
-     * UPDATED (this session): now also calls LeaseActivationOrchestrator.
-     * onLeaseActivated(...) to post the lease's opening rent charge — the
-     * gap flagged when the manual executeAction()/ACTIVATE path was wired
-     * to the same orchestrator. This method's existing @Transactional
-     * means the orchestrator's call into RentLedgerApplicationService.
-     * postCharge() (REQUIRED propagation) joins this same transaction, so
-     * the lease save and the opening charge commit atomically — same
-     * guarantee as the manual path, same reasoning: an event-driven
-     * alternative was considered and rejected here too, since a
-     * transactional listener would fire after commit and reopen the exact
-     * atomicity gap this fixes.
-     *
-     * tenantId is read directly off the loaded Lease rather than
-     * TenantContext, since this runs in a background scheduler with no
-     * inbound request to derive a tenant context from.
      */
     @Transactional
     public void activateOne(Lease lease) {
@@ -85,5 +74,81 @@ public class LeaseActionScheduler {
         eventPublisher.publishAll(lease.pullDomainEvents());
 
         log.info("Lease activated. leaseId={}", lease.getId());
+    }
+
+    /**
+     * NEW: runs daily — expires leases whose contractual end date has
+     * passed. Staggered 30 minutes after the activation sweep so both
+     * schedulers never contend for the same lease rows in a single run.
+     *
+     * SCOPE (deliberate, decided this session): only FIXED_TERM and
+     * STANDARD leases are eligible. MONTH_TO_MONTH leases are excluded —
+     * their endDate is a rolling/nominal field, not a real contractual
+     * expiry (a month-to-month tenancy of unknown duration should only
+     * end via TERMINATE/notice, never a silent date-based sweep).
+     *
+     * Eligible source statuses are ACTIVE and RENEWED, per this session's
+     * decision to treat RENEWED as equivalent to ACTIVE going forward.
+     */
+    @Scheduled(cron = "0 30 1 * * *") // 1:30 AM daily
+    public void runDailyExpiry() {
+
+        List<Lease> leases =
+                leaseRepository.findAllByStatusInAndLeaseTypeInAndEndDateLessThanEqual(
+                        List.of(LeaseStatus.ACTIVE, LeaseStatus.RENEWED),
+                        List.of(LeaseType.FIXED_TERM, LeaseType.STANDARD),
+                        LocalDate.now()
+                );
+
+        log.info("LeaseActionScheduler: found {} lease(s) eligible for expiry", leases.size());
+
+        for (Lease lease : leases) {
+            try {
+                expireOne(lease);
+            } catch (Exception e) {
+                log.error("Failed to expire lease id={}", lease.getId(), e);
+            }
+        }
+    }
+
+    /**
+     * Each lease gets its own transaction, same isolation pattern as
+     * activateOne(). Delegates to LeaseWorkflowEngine.expire() rather than
+     * calling Lease.expire() directly (unlike activateOne(), which has no
+     * corresponding engine method to call) — this reuses the engine's
+     * existing validation and event-publishing, avoiding a third,
+     * inconsistent event-publishing path. See handoff notes: this keeps
+     * EXPIRE's manual and scheduled paths behaving identically.
+     *
+     * UPDATED (this session): added an independent MONTH_TO_MONTH guard
+     * inside the method itself, matching the self-contained-invariant
+     * pattern already used by activateOne(). Previously this safety lived
+     * only in runDailyExpiry()'s query filter — if expireOne() were ever
+     * called from anywhere else (a future admin action, a retry path, a
+     * different scheduler), nothing would stop a MONTH_TO_MONTH lease from
+     * being silently expired. Fails loudly instead of assuming the caller
+     * already filtered correctly.
+     */
+    @Transactional
+    public void expireOne(Lease lease) {
+
+        // ---------------- IDEMPOTENCY GUARD ----------------
+        if (lease.getStatus() != LeaseStatus.ACTIVE && lease.getStatus() != LeaseStatus.RENEWED) {
+            return;
+        }
+
+        // ---------------- INDEPENDENT LEASE-TYPE GUARD ----------------
+        if (lease.getLeaseType() == LeaseType.MONTH_TO_MONTH) {
+            throw new LeaseStateException(
+                    "Month-to-month leases cannot be expired via the scheduled sweep; "
+                            + "use termination instead. leaseId=" + lease.getId(),
+                    ErrorCode.LEASE_EXPIRATION_NOT_APPLICABLE_TO_MONTH_TO_MONTH
+            );
+        }
+
+        leaseWorkflowEngine.expire(lease);
+        leaseRepository.save(lease);
+
+        log.info("Lease expired. leaseId={}", lease.getId());
     }
 }

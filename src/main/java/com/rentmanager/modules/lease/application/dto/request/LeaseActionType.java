@@ -10,7 +10,9 @@ public enum LeaseActionType {
     ACTIVATE,
     TERMINATE,
     REJECT,
-    RENEW;
+    RENEW,
+    EXPIRE,
+    CANCEL;
 
     @JsonCreator
     public static LeaseActionType from(String value) {
@@ -23,7 +25,7 @@ public enum LeaseActionType {
         } catch (Exception ex) {
             throw new IllegalArgumentException(
                     "Invalid LeaseActionType: " + value +
-                            ". Allowed: APPROVE, AWAITING_DEPOSIT, ACTIVATE, TERMINATE, REJECT, RENEW"
+                            ". Allowed: APPROVE, AWAITING_DEPOSIT, ACTIVATE, TERMINATE, REJECT, RENEW, EXPIRE, CANCEL"
             );
         }
     }

@@ -1,6 +1,7 @@
 package com.rentmanager.modules.lease.application.dto.request;
 
 public enum LeaseTypeDTO {
+    STANDARD,
     FIXED_TERM,
-    MONTHLY
+    MONTH_TO_MONTH
 }

@@ -1,6 +1,7 @@
 package com.rentmanager.modules.lease.domain.repository;
 
 import com.rentmanager.modules.lease.domain.enums.LeaseStatus;
+import com.rentmanager.modules.lease.domain.enums.LeaseType;
 import com.rentmanager.modules.lease.domain.model.Lease;
 
 import java.time.LocalDate;
@@ -41,6 +42,19 @@ public interface LeaseRepository {
     );
 
     /**
+     * NEW: finds leases in any of the given statuses, of any of the given
+     * lease types, whose end date is today or earlier. Used by the
+     * automatic lease expiry scheduler. MONTH_TO_MONTH is intentionally
+     * excluded at the call site (scheduler), not baked into this query's
+     * name — this method stays a general-purpose building block.
+     */
+    List<Lease> findAllByStatusInAndLeaseTypeInAndEndDateLessThanEqual(
+            List<LeaseStatus> statuses,
+            List<LeaseType> leaseTypes,
+            LocalDate date
+    );
+
+    /**
      * Optional domain-level convenience query
      * (can be derived from active + unit filter in service if needed)
      */
@@ -66,7 +80,7 @@ public interface LeaseRepository {
 
     Optional<Lease> findByIdAndTenantId(UUID id, UUID tenantId);
 
-    boolean hasActiveLeaseForUnit(UUID unitId);   // ← add this
+    boolean hasActiveLeaseForUnit(UUID unitId);
 
     long countAll();
 }

@@ -275,7 +275,16 @@ class LeaseControllerSecurityTest {
         );
     }
 
+
+
+
+
     private LeaseDetailResponse mockLeaseDetailResponse() {
+        // UPDATED: LeaseDetailResponse extended this session with 8 new
+        // lifecycle-metadata fields (signedAt through terminationReason).
+        // All null here -- same reasoning as LeaseControllerRbacTest's
+        // dummyDetailResponse(): this fixture is an ACTIVE lease with no
+        // lifecycle events in its own mock timeline.
         return new LeaseDetailResponse(
                 LEASE_ID,
                 "LEASE-001",
@@ -293,9 +302,23 @@ class LeaseControllerSecurityTest {
                 false,
                 LocalDate.now(),
                 LocalDate.now(),
-                1L
+                1L,
+                null,  // signedAt
+                null,  // activatedAt
+                null,  // terminatedAt
+                null,  // expiredAt
+                null,  // renewedAt
+                null,  // cancelledAt
+                null,  // terminationType
+                null   // terminationReason
         );
     }
+
+
+
+
+
+
 
     private LeaseActionResponse mockLeaseActionResponse() {
         return new LeaseActionResponse(

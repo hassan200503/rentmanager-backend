@@ -76,6 +76,9 @@ public class Lease extends AggregateRoot {
     @Column(name = "renewed_at")
     private LocalDateTime renewedAt;
 
+    @Column(name = "cancelled_at")
+    private LocalDateTime cancelledAt;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "termination_type")
     private TerminationType terminationType;
@@ -276,9 +279,9 @@ public class Lease extends AggregateRoot {
     }
 
     public void terminate(TerminationType type, String reason, String actor, UUID tenantId) {
-        if (status != LeaseStatus.ACTIVE) {
+        if (status != LeaseStatus.ACTIVE && status != LeaseStatus.RENEWED) {
             throw new LeaseStateException(
-                    "Only active leases can be terminated",
+                    "Only active or renewed leases can be terminated",
                     ErrorCode.LEASE_TERMINATION_ONLY_ACTIVE_ALLOWED
             );
         }
@@ -339,8 +342,11 @@ public class Lease extends AggregateRoot {
                     ErrorCode.LEASE_UPDATE_CLOSED_NOT_ALLOWED
             );
         }
-        this.status = LeaseStatus.TERMINATED;
-        this.terminatedAt = LocalDateTime.now();
+        // UPDATED (§4.3, V34 migration): now sets its own dedicated
+        // cancelledAt timestamp instead of reusing terminatedAt. Was:
+        // this.terminatedAt = LocalDateTime.now();
+        this.status = LeaseStatus.CANCELLED;
+        this.cancelledAt = LocalDateTime.now();
         this.terminationReason = reason;
 
         registerEvent(new LeaseCancelledEvent(
@@ -359,14 +365,20 @@ public class Lease extends AggregateRoot {
 
 
     public void expire() {
-        if (status != LeaseStatus.ACTIVE) {
+        if (status != LeaseStatus.ACTIVE && status != LeaseStatus.RENEWED) {
             throw new LeaseStateException(
-                    "Only active leases can expire",
+                    "Only active or renewed leases can expire",
                     ErrorCode.LEASE_EXPIRATION_ONLY_ACTIVE_ALLOWED
             );
         }
         this.status = LeaseStatus.EXPIRED;
         this.expiredAt = LocalDateTime.now();
+        // INTENTIONALLY no registerEvent() here — see handoff notes on the
+        // pre-existing double-publish bug. LeaseWorkflowEngine.expire()
+        // already publishes LeaseExpiredEvent directly; registering it here
+        // too would double-fire it via executeAction()'s pullDomainEvents()
+        // flush, matching the same latent bug already present on
+        // APPROVE/ACTIVATE/TERMINATE/RENEW/CANCEL. Flagged, not fixed here.
     }
 
     public void renew(
@@ -376,9 +388,9 @@ public class Lease extends AggregateRoot {
             String actor
     ) {
 
-        if (status != LeaseStatus.ACTIVE && status != LeaseStatus.EXPIRED) {
+        if (status != LeaseStatus.ACTIVE && status != LeaseStatus.EXPIRED && status != LeaseStatus.RENEWED) {
             throw new LeaseStateException(
-                    "Only active or expired leases can be renewed",
+                    "Only active, expired, or renewed leases can be renewed",
                     ErrorCode.LEASE_RENEWAL_ONLY_ACTIVE_OR_EXPIRED_ALLOWED
             );
         }
@@ -492,6 +504,38 @@ public class Lease extends AggregateRoot {
 
     public boolean isTerminated() {
         return this.status == LeaseStatus.TERMINATED;
+    }
+
+    public LocalDateTime getCancelledAt() {
+        return cancelledAt;
+    }
+
+    public LocalDateTime getSignedAt() {
+        return signedAt;
+    }
+
+    public LocalDateTime getActivatedAt() {
+        return activatedAt;
+    }
+
+    public LocalDateTime getTerminatedAt() {
+        return terminatedAt;
+    }
+
+    public LocalDateTime getExpiredAt() {
+        return expiredAt;
+    }
+
+    public LocalDateTime getRenewedAt() {
+        return renewedAt;
+    }
+
+    public TerminationType getTerminationType() {
+        return terminationType;
+    }
+
+    public String getTerminationReason() {
+        return terminationReason;
     }
 
     public void setTenantProfileId(UUID tenantProfileId) {

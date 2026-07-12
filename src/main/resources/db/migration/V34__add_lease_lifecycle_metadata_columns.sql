@@ -1,0 +1,6 @@
+-- V34__add_lease_lifecycle_metadata_columns.sql
+ALTER TABLE leases ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
+ALTER TABLE leases ADD COLUMN IF NOT EXISTS renewed_at TIMESTAMPTZ;
+ALTER TABLE leases ADD COLUMN IF NOT EXISTS termination_type VARCHAR(50);
+ALTER TABLE leases ADD COLUMN IF NOT EXISTS termination_reason VARCHAR(1000);
+ALTER TABLE leases ADD COLUMN IF NOT EXISTS signed_at TIMESTAMPTZ;

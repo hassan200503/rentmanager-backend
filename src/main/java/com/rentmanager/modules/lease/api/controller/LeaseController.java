@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 /**
@@ -94,6 +95,34 @@ public class LeaseController {
         leaseService.delete(leaseId);
         return ApiResponse.ok("Deleted successfully", null);
     }
+
+
+
+
+
+
+    // added to LeaseController
+
+    @GetMapping
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
+    public ApiResponse<PageResponse<LeaseSummaryResponse>> search(
+            @RequestParam(required = false) UUID propertyId,
+            @RequestParam(required = false) LeaseStatusDTO status,
+            @RequestParam(required = false) LocalDate fromDate,
+            @RequestParam(required = false) LocalDate toDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        LeaseSearchRequest request = new LeaseSearchRequest(
+                null, propertyId, status, fromDate, toDate, page, size
+        );
+        return ApiResponse.ok(leaseService.search(request));
+    }
+
+
+
+
+
 
 
 }

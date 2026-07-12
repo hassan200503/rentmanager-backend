@@ -32,15 +32,36 @@ public class LeaseWorkflowValidator {
 
     public void validateTermination(Lease lease) {
 
-        if (!lease.isActive()) {
-            throw new IllegalStateException("Only active leases can be terminated");
+        LeaseStatus status = lease.getStatus();
+        if (status != LeaseStatus.ACTIVE && status != LeaseStatus.RENEWED) {
+            throw new IllegalStateException("Only active or renewed leases can be terminated");
         }
     }
 
     public void validateRenewal(Lease lease) {
 
-        if (!lease.isActive() && !lease.isExpired()) {
+        LeaseStatus status = lease.getStatus();
+        if (status != LeaseStatus.ACTIVE && status != LeaseStatus.EXPIRED && status != LeaseStatus.RENEWED) {
             throw new IllegalStateException("Invalid renewal state");
+        }
+    }
+
+    // NEW: mirrors Lease.expire()'s own guard, defense-in-depth, matching
+    // the pattern every other engine-level transition already follows
+    // (e.g. validateActivation duplicates Lease.activate()'s own check).
+    public void validateExpiry(Lease lease) {
+
+        LeaseStatus status = lease.getStatus();
+        if (status != LeaseStatus.ACTIVE && status != LeaseStatus.RENEWED) {
+            throw new IllegalStateException("Only active or renewed leases can expire");
+        }
+    }
+
+    // NEW: mirrors Lease.cancel()'s own guard.
+    public void validateCancellation(Lease lease) {
+
+        if (lease.getStatus() == LeaseStatus.ACTIVE) {
+            throw new IllegalStateException("Cannot cancel an active lease");
         }
     }
 

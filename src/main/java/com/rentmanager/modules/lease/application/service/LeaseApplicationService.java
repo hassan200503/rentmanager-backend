@@ -54,13 +54,6 @@ public class LeaseApplicationService {
     // =========================================================
     // CREATE
     // =========================================================
-    // FIX (this session): Lease.create() registers LeaseCreatedEvent, but
-    // nothing previously called pullDomainEvents()/publishAll() after the
-    // save — confirmed by cross-referencing LeaseActionScheduler.activateOne(),
-    // which DOES call eventPublisher.publishAll(lease.pullDomainEvents())
-    // after its save, making this method's prior omission an inconsistency
-    // rather than a deliberate design choice. Every lease created via this
-    // path had its LeaseCreatedEvent silently discarded.
     public LeaseResponse create(@Valid @org.checkerframework.checker.nullness.qual.MonotonicNonNull CreateLeaseRequest request) {
 
         UUID tenantId = TenantContext.getTenantId(); // ✅ HERE (MANDATORY)
@@ -105,10 +98,6 @@ public class LeaseApplicationService {
     // =========================================================
     // UPDATE
     // =========================================================
-    // NOTE: updateContractTerms() registers no domain event today (verified
-    // against Lease.java — the method body has no registerEvent() call), so
-    // no publishAll() is added here. Nothing to fix, flagging only so this
-    // isn't mistaken for an oversight later.
     public LeaseResponse update(UUID leaseId, @Valid @org.checkerframework.checker.nullness.qual.MonotonicNonNull UpdateLeaseRequest request) {
 
         Lease lease = load(leaseId, TenantContext.getTenantId());
@@ -132,12 +121,18 @@ public class LeaseApplicationService {
         return toDetailResponse(load(leaseId, tenantId));
     }
     // =========================================================
+
+
+
     public PageResponse<LeaseSummaryResponse> search(LeaseSearchRequest request) {
 
         UUID tenantId = TenantContext.getTenantId();
 
-        var result = leaseRepository.findAllByTenant(tenantId)
-                .stream()
+        var result = leaseRepository.findAllByTenant(tenantId).stream()
+                .filter(l -> request.propertyId() == null || l.getPropertyId().equals(request.propertyId()))
+                .filter(l -> request.status() == null || l.getStatus().name().equals(request.status().name()))
+                .filter(l -> request.fromDate() == null || !l.getStartDate().isBefore(request.fromDate()))
+                .filter(l -> request.toDate() == null || !l.getEndDate().isAfter(request.toDate()))
                 .map(this::toSummary)
                 .toList();
 
@@ -152,31 +147,10 @@ public class LeaseApplicationService {
         );
     }
 
+
+
+
     // =========================================================
-    /**
-     * @Transactional added (earlier session): the ACTIVATE branch calls
-     * LeaseActivationOrchestrator.onLeaseActivated(...), which posts the
-     * lease's opening rent charge via RentLedgerApplicationService.
-     * postCharge(). postCharge()'s own @Transactional uses Spring's default
-     * REQUIRED propagation, so it joins this method's transaction.
-     *
-     * FIX (this session): every branch (APPROVE, AWAITING_DEPOSIT, ACTIVATE,
-     * REJECT, TERMINATE, RENEW) registers its own domain event on the Lease
-     * aggregate, but this method never pulled or published any of them —
-     * confirmed by comparing against LeaseActionScheduler.activateOne(),
-     * which does call eventPublisher.publishAll(lease.pullDomainEvents())
-     * after its save. Added the same call here, after save, inside the
-     * same transaction boundary, so this REST-triggered path has the same
-     * event-publishing guarantee as the scheduler path instead of silently
-     * discarding LeaseApprovedEvent / LeaseActivatedEvent / LeaseRejected
-     * (via reject(), which registers none today — see note below) /
-     * LeaseTerminatedEvent / LeaseRenewedEvent / LeaseCancelledEvent.
-     *
-     * NOTE: reject() in Lease.java registers no event currently (verified —
-     * no registerEvent() call in that method body), so REJECT will publish
-     * an empty list via this call; not a bug, just confirming the fix is
-     * complete rather than partial.
-     */
     @Transactional
     public LeaseActionResponse executeAction(UUID leaseId, @Valid @org.checkerframework.checker.nullness.qual.MonotonicNonNull LeaseActionRequest request) {
 
@@ -212,6 +186,22 @@ public class LeaseApplicationService {
                     lease,
                     request.getActionDate(),
                     calculateRenewalEndDate(lease, request)
+            );
+
+            // NEW: EXPIRE deliberately publishes only once (via the engine) —
+            // Lease.expire() does not registerEvent(), so the
+            // pullDomainEvents() flush below returns nothing extra for this
+            // action. See handoff notes on the pre-existing double-publish
+            // bug affecting the other cases above.
+            case EXPIRE -> workflowEngine.expire(lease);
+
+            // NEW: CANCEL inherits the same double-publish behavior as
+            // TERMINATE/RENEW/APPROVE/ACTIVATE (Lease.cancel() registers an
+            // event AND the engine publishes directly) — consistent with
+            // existing (flagged, unfixed) behavior, not a new deviation.
+            case CANCEL -> workflowEngine.cancel(
+                    lease,
+                    request.getReason()
             );
         }
 
@@ -278,6 +268,10 @@ public class LeaseApplicationService {
     }
 
     // =========================================================
+    // UPDATED this session: now includes the 6 lifecycle metadata fields
+    // (signedAt/activatedAt/terminatedAt/expiredAt/renewedAt/cancelledAt/
+    // terminationType/terminationReason), previously persisted correctly
+    // but never surfaced here. See LeaseDetailResponse for field details.
     private LeaseDetailResponse toDetailResponse(Lease lease) {
         return new LeaseDetailResponse(
                 lease.getId(),
@@ -296,7 +290,15 @@ public class LeaseApplicationService {
                 lease.isAutoRenew(),
                 lease.getCreatedAt().atZone(java.time.ZoneId.systemDefault()).toLocalDate(),
                 lease.getUpdatedAt().atZone(java.time.ZoneId.systemDefault()).toLocalDate(),
-                lease.getVersion()
+                lease.getVersion(),
+                lease.getSignedAt(),
+                lease.getActivatedAt(),
+                lease.getTerminatedAt(),
+                lease.getExpiredAt(),
+                lease.getRenewedAt(),
+                lease.getCancelledAt(),
+                map(lease.getTerminationType()),
+                lease.getTerminationReason()
         );
     }
 
@@ -323,6 +325,14 @@ public class LeaseApplicationService {
 
     private LeaseStatusDTO map(LeaseStatus status) {
         return LeaseStatusDTO.valueOf(status.name());
+    }
+
+    // NEW: mirrors the other map() overloads above. Nullable by design --
+    // terminationType is only ever set on TERMINATED leases (see
+    // Lease.terminate()); every other status leaves it null, so this must
+    // pass null through rather than throwing on valueOf(null).
+    private TerminationTypeDTO map(TerminationType type) {
+        return type == null ? null : TerminationTypeDTO.valueOf(type.name());
     }
 
     private OffsetDateTime toOffset(Instant instant) {

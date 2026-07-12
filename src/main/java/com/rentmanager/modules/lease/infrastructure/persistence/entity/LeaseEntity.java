@@ -4,10 +4,12 @@ import com.rentmanager.domain.base.BaseTenantEntity;
 import com.rentmanager.modules.lease.domain.enums.BillingCycle;
 import com.rentmanager.modules.lease.domain.enums.LeaseStatus;
 import com.rentmanager.modules.lease.domain.enums.LeaseType;
+import com.rentmanager.modules.lease.domain.enums.TerminationType;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -67,6 +69,38 @@ public class LeaseEntity extends BaseTenantEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "billing_cycle", nullable = false)
     private BillingCycle billingCycle;
+
+    // ---- Lifecycle metadata (previously orphaned/missing -- see
+    // Addendum 4 follow-up finding: activated_at/terminated_at/expired_at
+    // existed as columns since V2 but were never mapped; renewed_at/
+    // termination_type/termination_reason/signed_at/cancelled_at didn't
+    // exist as columns at all until V34. All seven now wired end-to-end. ----
+
+    @Column(name = "signed_at")
+    private LocalDateTime signedAt;
+
+    @Column(name = "activated_at")
+    private LocalDateTime activatedAt;
+
+    @Column(name = "terminated_at")
+    private LocalDateTime terminatedAt;
+
+    @Column(name = "expired_at")
+    private LocalDateTime expiredAt;
+
+    @Column(name = "renewed_at")
+    private LocalDateTime renewedAt;
+
+    @Column(name = "cancelled_at")
+    private LocalDateTime cancelledAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "termination_type", length = 50)
+    private TerminationType terminationType;
+
+    @Column(name = "termination_reason", length = 1000)
+    private String terminationReason;
+
     // -----------------------------
     // Getters & Setters
     // -----------------------------
@@ -160,8 +194,68 @@ public class LeaseEntity extends BaseTenantEntity {
         this.billingCycle = billingCycle;
     }
 
+    public LocalDateTime getSignedAt() {
+        return signedAt;
+    }
 
+    public void setSignedAt(LocalDateTime signedAt) {
+        this.signedAt = signedAt;
+    }
 
+    public LocalDateTime getActivatedAt() {
+        return activatedAt;
+    }
 
+    public void setActivatedAt(LocalDateTime activatedAt) {
+        this.activatedAt = activatedAt;
+    }
+
+    public LocalDateTime getTerminatedAt() {
+        return terminatedAt;
+    }
+
+    public void setTerminatedAt(LocalDateTime terminatedAt) {
+        this.terminatedAt = terminatedAt;
+    }
+
+    public LocalDateTime getExpiredAt() {
+        return expiredAt;
+    }
+
+    public void setExpiredAt(LocalDateTime expiredAt) {
+        this.expiredAt = expiredAt;
+    }
+
+    public LocalDateTime getRenewedAt() {
+        return renewedAt;
+    }
+
+    public void setRenewedAt(LocalDateTime renewedAt) {
+        this.renewedAt = renewedAt;
+    }
+
+    public LocalDateTime getCancelledAt() {
+        return cancelledAt;
+    }
+
+    public void setCancelledAt(LocalDateTime cancelledAt) {
+        this.cancelledAt = cancelledAt;
+    }
+
+    public TerminationType getTerminationType() {
+        return terminationType;
+    }
+
+    public void setTerminationType(TerminationType terminationType) {
+        this.terminationType = terminationType;
+    }
+
+    public String getTerminationReason() {
+        return terminationReason;
+    }
+
+    public void setTerminationReason(String terminationReason) {
+        this.terminationReason = terminationReason;
+    }
 
 }
