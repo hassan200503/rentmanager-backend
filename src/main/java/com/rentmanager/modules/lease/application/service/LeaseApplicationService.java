@@ -1,6 +1,7 @@
 package com.rentmanager.modules.lease.application.service;
 
 import com.rentmanager.contract.common.PageResponse;
+import com.rentmanager.domain.base.DomainEvent;
 import com.rentmanager.modules.lease.application.dto.request.*;
 import com.rentmanager.modules.lease.application.dto.response.*;
 import com.rentmanager.modules.lease.application.dto.request.CreateLeaseRequest;
@@ -26,6 +27,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -89,8 +91,18 @@ public class LeaseApplicationService {
                 request.autoRenew() != null ? request.autoRenew() : false
         );
 
+        // FIX: pull domain events from the live in-memory aggregate BEFORE save().
+        // LeaseRepository.save() round-trips through LeaseMapper.toDomain(), which
+        // reconstructs the returned Lease via Lease.restore() — that never
+        // repopulates AggregateRoot's transient domainEvents list (it's not a
+        // mapped column), so saved.pullDomainEvents() is always empty regardless
+        // of what was registered on `lease`. Same pattern already used in
+        // LeaseActionHandler.handle().
+        List<DomainEvent> events = lease.pullDomainEvents();
+
         Lease saved = leaseRepository.save(lease);
-        eventPublisher.publishAll(saved.pullDomainEvents());
+
+        eventPublisher.publishAll(events);
 
         return toResponse(saved);
     }

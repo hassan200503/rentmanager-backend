@@ -1,0 +1,29 @@
+package com.rentmanager.modules.activity.infrastructure.web;
+
+import com.rentmanager.modules.activity.application.ActivityLogService;
+import com.rentmanager.modules.activity.domain.model.ActivityLog;
+import com.rentmanager.shared.security.context.TenantContext;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/v1/activities")
+@RequiredArgsConstructor
+public class ActivityLogController {
+
+    private final ActivityLogService activityLogService;
+
+    @GetMapping
+    public List<ActivityLog> recent(@RequestParam(defaultValue = "20") int limit) {
+        return activityLogService.recent(TenantContext.getTenantId(), limit);
+    }
+
+    @GetMapping(path = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter stream() {
+        return activityLogService.subscribe(TenantContext.getTenantId());
+    }
+}

@@ -78,9 +78,11 @@ class PropertyCommandServiceImplTest {
         when(propertyRepository.save(any(Property.class)))
                 .thenReturn(saved);
 
-        when(saved.pullDomainEvents())
-                .thenReturn(Collections.emptyList());
-
+        // NOTE: `property` (the aggregate that actually has domain events registered
+        // on it via Property.create(...)) is a real object built inside the service,
+        // not a mock we can stub here. eventPublisher.publishAll(anyList()) will
+        // receive whatever real events Property.create() registered — anyList()
+        // still matches regardless of contents, so no stub is needed for that path.
         when(propertyMapper.toResponse(saved))
                 .thenReturn(response);
 
@@ -177,7 +179,10 @@ class PropertyCommandServiceImplTest {
         when(propertyRepository.save(property))
                 .thenReturn(updated);
 
-        when(updated.pullDomainEvents())
+        // Production code pulls events from `property` (the aggregate that had
+        // registerEvent() called on it), not from `updated` (the freshly remapped
+        // instance returned by the repository). Stub must match.
+        when(property.pullDomainEvents())
                 .thenReturn(Collections.emptyList());
 
         when(propertyMapper.toResponse(updated))
@@ -209,7 +214,8 @@ class PropertyCommandServiceImplTest {
         when(propertyRepository.save(property))
                 .thenReturn(saved);
 
-        when(saved.pullDomainEvents())
+        // Production code pulls events from `property`, not `saved`. Stub must match.
+        when(property.pullDomainEvents())
                 .thenReturn(Collections.emptyList());
 
         when(propertyMapper.toResponse(saved))
@@ -238,7 +244,8 @@ class PropertyCommandServiceImplTest {
         when(propertyRepository.save(property))
                 .thenReturn(saved);
 
-        when(saved.pullDomainEvents())
+        // Production code pulls events from `property`, not `saved`. Stub must match.
+        when(property.pullDomainEvents())
                 .thenReturn(Collections.emptyList());
 
         when(propertyMapper.toResponse(saved))
@@ -266,7 +273,8 @@ class PropertyCommandServiceImplTest {
         when(propertyRepository.save(property))
                 .thenReturn(saved);
 
-        when(saved.pullDomainEvents())
+        // Production code pulls events from `property`, not `saved`. Stub must match.
+        when(property.pullDomainEvents())
                 .thenReturn(Collections.emptyList());
 
         when(propertyMapper.toResponse(saved))
@@ -281,5 +289,3 @@ class PropertyCommandServiceImplTest {
         verify(eventPublisher).publishAll(anyList());
     }
 }
-
-

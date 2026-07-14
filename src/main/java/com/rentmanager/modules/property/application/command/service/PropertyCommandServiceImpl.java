@@ -51,7 +51,12 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
         Property saved = propertyRepository.save(property);
 
-        eventPublisher.publishAll(saved.pullDomainEvents());
+        // NOTE: pull events from `property` (the aggregate that had registerEvent()
+        // called on it), not `saved` — PropertyRepositoryAdapter.save() returns a
+        // freshly remapped instance via persistenceMapper.toDomain(...), which has
+        // its own empty domainEvents list. Pulling from `saved` always publishes
+        // nothing, silently.
+        eventPublisher.publishAll(property.pullDomainEvents());
 
         return propertyMapper.toResponse(saved);
     }
@@ -96,7 +101,8 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
         Property saved = propertyRepository.save(property);
 
-        eventPublisher.publishAll(saved.pullDomainEvents());
+        // See note in createProperty(): pull from `property`, not `saved`.
+        eventPublisher.publishAll(property.pullDomainEvents());
 
         return propertyMapper.toResponse(saved);
     }
@@ -112,7 +118,8 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
         Property saved = propertyRepository.save(property);
 
-        eventPublisher.publishAll(saved.pullDomainEvents());
+        // See note in createProperty(): pull from `property`, not `saved`.
+        eventPublisher.publishAll(property.pullDomainEvents());
 
         return propertyMapper.toResponse(saved);
     }
@@ -128,7 +135,8 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
         Property saved = propertyRepository.save(property);
 
-        eventPublisher.publishAll(saved.pullDomainEvents());
+        // See note in createProperty(): pull from `property`, not `saved`.
+        eventPublisher.publishAll(property.pullDomainEvents());
 
         return propertyMapper.toResponse(saved);
     }
@@ -144,7 +152,8 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
 
         Property saved = propertyRepository.save(property);
 
-        eventPublisher.publishAll(saved.pullDomainEvents());
+        // See note in createProperty(): pull from `property`, not `saved`.
+        eventPublisher.publishAll(property.pullDomainEvents());
 
         return propertyMapper.toResponse(saved);
     }
