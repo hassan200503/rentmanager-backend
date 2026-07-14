@@ -43,3 +43,5 @@ build/
 .env
 mpesa-debug.log
 
+
+app_startup.log
