@@ -5,7 +5,6 @@ import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.service.LeaseDomainService;
 import com.rentmanager.modules.lease.domain.service.UnitOccupancyService;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
-import com.rentmanager.modules.lease.domain.workflow.LeaseEventPublisher;
 import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowEngine;
 import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowValidator;
 import org.junit.jupiter.api.Test;
@@ -21,14 +20,12 @@ class LeaseBusinessConstraintTest {
 
     private LeaseWorkflowEngine engine(
             LeaseWorkflowValidator validator,
-            LeaseEventPublisher publisher,
             LeaseRepository repo,
             LeaseDomainService domainService,
             UnitOccupancyService occupancyService
     ) {
         return new LeaseWorkflowEngine(
                 validator,
-                publisher,
                 repo,
                 domainService,
                 occupancyService
@@ -66,14 +63,13 @@ class LeaseBusinessConstraintTest {
     void shouldActivateLeaseSuccessfullyWhenUnitIsAvailable() {
 
         LeaseWorkflowValidator validator = mock(LeaseWorkflowValidator.class);
-        LeaseEventPublisher publisher = mock(LeaseEventPublisher.class);
         LeaseRepository repo = mock(LeaseRepository.class);
         UnitOccupancyService occupancyService = mock(UnitOccupancyService.class);
         LeaseDomainService domainService = mock(LeaseDomainService.class);
 
         doNothing().when(occupancyService).validateUnitAvailability(any());
 
-        LeaseWorkflowEngine engine = engine(validator, publisher, repo, domainService, occupancyService);
+        LeaseWorkflowEngine engine = engine(validator, repo, domainService, occupancyService);
 
         Lease lease = createLease();
 
@@ -82,14 +78,12 @@ class LeaseBusinessConstraintTest {
         engine.activate(lease);
 
         assertEquals(LeaseStatus.ACTIVE, lease.getStatus());
-        verify(publisher, atLeastOnce()).publish(any());
     }
 
     @Test
     void shouldBlockActivationWhenUnitNotAvailable() {
 
         LeaseWorkflowValidator validator = mock(LeaseWorkflowValidator.class);
-        LeaseEventPublisher publisher = mock(LeaseEventPublisher.class);
         LeaseRepository repo = mock(LeaseRepository.class);
         UnitOccupancyService occupancyService = mock(UnitOccupancyService.class);
         LeaseDomainService domainService = mock(LeaseDomainService.class);
@@ -98,7 +92,7 @@ class LeaseBusinessConstraintTest {
                 .when(occupancyService)
                 .validateUnitAvailability(any());
 
-        LeaseWorkflowEngine engine = engine(validator, publisher, repo, domainService, occupancyService);
+        LeaseWorkflowEngine engine = engine(validator, repo, domainService, occupancyService);
 
         Lease lease = createLease();
 
@@ -113,7 +107,6 @@ class LeaseBusinessConstraintTest {
 
         LeaseWorkflowEngine engine = engine(
                 mock(LeaseWorkflowValidator.class),
-                mock(LeaseEventPublisher.class),
                 mock(LeaseRepository.class),
                 mock(LeaseDomainService.class),
                 mock(UnitOccupancyService.class)
@@ -131,7 +124,6 @@ class LeaseBusinessConstraintTest {
 
         LeaseWorkflowEngine engine = engine(
                 mock(LeaseWorkflowValidator.class),
-                mock(LeaseEventPublisher.class),
                 mock(LeaseRepository.class),
                 mock(LeaseDomainService.class),
                 mock(UnitOccupancyService.class)
@@ -149,7 +141,6 @@ class LeaseBusinessConstraintTest {
 
         LeaseWorkflowEngine engine = engine(
                 mock(LeaseWorkflowValidator.class),
-                mock(LeaseEventPublisher.class),
                 mock(LeaseRepository.class),
                 mock(LeaseDomainService.class),
                 mock(UnitOccupancyService.class)
@@ -167,7 +158,6 @@ class LeaseBusinessConstraintTest {
 
         LeaseWorkflowEngine engine = engine(
                 mock(LeaseWorkflowValidator.class),
-                mock(LeaseEventPublisher.class),
                 mock(LeaseRepository.class),
                 mock(LeaseDomainService.class),
                 mock(UnitOccupancyService.class)
@@ -188,7 +178,6 @@ class LeaseBusinessConstraintTest {
     void shouldBlockActivationWhenDateOverlapDetected() {
 
         LeaseWorkflowValidator validator = mock(LeaseWorkflowValidator.class);
-        LeaseEventPublisher publisher = mock(LeaseEventPublisher.class);
         LeaseRepository repo = mock(LeaseRepository.class);
         UnitOccupancyService occupancyService = mock(UnitOccupancyService.class);
         LeaseDomainService domainService = mock(LeaseDomainService.class);
@@ -196,7 +185,7 @@ class LeaseBusinessConstraintTest {
         doThrow(new IllegalStateException("Date overlap detected"))
                 .when(validator).validateActivation(any());
 
-        LeaseWorkflowEngine engine = engine(validator, publisher, repo, domainService, occupancyService);
+        LeaseWorkflowEngine engine = engine(validator, repo, domainService, occupancyService);
 
         Lease lease = createLease();
 
@@ -206,14 +195,12 @@ class LeaseBusinessConstraintTest {
         );
 
         verify(validator).validateActivation(lease);
-        verifyNoInteractions(publisher);
     }
 
     @Test
     void shouldBlockActivationWhenTenantIsolationFails() {
 
         LeaseWorkflowValidator validator = mock(LeaseWorkflowValidator.class);
-        LeaseEventPublisher publisher = mock(LeaseEventPublisher.class);
         LeaseRepository repo = mock(LeaseRepository.class);
         UnitOccupancyService occupancyService = mock(UnitOccupancyService.class);
         LeaseDomainService domainService = mock(LeaseDomainService.class);
@@ -221,7 +208,7 @@ class LeaseBusinessConstraintTest {
         doThrow(new IllegalStateException("Tenant isolation violation"))
                 .when(validator).validateActivation(any());
 
-        LeaseWorkflowEngine engine = engine(validator, publisher, repo, domainService, occupancyService);
+        LeaseWorkflowEngine engine = engine(validator, repo, domainService, occupancyService);
 
         Lease lease = createLease();
 
@@ -231,14 +218,12 @@ class LeaseBusinessConstraintTest {
         );
 
         verify(validator).validateActivation(lease);
-        verifyNoInteractions(publisher);
     }
 
     @Test
     void shouldBlockActivationWhenFinancialLockExists() {
 
         LeaseWorkflowValidator validator = mock(LeaseWorkflowValidator.class);
-        LeaseEventPublisher publisher = mock(LeaseEventPublisher.class);
         LeaseRepository repo = mock(LeaseRepository.class);
         UnitOccupancyService occupancyService = mock(UnitOccupancyService.class);
         LeaseDomainService domainService = mock(LeaseDomainService.class);
@@ -246,7 +231,7 @@ class LeaseBusinessConstraintTest {
         doThrow(new IllegalStateException("Financial lock active"))
                 .when(validator).validateActivation(any());
 
-        LeaseWorkflowEngine engine = engine(validator, publisher, repo, domainService, occupancyService);
+        LeaseWorkflowEngine engine = engine(validator, repo, domainService, occupancyService);
 
         Lease lease = createLease();
 
@@ -256,7 +241,6 @@ class LeaseBusinessConstraintTest {
         );
 
         verify(validator).validateActivation(lease);
-        verifyNoInteractions(publisher);
     }
 
     @Test
@@ -264,7 +248,6 @@ class LeaseBusinessConstraintTest {
 
         LeaseWorkflowEngine engine = engine(
                 mock(LeaseWorkflowValidator.class),
-                mock(LeaseEventPublisher.class),
                 mock(LeaseRepository.class),
                 mock(LeaseDomainService.class),
                 mock(UnitOccupancyService.class)
@@ -278,21 +261,20 @@ class LeaseBusinessConstraintTest {
     }
 
     @Test
-    void shouldPublishEventOnExpiration() {
+    void shouldExpireLeaseSuccessfullyOnSecondFlow() {
 
         LeaseWorkflowValidator validator = mock(LeaseWorkflowValidator.class);
-        LeaseEventPublisher publisher = mock(LeaseEventPublisher.class);
         LeaseRepository repo = mock(LeaseRepository.class);
         LeaseDomainService domainService = mock(LeaseDomainService.class);
         UnitOccupancyService occupancyService = mock(UnitOccupancyService.class);
 
-        LeaseWorkflowEngine engine = engine(validator, publisher, repo, domainService, occupancyService);
+        LeaseWorkflowEngine engine = engine(validator, repo, domainService, occupancyService);
 
         Lease lease = createActiveLease();
 
         engine.expire(lease);
 
-        verify(publisher, atLeastOnce()).publish(any());
+        assertEquals(LeaseStatus.EXPIRED, lease.getStatus());
     }
 
     @Test
@@ -300,7 +282,6 @@ class LeaseBusinessConstraintTest {
 
         LeaseWorkflowEngine engine = engine(
                 mock(LeaseWorkflowValidator.class),
-                mock(LeaseEventPublisher.class),
                 mock(LeaseRepository.class),
                 mock(LeaseDomainService.class),
                 mock(UnitOccupancyService.class)
@@ -319,7 +300,6 @@ class LeaseBusinessConstraintTest {
 
         LeaseWorkflowEngine engine = engine(
                 mock(LeaseWorkflowValidator.class),
-                mock(LeaseEventPublisher.class),
                 mock(LeaseRepository.class),
                 mock(LeaseDomainService.class),
                 mock(UnitOccupancyService.class)
@@ -333,20 +313,19 @@ class LeaseBusinessConstraintTest {
     }
 
     @Test
-    void shouldPublishEventOnCancellation() {
+    void shouldCancelLeaseSuccessfullyOnSecondFlow() {
 
         LeaseWorkflowValidator validator = mock(LeaseWorkflowValidator.class);
-        LeaseEventPublisher publisher = mock(LeaseEventPublisher.class);
         LeaseRepository repo = mock(LeaseRepository.class);
         LeaseDomainService domainService = mock(LeaseDomainService.class);
         UnitOccupancyService occupancyService = mock(UnitOccupancyService.class);
 
-        LeaseWorkflowEngine engine = engine(validator, publisher, repo, domainService, occupancyService);
+        LeaseWorkflowEngine engine = engine(validator, repo, domainService, occupancyService);
 
         Lease lease = createLease();
 
         engine.reject(lease, "user cancel");
 
-        verify(publisher, atLeastOnce()).publish(any());
+        assertEquals(LeaseStatus.TERMINATED, lease.getStatus());
     }
 }

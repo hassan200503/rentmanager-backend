@@ -29,6 +29,8 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
     private final MarkFullyOccupiedValidator markFullyOccupiedValidator;
     private final PropertyMarkVacantValidator propertyMarkVacantValidator;
 
+    private final PropertyMarkPartiallyOccupiedValidator markPartiallyOccupiedValidator;
+
     // ---------------- CREATE ----------------
     @Override
     public PropertyResponse createProperty(UUID tenantId,
@@ -161,5 +163,29 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
     // ---------------- INTERNAL ----------------
     private String generateCorrelationId() {
         return "PROP-" + UUID.randomUUID();
+    }
+
+
+
+
+
+
+
+
+    // ---------------- PARTIALLY OCCUPIED ----------------
+    @Override
+    public PropertyResponse markPartiallyOccupied(UUID tenantId,
+                                                  UUID propertyId) {
+
+        Property property = markPartiallyOccupiedValidator.validate(tenantId, propertyId);
+
+        property.markPartiallyOccupied(generateCorrelationId());
+
+        Property saved = propertyRepository.save(property);
+
+        // See note in createProperty(): pull from `property`, not `saved`.
+        eventPublisher.publishAll(property.pullDomainEvents());
+
+        return propertyMapper.toResponse(saved);
     }
 }

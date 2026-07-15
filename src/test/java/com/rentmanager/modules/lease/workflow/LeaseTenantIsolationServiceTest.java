@@ -4,7 +4,6 @@ import com.rentmanager.modules.lease.domain.enums.*;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowEngine;
 import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowValidator;
-import com.rentmanager.modules.lease.domain.workflow.LeaseEventPublisher;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.lease.domain.service.LeaseDomainService;
 import com.rentmanager.modules.lease.domain.service.UnitOccupancyService;
@@ -46,7 +45,6 @@ class LeaseTenantIsolationServiceTest {
     private LeaseWorkflowEngine engine() {
         return new LeaseWorkflowEngine(
                 new LeaseWorkflowValidator(),
-                new LeaseEventPublisher(event -> {}),
                 mock(LeaseRepository.class),
                 mock(LeaseDomainService.class),
                 mock(UnitOccupancyService.class)

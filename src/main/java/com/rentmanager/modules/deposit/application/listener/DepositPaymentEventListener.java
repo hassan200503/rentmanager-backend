@@ -35,15 +35,25 @@ public class DepositPaymentEventListener {
                         "Lease not found for id: " + event.getLeaseId()));
 
         lease.activate();
-        Lease savedLease = leaseRepository.save(lease);
-        eventPublisher.publishAll(savedLease.pullDomainEvents());
+
+        // FIX: pull events from `lease` (pre-save, live domainEvents list),
+        // not from the object returned by save() — repository save() paths
+        // in this codebase round-trip through a mapper that rehydrates a
+        // fresh aggregate with an empty transient domainEvents list, so
+        // pulling from the post-save object always silently returns nothing.
+        var leaseEvents = lease.pullDomainEvents();
+        leaseRepository.save(lease);
+        eventPublisher.publishAll(leaseEvents);
 
         Unit unit = unitRepository.findByIdAndTenantId(event.getUnitId(), tenantId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Unit not found for id: " + event.getUnitId()));
 
         unit.markOccupied(event.getCorrelationId());
-        Unit savedUnit = unitRepository.save(unit);
-        eventPublisher.publishAll(savedUnit.pullDomainEvents());
+
+        // FIX: same reasoning as above — pull from pre-save `unit`.
+        var unitEvents = unit.pullDomainEvents();
+        unitRepository.save(unit);
+        eventPublisher.publishAll(unitEvents);
     }
 }

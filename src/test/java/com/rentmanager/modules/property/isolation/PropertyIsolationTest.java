@@ -51,6 +51,9 @@ class PropertyIsolationTest {
     @Mock
     private PropertyMarkVacantValidator propertyMarkVacantValidator;
 
+    @Mock
+    private PropertyMarkPartiallyOccupiedValidator propertyMarkPartiallyOccupiedValidator;
+
     private final UUID TENANT_A = UUID.randomUUID();
     private final UUID TENANT_B = UUID.randomUUID();
     private final UUID PROPERTY_ID = UUID.randomUUID();
@@ -65,7 +68,8 @@ class PropertyIsolationTest {
                 updatePropertyValidator,
                 activatePropertyValidator,
                 markFullyOccupiedValidator,
-                propertyMarkVacantValidator
+                propertyMarkVacantValidator,
+                propertyMarkPartiallyOccupiedValidator
         );
     }
 

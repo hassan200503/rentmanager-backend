@@ -19,7 +19,7 @@ public class DepositCommandService {
     private final DomainEventPublisher eventPublisher;
 
     public Deposit createDeposit(UUID tenantId, UUID leaseId, UUID unitId,
-                                  UUID tenantProfileId, BigDecimal amountRequired) {
+                                 UUID tenantProfileId, BigDecimal amountRequired) {
 
         String correlationId = generateCorrelationId();
 
@@ -27,9 +27,15 @@ public class DepositCommandService {
                 tenantId, leaseId, unitId, tenantProfileId, amountRequired, correlationId
         );
 
+        // FIX: pull from `deposit` (pre-save) — DepositRepositoryAdapter.save()
+        // returns Deposit.rehydrate(...), a fresh instance with an empty
+        // transient domainEvents list, so pulling from `saved` always
+        // silently published nothing.
+        var events = deposit.pullDomainEvents();
+
         Deposit saved = depositRepository.save(deposit);
 
-        eventPublisher.publishAll(saved.pullDomainEvents());
+        eventPublisher.publishAll(events);
 
         return saved;
     }
@@ -41,9 +47,12 @@ public class DepositCommandService {
 
         deposit.confirmPayment(amountPaid, generateCorrelationId());
 
+        // FIX: pull from pre-save `deposit`.
+        var events = deposit.pullDomainEvents();
+
         Deposit saved = depositRepository.save(deposit);
 
-        eventPublisher.publishAll(saved.pullDomainEvents());
+        eventPublisher.publishAll(events);
 
         return saved;
     }
@@ -55,9 +64,12 @@ public class DepositCommandService {
 
         deposit.refund(refundAmount, generateCorrelationId());
 
+        // FIX: pull from pre-save `deposit`.
+        var events = deposit.pullDomainEvents();
+
         Deposit saved = depositRepository.save(deposit);
 
-        eventPublisher.publishAll(saved.pullDomainEvents());
+        eventPublisher.publishAll(events);
 
         return saved;
     }

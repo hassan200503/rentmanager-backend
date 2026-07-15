@@ -7,7 +7,6 @@ import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.lease.domain.service.LeaseDomainService;
 import com.rentmanager.modules.lease.domain.service.UnitOccupancyService;
-import com.rentmanager.modules.lease.domain.workflow.LeaseEventPublisher;
 import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowEngine;
 import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowValidator;
 import com.rentmanager.shared.events.DomainEventPublisher;
@@ -40,6 +39,11 @@ import static org.mockito.Mockito.*;
  * mirroring how activateOne()'s guard is independent of runDaily()'s
  * query. Covered directly below by
  * expireOne_monthToMonthLease_throwsLeaseStateException().
+ *
+ * UPDATED (this session): LeaseEventPublisher removed from
+ * LeaseWorkflowEngine's constructor as part of the double-publish fix.
+ * No test in this file asserted against the publisher directly, so this
+ * is a pure constructor-call fix -- no behavioral change.
  */
 class LeaseActionSchedulerExpiryTest {
 
@@ -76,7 +80,6 @@ class LeaseActionSchedulerExpiryTest {
     private LeaseActionScheduler schedulerWithMockedRepository(LeaseRepository repository) {
         LeaseWorkflowEngine realEngine = new LeaseWorkflowEngine(
                 new LeaseWorkflowValidator(),
-                new LeaseEventPublisher(event -> {}),
                 mock(LeaseRepository.class),
                 mock(LeaseDomainService.class),
                 mock(UnitOccupancyService.class)

@@ -38,6 +38,7 @@ class PropertyConcurrencyLifecycleTest {
     @Mock private ActivatePropertyValidator activatePropertyValidator;
     @Mock private MarkFullyOccupiedValidator markFullyOccupiedValidator;
     @Mock private PropertyMarkVacantValidator propertyMarkVacantValidator;
+    @Mock private PropertyMarkPartiallyOccupiedValidator propertyMarkPartiallyOccupiedValidator;
 
     private final UUID TENANT_ID = UUID.randomUUID();
     private final UUID PROPERTY_ID = UUID.randomUUID();
@@ -55,7 +56,8 @@ class PropertyConcurrencyLifecycleTest {
                 updatePropertyValidator,
                 activatePropertyValidator,
                 markFullyOccupiedValidator,
-                propertyMarkVacantValidator
+                propertyMarkVacantValidator,
+                propertyMarkPartiallyOccupiedValidator
         );
 
         sharedProperty = mock(Property.class);

@@ -231,4 +231,34 @@ public class Property extends AggregateRoot {
 
         return property;
     }
+
+
+
+
+
+
+
+
+
+    public void markPartiallyOccupied(String correlationId) {
+        OccupancyStatus previous = this.occupancyStatus;
+        this.occupancyStatus = OccupancyStatus.PARTIALLY_OCCUPIED;
+
+        registerEvent(new PropertyOccupancyChangedEvent(
+                tenantId,
+                getId(),
+                correlationId,
+                getId(),
+                previous.ordinal(),
+                this.occupancyStatus.ordinal()
+        ));
+    }
+
+
+
+
+
+
+
+
 }

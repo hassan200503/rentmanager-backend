@@ -121,6 +121,7 @@ public class Unit extends AggregateRoot {
                 getId(),
                 correlationId,
                 getId(),
+                this.propertyId,
                 previous,
                 this.occupancyStatus
         ));
@@ -138,6 +139,7 @@ public class Unit extends AggregateRoot {
                 getId(),
                 correlationId,
                 getId(),
+                this.propertyId,
                 previous,
                 this.occupancyStatus
         ));
@@ -199,7 +201,7 @@ public class Unit extends AggregateRoot {
         this.vacatedAt = null;
 
         registerEvent(new UnitOccupancyChangedEvent(
-                getTenantId(), getId(), correlationId, getId(), previous, this.occupancyStatus
+                getTenantId(), getId(), correlationId, getId(), this.propertyId,previous, this.occupancyStatus
         ));
     }
 
@@ -211,7 +213,7 @@ public class Unit extends AggregateRoot {
         this.vacatedAt = LocalDateTime.now();
 
         registerEvent(new UnitOccupancyChangedEvent(
-                getTenantId(), getId(), correlationId, getId(), previous, this.occupancyStatus
+                getTenantId(), getId(), correlationId, getId(),this.propertyId, previous, this.occupancyStatus
         ));
     }
 
@@ -227,7 +229,7 @@ public class Unit extends AggregateRoot {
         this.occupancyStatus = UnitOccupancyStatus.PENDING_PAYMENT;
 
         registerEvent(new UnitOccupancyChangedEvent(
-                getTenantId(), getId(), correlationId, getId(), previous, this.occupancyStatus
+                getTenantId(), getId(), correlationId, getId(),this.propertyId, previous, this.occupancyStatus
         ));
     }
 
@@ -239,7 +241,7 @@ public class Unit extends AggregateRoot {
         this.vacatedAt = LocalDateTime.now();
 
         registerEvent(new UnitOccupancyChangedEvent(
-                getTenantId(), getId(), correlationId, getId(), previous, this.occupancyStatus
+                getTenantId(), getId(), correlationId, getId(),this.propertyId, previous, this.occupancyStatus
         ));
     }
 }

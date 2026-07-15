@@ -58,7 +58,6 @@ public class LeaseEntity extends BaseTenantEntity {
     @Column(name = "status", nullable = false, length = 30)
     private LeaseStatus status;
 
-
     @Column(name = "lease_number", nullable = false, unique = true)
     private String leaseNumber;
 
@@ -100,6 +99,25 @@ public class LeaseEntity extends BaseTenantEntity {
 
     @Column(name = "termination_reason", length = 1000)
     private String terminationReason;
+
+    // ---- FIX (Track B, this session): previously absent entirely — no
+    // column, no field, no accessor. Every lease saved before this change
+    // silently discarded lateFeeAmount/gracePeriodDays/autoRenew on write,
+    // and every reload returned null/null/false regardless of intent.
+    // Requires the companion migration (V<next>__add_lease_optional_terms_columns.sql)
+    // to run first. autoRenew is NOT NULL DEFAULT FALSE since the domain
+    // field is a primitive boolean and can never be null; the other two
+    // are nullable to match Lease.create()'s validation (unvalidated,
+    // optional fields — unlike monthlyRent/securityDeposit). ----
+
+    @Column(name = "late_fee_amount", precision = 19, scale = 2)
+    private BigDecimal lateFeeAmount;
+
+    @Column(name = "grace_period_days")
+    private Integer gracePeriodDays;
+
+    @Column(name = "auto_renew", nullable = false)
+    private boolean autoRenew;
 
     // -----------------------------
     // Getters & Setters
@@ -168,7 +186,6 @@ public class LeaseEntity extends BaseTenantEntity {
     public void setStatus(LeaseStatus status) {
         this.status = status;
     }
-
 
     public String getLeaseNumber() {
         return leaseNumber;
@@ -258,4 +275,27 @@ public class LeaseEntity extends BaseTenantEntity {
         this.terminationReason = terminationReason;
     }
 
+    public BigDecimal getLateFeeAmount() {
+        return lateFeeAmount;
+    }
+
+    public void setLateFeeAmount(BigDecimal lateFeeAmount) {
+        this.lateFeeAmount = lateFeeAmount;
+    }
+
+    public Integer getGracePeriodDays() {
+        return gracePeriodDays;
+    }
+
+    public void setGracePeriodDays(Integer gracePeriodDays) {
+        this.gracePeriodDays = gracePeriodDays;
+    }
+
+    public boolean isAutoRenew() {
+        return autoRenew;
+    }
+
+    public void setAutoRenew(boolean autoRenew) {
+        this.autoRenew = autoRenew;
+    }
 }

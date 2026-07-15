@@ -114,20 +114,19 @@ public class LeaseActionScheduler {
     /**
      * Each lease gets its own transaction, same isolation pattern as
      * activateOne(). Delegates to LeaseWorkflowEngine.expire() rather than
-     * calling Lease.expire() directly (unlike activateOne(), which has no
-     * corresponding engine method to call) — this reuses the engine's
-     * existing validation and event-publishing, avoiding a third,
-     * inconsistent event-publishing path. See handoff notes: this keeps
-     * EXPIRE's manual and scheduled paths behaving identically.
+     * calling Lease.expire() directly, reusing the engine's validation.
      *
-     * UPDATED (this session): added an independent MONTH_TO_MONTH guard
-     * inside the method itself, matching the self-contained-invariant
-     * pattern already used by activateOne(). Previously this safety lived
-     * only in runDailyExpiry()'s query filter — if expireOne() were ever
-     * called from anywhere else (a future admin action, a retry path, a
-     * different scheduler), nothing would stop a MONTH_TO_MONTH lease from
-     * being silently expired. Fails loudly instead of assuming the caller
-     * already filtered correctly.
+     * FIX (this session): added the pullDomainEvents()/publishAll() pair
+     * below. Previously this method relied entirely on
+     * LeaseWorkflowEngine.expire()'s own direct eventPublisher.publish()
+     * call to fire LeaseExpiredEvent — that direct call has now been
+     * removed from the engine as part of fixing a double-publish bug on
+     * the manual-action path (see LeaseWorkflowEngine.java /
+     * LeaseApplicationService.executeAction()). Without this addition,
+     * removing the engine's direct publish would have silently stopped
+     * LeaseExpiredEvent from firing on the scheduled sweep entirely. This
+     * now matches the same publish pattern already used by activateOne()
+     * above.
      */
     @Transactional
     public void expireOne(Lease lease) {
@@ -148,6 +147,9 @@ public class LeaseActionScheduler {
 
         leaseWorkflowEngine.expire(lease);
         leaseRepository.save(lease);
+
+        // ---------------- DOMAIN EVENTS ----------------
+        eventPublisher.publishAll(lease.pullDomainEvents());
 
         log.info("Lease expired. leaseId={}", lease.getId());
     }

@@ -217,8 +217,35 @@ public class LeaseApplicationService {
             );
         }
 
+        // FIX: pull events from `lease` (pre-save, live domainEvents list),
+        // not from `saved` — LeaseRepositoryImpl.save() returns
+        // mapper.toDomain(...), which reconstructs the Lease via restore()/
+        // rehydrate() and never repopulates AggregateRoot's transient
+        // domainEvents list. Pulling from `saved` silently published nothing
+        // for every action (APPROVE, ACTIVATE, REJECT, TERMINATE, RENEW,
+        // EXPIRE, CANCEL) prior to this fix — the same shape as the bug
+        // already fixed in create() above.
+        //
+        // ⚠️ CONSEQUENCE OF THIS FIX — READ BEFORE DEPLOYING:
+        // The comments on EXPIRE and CANCEL above describe a "pre-existing
+        // double-publish bug," on the theory that LeaseWorkflowEngine
+        // publishes some events directly AND Lease.registerEvent() queues
+        // the same event for this flush. While this line was silently
+        // publishing nothing, that theoretical double-publish could never
+        // actually have happened in practice. Now that this flush is real,
+        // if LeaseWorkflowEngine.approve/activate/terminate/renew/cancel
+        // truly do publish directly in addition to registerEvent(), those
+        // five actions will now genuinely double-fire their events (extra
+        // notifications, duplicate side effects in any listener, etc).
+        // VERIFY LeaseWorkflowEngine's publishing behavior for each of
+        // those five methods before this goes to production — if it does
+        // publish directly, either remove the direct publish there or stop
+        // registering the event on Lease for that action, so there's a
+        // single source of truth per action.
+        List<DomainEvent> events = lease.pullDomainEvents();
+
         Lease saved = leaseRepository.save(lease);
-        eventPublisher.publishAll(saved.pullDomainEvents());
+        eventPublisher.publishAll(events);
 
         return new LeaseActionResponse(
                 saved.getId(),

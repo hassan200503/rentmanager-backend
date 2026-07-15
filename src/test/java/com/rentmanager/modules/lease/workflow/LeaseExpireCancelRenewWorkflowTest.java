@@ -1,10 +1,10 @@
 package com.rentmanager.modules.lease.workflow;
 
+import com.rentmanager.domain.base.DomainEvent;
 import com.rentmanager.modules.lease.domain.enums.*;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowEngine;
 import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowValidator;
-import com.rentmanager.modules.lease.domain.workflow.LeaseEventPublisher;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.lease.domain.service.LeaseDomainService;
 import com.rentmanager.modules.lease.domain.service.UnitOccupancyService;
@@ -12,7 +12,6 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -26,9 +25,19 @@ import static org.mockito.Mockito.*;
  * constructor. Step 5 (cron revert) is a commit-time checklist item per
  * §2.9, not something meaningfully assertable as a unit test.
  *
+ * UPDATED: LeaseEventPublisher and the engine's direct publish() calls
+ * were removed in the double-publish fix (see LeaseWorkflowEngine's
+ * class-level doc). registerEvent()/pullDomainEvents() is now the single
+ * source of truth for every transition, including expire() — the
+ * asymmetry this test originally guarded (expire published directly and
+ * deliberately did NOT registerEvent) no longer exists by design. Step 2
+ * below is rewritten to assert the same regression risk (a future
+ * double-publish on expire) via pullDomainEvents() instead of a collected
+ * publisher callback, since there is no longer a publisher to collect from.
+ *
  * Signatures below confirmed against real Lease.java source:
- * - expire() is no-arg, intentionally does not call registerEvent()
- *   (see Addendum 4 §2.2/§3.1) -- confirmed, not guessed.
+ * - expire() is no-arg, now registers its event via registerEvent() like
+ *   every other transition (no longer a special case).
  * - renew(LocalDate newStart, LocalDate newEnd, UUID tenantId, String actor)
  *   -- corrected from an earlier guessed (LocalDate, BigDecimal) shape.
  * - isCancelled() lives on LeaseStatus, not Lease -- corrected from an
@@ -56,13 +65,10 @@ class LeaseExpireCancelRenewWorkflowTest {
     }
 
     // Real constructor confirmed against LeaseTenantIsolationServiceTest's
-    // engine() factory. Event publisher swapped for a collecting consumer
-    // so tests can assert on publish COUNT, not just absence of exceptions
-    // -- no prior test in the suite does this.
-    private LeaseWorkflowEngine engineWithEventCollector(List<Object> publishedEvents) {
+    // engine() factory. No publisher argument anymore -- see class doc.
+    private LeaseWorkflowEngine createEngine() {
         return new LeaseWorkflowEngine(
                 new LeaseWorkflowValidator(),
-                new LeaseEventPublisher(publishedEvents::add),
                 mock(LeaseRepository.class),
                 mock(LeaseDomainService.class),
                 mock(UnitOccupancyService.class)
@@ -80,8 +86,7 @@ class LeaseExpireCancelRenewWorkflowTest {
     // avoid duplicating that test's job.
     @Test
     void cancel_awaitingDepositLease_setsStatusCancelled_notTerminated() {
-        List<Object> publishedEvents = new ArrayList<>();
-        LeaseWorkflowEngine engine = engineWithEventCollector(publishedEvents);
+        LeaseWorkflowEngine engine = createEngine();
 
         Lease lease = createLease(LeaseType.STANDARD);
         lease.approve();
@@ -97,30 +102,35 @@ class LeaseExpireCancelRenewWorkflowTest {
     // =========================
     // §4.4 STEP 2: EXPIRE on ACTIVE — exactly one event
     // =========================
-    // This is the one that guards against someone "fixing" the deliberate
-    // asymmetry in Lease.expire() (§2.2/§3.1) by adding registerEvent()
-    // back without understanding why it was removed. If that regression
-    // happens, this test starts asserting 1 == 2 and fails loudly.
+    // This is the one that guards against someone reintroducing a double-
+    // publish on expire (e.g. adding a direct publisher call back in
+    // alongside registerEvent()). If that regression happens, this test
+    // starts asserting 1 == 2 and fails loudly.
     @Test
-    void expire_activeLease_setsStatusExpired_andPublishesExactlyOneEvent() {
-        List<Object> publishedEvents = new ArrayList<>();
-        LeaseWorkflowEngine engine = engineWithEventCollector(publishedEvents);
+    void expire_activeLease_setsStatusExpired_andRegistersExactlyOneEvent() {
+        LeaseWorkflowEngine engine = createEngine();
 
         Lease lease = createLease(LeaseType.STANDARD);
         lease.approve();
         lease.markAwaitingDeposit();
         lease.activate();
 
+        // Drain events from approve/markAwaitingDeposit/activate so the
+        // count below isolates expire()'s contribution only.
+        lease.pullDomainEvents();
+
         engine.expire(lease);
 
         assertEquals(LeaseStatus.EXPIRED, lease.getStatus());
+
+        List<DomainEvent> publishedEvents = lease.pullDomainEvents();
         assertEquals(
                 1,
                 publishedEvents.size(),
-                "Expected exactly one LeaseExpiredEvent published via the engine's direct "
-                        + "publish call. Lease.expire() must NOT also call registerEvent() -- "
-                        + "see Addendum 4 §2.2/§3.1. A count of 2 here means that asymmetry "
-                        + "was reverted, reintroducing the double-publish bug for EXPIRE."
+                "Expected exactly one event registered via Lease.expire()'s "
+                        + "registerEvent() call. A count of 2 here means expire() is "
+                        + "somehow registering twice, or a direct publisher call was "
+                        + "reintroduced alongside it -- reintroducing the double-publish bug."
         );
     }
 

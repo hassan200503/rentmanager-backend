@@ -55,6 +55,9 @@ class PropertyLifecycleTest {
     @Mock
     private PropertyMarkVacantValidator propertyMarkVacantValidator;
 
+    @Mock
+    private PropertyMarkPartiallyOccupiedValidator propertyMarkPartiallyOccupiedValidator;
+
     private final UUID TENANT_ID = UUID.randomUUID();
     private final UUID PROPERTY_ID = UUID.randomUUID();
 
@@ -71,7 +74,8 @@ class PropertyLifecycleTest {
                 updatePropertyValidator,
                 activatePropertyValidator,
                 markFullyOccupiedValidator,
-                propertyMarkVacantValidator
+                propertyMarkVacantValidator,
+                propertyMarkPartiallyOccupiedValidator
         );
 
         property = Property.create(

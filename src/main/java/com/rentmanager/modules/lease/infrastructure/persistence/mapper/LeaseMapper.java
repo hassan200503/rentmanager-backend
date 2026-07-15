@@ -14,10 +14,10 @@ public class LeaseMapper {
      */
     public void updateEntity(LeaseEntity e, Lease lease) {
 
-
         if (lease.getId() != null) {
             setField(e, "id", lease.getId());
         }
+
         // FIX: was setField(e, "tenantId", lease.getTenantId()) via raw
         // reflection, which bypassed BaseTenantEntity's tenant-isolation
         // guard entirely and could silently move a row to a different
@@ -43,9 +43,7 @@ public class LeaseMapper {
 
         e.setStatus(lease.getStatus());
 
-        // UPDATED: lifecycle metadata now read via real getters, added to
-        // Lease.java this session, instead of reflection. Only
-        // getCancelledAt() existed before; the other six are new.
+        // Lifecycle metadata — real getters on Lease.java (this session).
         e.setSignedAt(lease.getSignedAt());
         e.setActivatedAt(lease.getActivatedAt());
         e.setTerminatedAt(lease.getTerminatedAt());
@@ -54,7 +52,17 @@ public class LeaseMapper {
         e.setCancelledAt(lease.getCancelledAt());
         e.setTerminationType(lease.getTerminationType());
         e.setTerminationReason(lease.getTerminationReason());
+
+        // FIX (Track B): previously missing entirely — no column, no
+        // setter call. Every lease saved before this fix silently
+        // discarded lateFeeAmount/gracePeriodDays/autoRenew on write.
+        // Requires LeaseEntity to have these three columns (migration +
+        // entity fields added alongside this change).
+        e.setLateFeeAmount(lease.getLateFeeAmount());
+        e.setGracePeriodDays(lease.getGracePeriodDays());
+        e.setAutoRenew(lease.isAutoRenew());
     }
+
     /**
      * ENTITY → DOMAIN (SAFE RECONSTRUCTION)
      *
@@ -84,7 +92,6 @@ public class LeaseMapper {
                 e.getStatus()
         );
 
-
         // identity restore
         setField(lease, "id", e.getId());
         setField(lease, "tenantId", e.getTenantId());
@@ -92,13 +99,12 @@ public class LeaseMapper {
         // lifecycle restore
         setField(lease, "status", e.getStatus());
 
-        // timestamps RESTORE (IMPORTANT FIX FOR TEST STABILITY)
+        // timestamps restore (test stability + audit correctness)
         setField(lease, "createdAt", e.getCreatedAt());
         setField(lease, "updatedAt", e.getUpdatedAt());
 
-        // lifecycle metadata restore -- previously always null after any
+        // lifecycle metadata restore — previously always null after any
         // save/reload cycle regardless of what the domain object had set.
-        // See Addendum 4 follow-up finding.
         setField(lease, "signedAt", e.getSignedAt());
         setField(lease, "activatedAt", e.getActivatedAt());
         setField(lease, "terminatedAt", e.getTerminatedAt());
@@ -108,15 +114,24 @@ public class LeaseMapper {
         setField(lease, "terminationType", e.getTerminationType());
         setField(lease, "terminationReason", e.getTerminationReason());
 
+        // FIX (Track B): previously missing entirely — restore() never
+        // took these params and nothing reflected them back in either,
+        // so every reload came back with lateFeeAmount=null,
+        // gracePeriodDays=null, autoRenew=false regardless of what was
+        // actually in the database (once updateEntity() above is also
+        // fixed to actually persist them).
+        setField(lease, "lateFeeAmount", e.getLateFeeAmount());
+        setField(lease, "gracePeriodDays", e.getGracePeriodDays());
+        setField(lease, "autoRenew", e.isAutoRenew());
+
         return lease;
     }
-
 
     public LeaseEntity toEntity(Lease lease) {
 
         LeaseEntity entity = new LeaseEntity();
 
-// ensure ID consistency
+        // ensure ID consistency
         if (lease.getId() != null) {
             setField(entity, "id", lease.getId());
         }
@@ -125,6 +140,7 @@ public class LeaseMapper {
 
         return entity;
     }
+
     /**
      * Reflection-based safe field restoration (no domain leaks)
      */

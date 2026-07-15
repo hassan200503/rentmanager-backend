@@ -1,9 +1,11 @@
 package com.rentmanager.modules.lease.application;
 
+import com.rentmanager.domain.base.DomainEvent;
 import com.rentmanager.modules.lease.domain.enums.*;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.event.*;
 import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowEngine;
+import com.rentmanager.shared.events.DomainEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -23,6 +25,16 @@ class LeaseEventApplicationTest {
 
     @Autowired
     private LeaseWorkflowEngine workflowEngine;
+
+    // FIX: added. Workflow engine transitions only call Lease.registerEvent()
+    // internally — nothing publishes those events to Spring on its own.
+    // In production, LeaseApplicationService.executeAction() is the one place
+    // that does lease.pullDomainEvents() + eventPublisher.publishAll(events)
+    // after each transition. This test called the workflow engine directly,
+    // skipping that flush entirely, so EventCaptureListener never received
+    // anything and both assertions failed with events.isEmpty() == true.
+    @Autowired
+    private DomainEventPublisher eventPublisher;
 
     @Autowired
     private EventCaptureListener listener;
@@ -51,6 +63,12 @@ class LeaseEventApplicationTest {
         workflowEngine.markAwaitingDeposit(lease);
 
         workflowEngine.activate(lease);
+
+        // FIX: pull + publish, mirroring LeaseApplicationService.executeAction().
+        // Without this, the events registered on `lease` never leave the
+        // aggregate and EventCaptureListener stays empty.
+        List<DomainEvent> pulled = lease.pullDomainEvents();
+        eventPublisher.publishAll(pulled);
 
         List<Object> events = listener.getEvents();
 
@@ -85,7 +103,15 @@ class LeaseEventApplicationTest {
         workflowEngine.markAwaitingDeposit(lease);
         workflowEngine.activate(lease);
 
+        // FIX: flush activation-related events before moving on to
+        // termination, so pullDomainEvents() below only contains the
+        // termination event (pullDomainEvents() drains the list).
+        eventPublisher.publishAll(lease.pullDomainEvents());
+
         workflowEngine.terminate(lease, TerminationType.TENANT_REQUEST, "exit");
+
+        // FIX: pull + publish the termination event, same as above.
+        eventPublisher.publishAll(lease.pullDomainEvents());
 
         List<Object> events = listener.getEvents();
 

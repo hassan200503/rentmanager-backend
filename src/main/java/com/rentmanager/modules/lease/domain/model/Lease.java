@@ -373,12 +373,26 @@ public class Lease extends AggregateRoot {
         }
         this.status = LeaseStatus.EXPIRED;
         this.expiredAt = LocalDateTime.now();
-        // INTENTIONALLY no registerEvent() here — see handoff notes on the
-        // pre-existing double-publish bug. LeaseWorkflowEngine.expire()
-        // already publishes LeaseExpiredEvent directly; registering it here
-        // too would double-fire it via executeAction()'s pullDomainEvents()
-        // flush, matching the same latent bug already present on
-        // APPROVE/ACTIVATE/TERMINATE/RENEW/CANCEL. Flagged, not fixed here.
+
+        // FIX (this session): restored. Previously omitted deliberately to
+        // dodge a double-publish through LeaseWorkflowEngine.expire()'s
+        // direct eventPublisher.publish() call — that direct call has now
+        // been removed from the engine (see LeaseWorkflowEngine.java), so
+        // this registerEvent() is once again the sole publish path for
+        // LeaseExpiredEvent, consistent with every other transition on this
+        // aggregate. LeaseActionScheduler.expireOne() was updated in the
+        // same change to pull and publish this event, since it previously
+        // relied entirely on the engine's now-removed direct publish.
+        registerEvent(
+                new LeaseExpiredEvent(
+                        getTenantId(),
+                        getId(),
+                        "SYSTEM",
+                        propertyId,
+                        unitId,
+                        tenantProfileId
+                )
+        );
     }
 
     public void renew(
@@ -599,6 +613,13 @@ public class Lease extends AggregateRoot {
         }
     }
 
+    // NOT MODIFIED IN THIS PASS — see chat: this factory only reconstructs
+    // 8 of the aggregate's 19 persisted fields (missing lateFeeAmount,
+    // gracePeriodDays, autoRenew, signedAt, activatedAt, terminatedAt,
+    // expiredAt, renewedAt, cancelledAt, terminationType,
+    // terminationReason). Left untouched pending review of the mapper that
+    // calls this, to confirm the call site and avoid a blind signature
+    // change on a live persistence path.
     public static Lease restore(
             UUID id,
             UUID tenantId,

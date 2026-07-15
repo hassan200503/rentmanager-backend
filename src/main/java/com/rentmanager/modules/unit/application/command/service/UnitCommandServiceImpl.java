@@ -51,6 +51,10 @@ public class UnitCommandServiceImpl implements UnitCommandService {
                 generateCorrelationId()
         );
 
+        // FIX: pull events from `unit` (pre-save) before save() returns a
+        // rehydrated instance with an empty domainEvents list.
+        var events = unit.pullDomainEvents();
+
         Unit saved;
         try {
             saved = unitRepository.save(unit);
@@ -60,7 +64,7 @@ public class UnitCommandServiceImpl implements UnitCommandService {
             );
         }
 
-        eventPublisher.publishAll(saved.pullDomainEvents());
+        eventPublisher.publishAll(events);
 
         return unitMapper.toResponse(saved);
     }
@@ -82,9 +86,12 @@ public class UnitCommandServiceImpl implements UnitCommandService {
                 generateCorrelationId()
         );
 
+        // FIX: pull from pre-save `unit`.
+        var events = unit.pullDomainEvents();
+
         Unit saved = unitRepository.save(unit);
 
-        eventPublisher.publishAll(saved.pullDomainEvents());
+        eventPublisher.publishAll(events);
 
         return unitMapper.toResponse(saved);
     }
@@ -96,9 +103,12 @@ public class UnitCommandServiceImpl implements UnitCommandService {
 
         unit.activate(resolveCorrelationId(correlationId));
 
-        Unit saved = unitRepository.save(unit);
+        // FIX: pull from pre-save `unit`.
+        var events = unit.pullDomainEvents();
 
-        eventPublisher.publishAll(saved.pullDomainEvents());
+        unitRepository.save(unit);
+
+        eventPublisher.publishAll(events);
     }
 
     @Override
@@ -108,9 +118,12 @@ public class UnitCommandServiceImpl implements UnitCommandService {
 
         unit.archive("SYSTEM");
 
-        Unit saved = unitRepository.save(unit);
+        // FIX: pull from pre-save `unit`.
+        var events = unit.pullDomainEvents();
 
-        eventPublisher.publishAll(saved.pullDomainEvents());
+        unitRepository.save(unit);
+
+        eventPublisher.publishAll(events);
     }
 
     @Override
@@ -120,9 +133,12 @@ public class UnitCommandServiceImpl implements UnitCommandService {
 
         unit.markOccupied(resolveCorrelationId(correlationId));
 
-        Unit saved = unitRepository.save(unit);
+        // FIX: pull from pre-save `unit`.
+        var events = unit.pullDomainEvents();
 
-        eventPublisher.publishAll(saved.pullDomainEvents());
+        unitRepository.save(unit);
+
+        eventPublisher.publishAll(events);
     }
 
     @Override
@@ -132,9 +148,12 @@ public class UnitCommandServiceImpl implements UnitCommandService {
 
         unit.markVacant(resolveCorrelationId(correlationId));
 
-        Unit saved = unitRepository.save(unit);
+        // FIX: pull from pre-save `unit`.
+        var events = unit.pullDomainEvents();
 
-        eventPublisher.publishAll(saved.pullDomainEvents());
+        unitRepository.save(unit);
+
+        eventPublisher.publishAll(events);
     }
 
     private String generateCorrelationId() {

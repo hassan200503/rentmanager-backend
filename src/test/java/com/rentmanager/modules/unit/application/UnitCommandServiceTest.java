@@ -76,7 +76,12 @@ class UnitCommandServiceTest {
         UnitResponse response = mock(UnitResponse.class);
 
         when(unitRepository.save(any(Unit.class))).thenReturn(unit);
-        when(unit.pullDomainEvents()).thenReturn(Collections.emptyList());
+        // FIX: removed `when(unit.pullDomainEvents()).thenReturn(Collections.emptyList());`
+        // UnitCommandServiceImpl.create() builds its own real Unit via Unit.create(...)
+        // and calls pullDomainEvents() on THAT instance, before save() is even invoked.
+        // This `unit` mock is only ever the return value of unitRepository.save(...) —
+        // pullDomainEvents() is never called on it, so stubbing it tripped Mockito's
+        // strict UnnecessaryStubbingException.
         when(unitMapper.toResponse(unit)).thenReturn(response);
 
         UnitResponse result = service.create(tenantId, request);

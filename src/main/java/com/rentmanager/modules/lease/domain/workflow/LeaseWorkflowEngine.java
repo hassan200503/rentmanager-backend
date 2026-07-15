@@ -3,7 +3,6 @@ package com.rentmanager.modules.lease.domain.workflow;
 import com.rentmanager.modules.lease.domain.enums.LeaseStatus;
 import com.rentmanager.modules.lease.domain.enums.TerminationType;
 import com.rentmanager.modules.lease.domain.model.Lease;
-import com.rentmanager.modules.lease.domain.event.*;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.lease.domain.service.LeaseDomainService;
 import com.rentmanager.modules.lease.domain.service.UnitOccupancyService;
@@ -17,13 +16,28 @@ import java.time.LocalDate;
  * RULES:
  * - NEVER directly mutate state (no setStatus usage)
  * - ALWAYS delegate state changes to Lease aggregate
- * - ONLY orchestrate + publish events
+ * - Validates + orchestrates state transitions only
+ *
+ * FIX (this session): this class previously called
+ * eventPublisher.publish(...) directly inside approve/activate/reject/
+ * terminate/renew/cancel, IN ADDITION TO Lease itself registering the same
+ * event via registerEvent() on every one of those transitions. Before
+ * LeaseApplicationService.executeAction() correctly pulled events off the
+ * aggregate (separate fix, same session), the registerEvent() side was
+ * dead — this class's direct publish was the only live path, so it looked
+ * correct. Once pullDomainEvents() started working, every one of those six
+ * transitions double-fired its event. LeaseEventPublisher and its direct
+ * publish() calls are removed here; Lease's own registerEvent() plus the
+ * application layer's pullDomainEvents()/publishAll() is now the single
+ * source of truth, consistent with Unit, Deposit, and PaymentIntent
+ * elsewhere in this codebase. expire() is no longer a special case either
+ * — see Lease.expire(), which now registers its event again now that this
+ * class no longer double-publishes it.
  */
 @Component
 public class LeaseWorkflowEngine {
 
     private final LeaseWorkflowValidator validator;
-    private final LeaseEventPublisher eventPublisher;
     private final UnitOccupancyService unitOccupancyService;
     private final LeaseRepository leaseRepository;
     private final LeaseDomainService leaseDomainService;
@@ -33,13 +47,11 @@ public class LeaseWorkflowEngine {
 
     public LeaseWorkflowEngine(
             LeaseWorkflowValidator validator,
-            LeaseEventPublisher eventPublisher,
             LeaseRepository leaseRepository,
             LeaseDomainService leaseDomainService,
             UnitOccupancyService unitOccupancyService
     ) {
         this.validator = validator;
-        this.eventPublisher = eventPublisher;
         this.leaseRepository = leaseRepository;
         this.leaseDomainService = leaseDomainService;
         this.unitOccupancyService = unitOccupancyService;
@@ -56,15 +68,6 @@ public class LeaseWorkflowEngine {
         }
 
         lease.approve();
-
-        eventPublisher.publish(new LeaseApprovedEvent(
-                lease.getTenantId(),
-                lease.getId(),
-                "SYSTEM",
-                lease.getPropertyId(),
-                lease.getUnitId(),
-                lease.getTenantProfileId()
-        ));
     }
 
     // =========================================================
@@ -76,15 +79,6 @@ public class LeaseWorkflowEngine {
         validator.validateActivation(lease);
         unitOccupancyService.validateUnitAvailability(lease.getUnitId());
         lease.activate();
-
-        eventPublisher.publish(new LeaseActivatedEvent(
-                lease.getTenantId(),
-                lease.getId(),
-                "SYSTEM",
-                lease.getPropertyId(),
-                lease.getUnitId(),
-                lease.getTenantProfileId()
-        ));
     }
 
     // =========================================================
@@ -99,16 +93,6 @@ public class LeaseWorkflowEngine {
         }
 
         lease.reject(reason);
-
-        eventPublisher.publish(new LeaseCancelledEvent(
-                lease.getTenantId(),
-                lease.getId(),
-                "SYSTEM",
-                lease.getPropertyId(),
-                lease.getUnitId(),
-                lease.getTenantProfileId(),
-                reason
-        ));
     }
 
     // =========================================================
@@ -129,17 +113,6 @@ public class LeaseWorkflowEngine {
                 "SYSTEM",
                 lease.getTenantId()
         );
-
-        eventPublisher.publish(new LeaseTerminatedEvent(
-                lease.getTenantId(),
-                lease.getId(),
-                "SYSTEM",
-                lease.getPropertyId(),
-                lease.getUnitId(),
-                lease.getTenantProfileId(),
-                type,
-                reason
-        ));
     }
 
     // =========================================================
@@ -148,25 +121,13 @@ public class LeaseWorkflowEngine {
 
     public void expire(Lease lease) {
 
-        // NEW: was previously unguarded — only method in the engine with no
-        // precondition check, inconsistent with every sibling. Now mirrors
-        // Lease.expire()'s own guard, matching the rest of this class.
         validator.validateExpiry(lease);
 
         lease.expire();
-
-        eventPublisher.publish(new LeaseExpiredEvent(
-                lease.getTenantId(),
-                lease.getId(),
-                "SYSTEM",
-                lease.getPropertyId(),
-                lease.getUnitId(),
-                lease.getTenantProfileId()
-        ));
     }
 
     // =========================================================
-    // CANCELLATION FLOW (NEW)
+    // CANCELLATION FLOW
     // =========================================================
 
     public void cancel(Lease lease, String reason) {
@@ -174,16 +135,6 @@ public class LeaseWorkflowEngine {
         validator.validateCancellation(lease);
 
         lease.cancel(reason);
-
-        eventPublisher.publish(new LeaseCancelledEvent(
-                lease.getTenantId(),
-                lease.getId(),
-                "SYSTEM",
-                lease.getPropertyId(),
-                lease.getUnitId(),
-                lease.getTenantProfileId(),
-                reason
-        ));
     }
 
     // =========================================================
@@ -198,15 +149,7 @@ public class LeaseWorkflowEngine {
 
         validator.validateRenewal(lease);
 
-        lease.renew(newStart, newEnd, lease.getTenantId(),"SYSTEM");
-
-        eventPublisher.publish(new LeaseRenewedEvent(
-                lease.getTenantId(),
-                lease.getId(),
-                "SYSTEM",
-                newStart,
-                newEnd
-        ));
+        lease.renew(newStart, newEnd, lease.getTenantId(), "SYSTEM");
     }
 
 

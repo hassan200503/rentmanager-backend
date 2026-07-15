@@ -8,6 +8,7 @@ import java.util.UUID;
 public class UnitOccupancyChangedEvent extends DomainEvent {
 
     private final UUID unitId;
+    private final UUID propertyId;
     private final UnitOccupancyStatus previousStatus;
     private final UnitOccupancyStatus newStatus;
 
@@ -16,17 +17,23 @@ public class UnitOccupancyChangedEvent extends DomainEvent {
             UUID aggregateId,
             String correlationId,
             UUID unitId,
+            UUID propertyId,
             UnitOccupancyStatus previousStatus,
             UnitOccupancyStatus newStatus
     ) {
-        super(tenantId,aggregateId, correlationId);
+        super(tenantId, aggregateId, correlationId);
         this.unitId = unitId;
+        this.propertyId = propertyId;
         this.previousStatus = previousStatus;
         this.newStatus = newStatus;
     }
 
     public UUID getUnitId() {
         return unitId;
+    }
+
+    public UUID getPropertyId() {
+        return propertyId;
     }
 
     public UnitOccupancyStatus getPreviousStatus() {

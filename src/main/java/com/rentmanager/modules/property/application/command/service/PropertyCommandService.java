@@ -21,4 +21,7 @@ public interface PropertyCommandService {
     PropertyResponse markFullyOccupied(UUID tenantId, UUID propertyId);
 
     PropertyResponse markVacant(UUID tenantId, UUID propertyId);
+
+
+    PropertyResponse markPartiallyOccupied(UUID tenantId, UUID propertyId);
 }
