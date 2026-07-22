@@ -44,6 +44,14 @@ public class PaymentIntentRepositoryImpl implements PaymentIntentRepository {
                 .toList();
     }
 
+    @Override
+    public List<PaymentIntent> findByStatusInAndCreatedAtBefore(List<PaymentIntentStatus> statuses, Instant cutoff) {
+        return jpaRepository.findByStatusInAndCreatedAtBefore(statuses, cutoff)
+                .stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
     // -------------------------------------------------------
     // MAPPING
     // -------------------------------------------------------

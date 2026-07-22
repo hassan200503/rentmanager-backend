@@ -20,7 +20,9 @@ class UnitDomainTest {
                 UUID.randomUUID(),
                 "U-101",
                 "Test Unit",
+                null,
                 new BigDecimal("1200"),
+                null,
                 "desc",
                 "corr-1"
         );
@@ -64,7 +66,9 @@ class UnitDomainTest {
         unit.updateDetails(
                 "U-202",
                 "Updated Label",
+                null,
                 new BigDecimal("1500"),
+                null,
                 "updated desc",
                 "corr-upd"
         );
@@ -202,9 +206,11 @@ class UnitDomainTest {
                 UUID.randomUUID(),
                 "U-1",
                 "Label",
+                null,
                 UnitStatus.ACTIVE,
                 UnitOccupancyStatus.OCCUPIED,
                 new BigDecimal("1000"),
+                null,
                 "desc",
                 null
         );

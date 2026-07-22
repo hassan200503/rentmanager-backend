@@ -66,16 +66,14 @@ public class UnitReservationSummaryQueryServiceImpl implements UnitReservationSu
                         "Property not found", ErrorCode.PROPERTY_NOT_FOUND
                 ));
 
-        // TODO: DEPOSIT_MONTHS is a hardcoded constant (2 months), not
-        // sourced from any stored lease/deposit-terms entity. Flagged per
-        // handoff §2.3 as a possible business-logic concern — out of scope
-        // for this security fix, not changed here.
-        BigDecimal deposit = unit.getRentAmount()
-                .multiply(BigDecimal.valueOf(DEPOSIT_MONTHS));
+        BigDecimal deposit = unit.getDepositAmount() != null
+                ? unit.getDepositAmount()
+                : unit.getRentAmount().multiply(BigDecimal.valueOf(DEPOSIT_MONTHS));
 
         return UnitReservationSummaryResponse.builder()
                 .unitId(unit.getId())
                 .unitNumber(unit.getUnitNumber())
+                .label(unit.getLabel())
                 .propertyName(property.getName())
                 .monthlyRent(unit.getRentAmount())
                 .depositAmount(deposit)

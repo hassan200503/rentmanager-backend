@@ -8,6 +8,7 @@ import com.rentmanager.modules.property.domain.event.PropertyActivatedEvent;
 import com.rentmanager.modules.property.domain.event.PropertyArchivedEvent;
 import com.rentmanager.modules.property.domain.event.PropertyCreatedEvent;
 import com.rentmanager.modules.property.domain.event.PropertyOccupancyChangedEvent;
+import com.rentmanager.modules.property.domain.event.PropertyUpdatedEvent;
 import com.rentmanager.modules.property.domain.valueobject.Address;
 import com.rentmanager.modules.property.domain.valueobject.GeoLocation;
 import com.rentmanager.modules.property.domain.valueobject.PropertyDimensions;
@@ -186,6 +187,13 @@ public class Property extends AggregateRoot {
         if (description != null) {
             this.description = description;
         }
+
+        registerEvent(new PropertyUpdatedEvent(
+                tenantId,
+                "PROP-UPDATE-" + getId(),
+                getId(),
+                getId()
+        ));
     }
 
     public void archive() {

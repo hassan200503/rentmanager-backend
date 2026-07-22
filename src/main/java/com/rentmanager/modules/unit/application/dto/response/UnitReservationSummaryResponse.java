@@ -16,6 +16,7 @@ public class UnitReservationSummaryResponse {
 
     private UUID unitId;
     private String unitNumber;
+    private String label;
     private String propertyName;
     private BigDecimal monthlyRent;
     private BigDecimal depositAmount;

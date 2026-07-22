@@ -30,7 +30,9 @@ public class TestDataFactory {
                 propertyId,
                 "U-101",
                 "Unit 101",
+                null,
                 new BigDecimal("1200"),
+                null,
                 "Nice unit",
                 "TEST"
         );

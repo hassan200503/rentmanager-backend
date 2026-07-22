@@ -20,7 +20,9 @@ class UnitTest {
                 UUID.randomUUID(),
                 "U-001",
                 "Test Unit",
+                null,
                 BigDecimal.valueOf(1000),
+                null,
                 "desc",
                 "corr-1"
         );
@@ -38,7 +40,9 @@ class UnitTest {
                 UUID.randomUUID(),
                 "U-002",
                 "Test Unit",
+                null,
                 BigDecimal.valueOf(1000),
+                null,
                 "desc",
                 "corr-1"
         );
@@ -56,7 +60,9 @@ class UnitTest {
                 UUID.randomUUID(),
                 "U-003",
                 "Test Unit",
+                null,
                 BigDecimal.valueOf(1000),
+                null,
                 "desc",
                 "corr-1"
         );
@@ -75,7 +81,9 @@ class UnitTest {
                 UUID.randomUUID(),
                 "U-004",
                 "Test Unit",
+                null,
                 BigDecimal.valueOf(1000),
+                null,
                 "desc",
                 "corr-1"
         );
@@ -93,7 +101,9 @@ class UnitTest {
                 UUID.randomUUID(),
                 "U-005",
                 "Test Unit",
+                null,
                 BigDecimal.valueOf(1000),
+                null,
                 "desc",
                 "corr-1"
         );
@@ -115,7 +125,9 @@ class UnitTest {
                 UUID.randomUUID(),
                 "U-006",
                 "Test Unit",
+                null,
                 BigDecimal.valueOf(1000),
+                null,
                 "desc",
                 "corr-1"
         );
@@ -134,7 +146,9 @@ class UnitTest {
                 UUID.randomUUID(),
                 "U-007",
                 "Test Unit",
+                null,
                 BigDecimal.valueOf(1000),
+                null,
                 "desc",
                 "corr-1"
         );
@@ -154,7 +168,9 @@ class UnitTest {
                 UUID.randomUUID(),
                 "U-008",
                 "Test Unit",
+                null,
                 BigDecimal.valueOf(1000),
+                null,
                 "desc",
                 "corr-1"
         );

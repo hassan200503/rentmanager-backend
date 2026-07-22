@@ -71,7 +71,9 @@ class CrossModuleRollbackIT {
                             property.getId(),
                             "U-ROLLBACK",
                             "Rollback Unit",
+                            null,
                             new BigDecimal("1500"),
+                            null,
                             "desc",
                             "TX-1"
                     );

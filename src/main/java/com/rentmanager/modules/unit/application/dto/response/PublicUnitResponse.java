@@ -9,8 +9,11 @@ public class PublicUnitResponse {
     private UUID id;
     private UUID propertyId;
     private String unitNumber;
+    private String label;
+    private String floor;
     private String description;
     private BigDecimal rentAmount;
+    private BigDecimal depositAmount;
     private String occupancyStatus; // always "VACANT" for this endpoint, but kept for clarity
 
     public PublicUnitResponse() {}
@@ -25,11 +28,20 @@ public class PublicUnitResponse {
     public String getUnitNumber() { return unitNumber; }
     public void setUnitNumber(String unitNumber) { this.unitNumber = unitNumber; }
 
+    public String getLabel() { return label; }
+    public void setLabel(String label) { this.label = label; }
+
+    public String getFloor() { return floor; }
+    public void setFloor(String floor) { this.floor = floor; }
+
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
 
     public BigDecimal getRentAmount() { return rentAmount; }
     public void setRentAmount(BigDecimal rentAmount) { this.rentAmount = rentAmount; }
+
+    public BigDecimal getDepositAmount() { return depositAmount; }
+    public void setDepositAmount(BigDecimal depositAmount) { this.depositAmount = depositAmount; }
 
     public String getOccupancyStatus() { return occupancyStatus; }
     public void setOccupancyStatus(String occupancyStatus) { this.occupancyStatus = occupancyStatus; }

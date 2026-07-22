@@ -7,6 +7,8 @@ import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.lease.infrastructure.persistence.entity.LeaseEntity;
 import com.rentmanager.modules.lease.infrastructure.persistence.mapper.LeaseMapper;
 import com.rentmanager.modules.lease.infrastructure.persistence.repository.JpaLeaseRepository;
+import com.rentmanager.modules.unit.domain.model.Unit;
+import com.rentmanager.modules.unit.domain.repository.UnitRepository;
 import com.rentmanager.shared.events.DomainEventPublisher;
 import com.rentmanager.shared.exception.ErrorCode;
 import com.rentmanager.shared.exception.ResourceNotFoundException;
@@ -26,19 +28,22 @@ public class LeaseActionHandler {
     private final JpaLeaseRepository jpaLeaseRepository;
     private final LeaseMapper leaseMapper;
     private final DomainEventPublisher eventPublisher;
+    private final UnitRepository unitRepository;
 
     public LeaseActionHandler(
             LeaseRepository leaseRepository,
             LeaseActionValidator validator,
             JpaLeaseRepository jpaLeaseRepository,
             LeaseMapper leaseMapper,
-            DomainEventPublisher eventPublisher
+            DomainEventPublisher eventPublisher,
+            UnitRepository unitRepository
     ) {
         this.leaseRepository = leaseRepository;
         this.validator = validator;
         this.jpaLeaseRepository = jpaLeaseRepository;
         this.leaseMapper = leaseMapper;
         this.eventPublisher = eventPublisher;
+        this.unitRepository = unitRepository;
     }
 
     public void handle(UUID leaseId, LeaseActionRequest request) {
@@ -59,7 +64,23 @@ public class LeaseActionHandler {
         // 4. Execute domain action
         switch (request.getAction()) {
 
-            case ACTIVATE -> lease.activate();
+            case ACTIVATE -> {
+                lease.activate();
+
+                // Mark the unit as occupied so property occupancy rollup
+                // reflects the change when a lease is manually activated.
+                if (lease.getUnitId() != null) {
+                    Unit unit = unitRepository.findByIdAndTenantId(lease.getUnitId(), tenantId)
+                            .orElseThrow(() -> new ResourceNotFoundException(
+                                    "Unit not found: " + lease.getUnitId(),
+                                    ErrorCode.RESOURCE_NOT_FOUND
+                            ));
+                    unit.markOccupied(leaseId.toString());
+                    var unitEvents = unit.pullDomainEvents();
+                    unitRepository.save(unit);
+                    eventPublisher.publishAll(unitEvents);
+                }
+            }
 
             case APPROVE -> lease.approve();
 

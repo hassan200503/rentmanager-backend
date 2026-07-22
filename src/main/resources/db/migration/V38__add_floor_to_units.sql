@@ -1,0 +1,2 @@
+ALTER TABLE units
+    ADD COLUMN floor VARCHAR(50);

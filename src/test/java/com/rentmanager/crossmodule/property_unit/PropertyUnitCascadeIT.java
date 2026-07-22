@@ -41,7 +41,9 @@ class PropertyUnitCascadeIT {
                 property.getId(),
                 "U-1",
                 "Unit 1",
+                null,
                 new BigDecimal("1000"),
+                null,
                 "desc",
                 "CORR"
         );

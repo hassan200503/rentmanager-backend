@@ -23,6 +23,8 @@ public class UnitPersistenceMapper {
                 .status(unit.getStatus())
                 .occupancyStatus(unit.getOccupancyStatus())
                 .rentAmount(unit.getRentAmount())
+                .depositAmount(unit.getDepositAmount())
+                .floor(unit.getFloor())
                 .description(unit.getDescription())
                 .vacatedAt(unit.getVacatedAt())
                 .build();
@@ -41,9 +43,11 @@ public class UnitPersistenceMapper {
                 entity.getPropertyId(),
                 entity.getUnitNumber(),
                 entity.getLabel(),
+                entity.getFloor(),
                 entity.getStatus(),
                 entity.getOccupancyStatus(),
                 entity.getRentAmount(),
+                entity.getDepositAmount(),
                 entity.getDescription(),
                 entity.getVacatedAt()
         );

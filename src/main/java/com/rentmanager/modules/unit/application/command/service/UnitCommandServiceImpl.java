@@ -9,7 +9,7 @@ import com.rentmanager.modules.unit.domain.model.Unit;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
 import com.rentmanager.shared.events.DomainEventPublisher;
 import com.rentmanager.shared.exception.ConflictException;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -46,7 +46,9 @@ public class UnitCommandServiceImpl implements UnitCommandService {
                 request.getPropertyId(),
                 request.getUnitNumber(),
                 request.getLabel(),
+                request.getFloor(),
                 request.getRentAmount(),
+                request.getDepositAmount(),
                 request.getDescription(),
                 generateCorrelationId()
         );
@@ -81,7 +83,9 @@ public class UnitCommandServiceImpl implements UnitCommandService {
         unit.updateDetails(
                 unit.getUnitNumber(),
                 request.getLabel(),
+                request.getFloor(),
                 request.getRentAmount(),
+                request.getDepositAmount(),
                 request.getDescription(),
                 generateCorrelationId()
         );

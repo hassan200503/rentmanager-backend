@@ -4,6 +4,8 @@ import com.rentmanager.modules.activity.application.ActivityLogService;
 import com.rentmanager.modules.activity.domain.model.ActivityLog;
 import com.rentmanager.shared.security.context.TenantContext;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -20,6 +22,15 @@ public class ActivityLogController {
     @GetMapping
     public List<ActivityLog> recent(@RequestParam(defaultValue = "20") int limit) {
         return activityLogService.recent(TenantContext.getTenantId(), limit);
+    }
+
+    @GetMapping("/paginated")
+    public Page<ActivityLog> findAll(
+            @RequestParam(required = false) String entityType,
+            @RequestParam(required = false) String eventType,
+            Pageable pageable
+    ) {
+        return activityLogService.findAll(TenantContext.getTenantId(), entityType, eventType, pageable);
     }
 
     @GetMapping(path = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

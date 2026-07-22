@@ -24,9 +24,10 @@ public class UnitMapper {
         response.setPropertyId(unit.getPropertyId());
         response.setUnitNumber(unit.getUnitNumber());
         response.setFloor(unit.getFloor());
+        response.setLabel(unit.getLabel());
         response.setDescription(unit.getDescription());
         response.setRentAmount(unit.getRentAmount());
-
+        response.setDepositAmount(unit.getDepositAmount());
 
         response.setStatus(
                 unit.getStatus() != null ? unit.getStatus().name() : null
@@ -46,8 +47,11 @@ public class UnitMapper {
         dto.setId(unit.getId());
         dto.setPropertyId(unit.getPropertyId());
         dto.setUnitNumber(unit.getUnitNumber());
+        dto.setLabel(unit.getLabel());
+        dto.setFloor(unit.getFloor());
         dto.setDescription(unit.getDescription());
         dto.setRentAmount(unit.getRentAmount());
+        dto.setDepositAmount(unit.getDepositAmount());
         dto.setOccupancyStatus(unit.getOccupancyStatus().name());
         dto.setVacatedAt(unit.getVacatedAt()); // ADDED
         return dto;

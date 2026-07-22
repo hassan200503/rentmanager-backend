@@ -8,7 +8,7 @@ import com.rentmanager.modules.property.application.command.validator.*;
 import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.shared.events.DomainEventPublisher;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -87,6 +87,9 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
         property.updateDetails(request.getName(), request.getDescription());
 
         Property saved = propertyRepository.save(property);
+
+        // See note in createProperty(): pull from `property`, not `saved`.
+        eventPublisher.publishAll(property.pullDomainEvents());
 
         return propertyMapper.toResponse(saved);
     }

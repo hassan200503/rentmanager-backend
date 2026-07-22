@@ -14,9 +14,13 @@ public class UpdateUnitRequest {
 
     private String unitNumber;
 
-    private String label; // ✅ FIXED (missing)
+    private String label;
+
+    private String floor;
 
     private BigDecimal rentAmount;
+
+    private BigDecimal depositAmount;
 
     private String description;
 }

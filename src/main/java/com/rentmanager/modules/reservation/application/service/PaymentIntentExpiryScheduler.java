@@ -62,4 +62,40 @@ public class PaymentIntentExpiryScheduler {
             }
         }
     }
+
+    /**
+     * Orphaned-unit recovery sweep — runs alongside the stale-intent sweep.
+     *
+     * Finds PaymentIntents that reached a terminal failure state
+     * (FAILED/EXPIRED) but whose unit is still PENDING_PAYMENT because
+     * MpesaCallbackService's releaseUnitIfPendingPayment() swallowed a
+     * transient error. Without this, such units would be stuck forever.
+     *
+     * Staggered 30 seconds after the stale-intent sweep to reduce DB
+     * contention in the unlikely event both find candidates at once.
+     */
+    @Scheduled(fixedRate = 5 * 60 * 1000, initialDelay = 30_000) // 30s after startup, then every 5 min
+    public void releaseOrphanedUnits() {
+        Instant cutoff = Instant.now().minus(STALE_AFTER);
+
+        List<PaymentIntent> terminal = paymentIntentRepository
+                .findByStatusInAndCreatedAtBefore(
+                        List.of(PaymentIntentStatus.FAILED, PaymentIntentStatus.EXPIRED),
+                        cutoff);
+
+        if (terminal.isEmpty()) {
+            return;
+        }
+
+        log.info("Orphaned-unit sweep found {} candidate(s) older than {}", terminal.size(), cutoff);
+
+        for (PaymentIntent intent : terminal) {
+            try {
+                sweepService.releaseOrphanedUnit(intent.getId());
+            } catch (Exception e) {
+                log.error("Failed to release orphaned unit — will retry on next sweep. " +
+                        "paymentIntentId={}", intent.getId(), e);
+            }
+        }
+    }
 }

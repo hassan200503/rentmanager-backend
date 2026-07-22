@@ -22,6 +22,8 @@ public class Unit extends AggregateRoot {
     private UnitStatus status;
     private UnitOccupancyStatus occupancyStatus;
     private BigDecimal rentAmount;
+    private BigDecimal depositAmount;
+    private String floor;
     private String description;
     private LocalDateTime vacatedAt;
 
@@ -30,7 +32,9 @@ public class Unit extends AggregateRoot {
             UUID propertyId,
             String unitNumber,
             String label,
+            String floor,
             BigDecimal rentAmount,
+            BigDecimal depositAmount,
             String description,
             String correlationId
     ) {
@@ -39,10 +43,12 @@ public class Unit extends AggregateRoot {
                 .propertyId(propertyId)
                 .unitNumber(unitNumber)
                 .label(label)
+                .floor(floor)
                 .status(UnitStatus.INACTIVE)
                 .occupancyStatus(UnitOccupancyStatus.VACANT)
                 .vacatedAt(LocalDateTime.now())
                 .rentAmount(rentAmount)
+                .depositAmount(depositAmount)
                 .description(description)
                 .build();
 
@@ -62,13 +68,17 @@ public class Unit extends AggregateRoot {
     public void updateDetails(
             String unitNumber,
             String label,
+            String floor,
             BigDecimal rentAmount,
+            BigDecimal depositAmount,
             String description,
             String correlationId
     ) {
         this.unitNumber = unitNumber;
         this.label = label;
+        this.floor = floor;
         this.rentAmount = rentAmount;
+        this.depositAmount = depositAmount;
         this.description = description;
 
         registerEvent(new UnitUpdatedEvent(
@@ -163,9 +173,11 @@ public class Unit extends AggregateRoot {
             UUID propertyId,
             String unitNumber,
             String label,
+            String floor,
             UnitStatus status,
             UnitOccupancyStatus occupancyStatus,
             BigDecimal rentAmount,
+            BigDecimal depositAmount,
             String description,
             LocalDateTime vacatedAt
     ) {
@@ -173,9 +185,11 @@ public class Unit extends AggregateRoot {
                 .propertyId(propertyId)
                 .unitNumber(unitNumber)
                 .label(label)
+                .floor(floor)
                 .status(status)
                 .occupancyStatus(occupancyStatus)
                 .rentAmount(rentAmount)
+                .depositAmount(depositAmount)
                 .description(description)
                 .vacatedAt(vacatedAt)
                 .build();
@@ -185,8 +199,8 @@ public class Unit extends AggregateRoot {
         return unit;
     }
 
-    public Integer getFloor() {
-        return null;
+    public String getFloor() {
+        return floor;
     }
 
     public String getStatusAsString() {

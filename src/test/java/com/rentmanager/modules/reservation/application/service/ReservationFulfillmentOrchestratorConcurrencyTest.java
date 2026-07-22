@@ -201,9 +201,11 @@ class ReservationFulfillmentOrchestratorConcurrencyTest {
                 propertyId,
                 "A-101",
                 "Unit A-101",
+                null,
                 UnitStatus.ACTIVE,
                 UnitOccupancyStatus.VACANT,
                 BigDecimal.valueOf(15000),
+                null,
                 "Nice unit",
                 null
         );

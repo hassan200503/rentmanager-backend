@@ -57,7 +57,9 @@ class PropertyLeaseRestrictionIT {
                 property.getId(),
                 "U-100",
                 "Penthouse",
+                null,
                 new BigDecimal("5000"),
+                null,
                 "Top floor unit",
                 "CORR"
         );
@@ -111,7 +113,9 @@ class PropertyLeaseRestrictionIT {
                 property.getId(),
                 "U-1A",
                 "Unit A",
+                null,
                 new BigDecimal("1200"),
+                null,
                 "Nice unit",
                 "CORR"
         );
@@ -177,7 +181,9 @@ class PropertyLeaseRestrictionIT {
                 propertyA.getId(),
                 "U-9",
                 "Unit",
+                null,
                 new BigDecimal("900"),
+                null,
                 "desc",
                 "CORR"
         );
@@ -209,7 +215,9 @@ class PropertyLeaseRestrictionIT {
                 UUID.randomUUID(),
                 "U-ROGUE",
                 "Illegal Unit",
+                null,
                 new BigDecimal("1000"),
+                null,
                 "desc",
                 "CORR"
         );

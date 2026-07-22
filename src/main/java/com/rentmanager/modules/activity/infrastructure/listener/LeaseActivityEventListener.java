@@ -57,6 +57,11 @@ public class LeaseActivityEventListener {
             return;
         }
 
+        Lease l = lease.get();
+        Map<String, Object> enriched = new java.util.HashMap<>(metadata);
+        if (l.getPropertyId() != null) enriched.put("propertyId", l.getPropertyId().toString());
+        if (l.getUnitId() != null) enriched.put("unitId", l.getUnitId().toString());
+
         var context = SecurityContextHolder.get();
         UUID actorId = context != null ? context.userId() : null;
         String actorName = context != null && context.email() != null ? context.email() : "System";
@@ -66,10 +71,10 @@ public class LeaseActivityEventListener {
                 eventType,
                 "Lease",
                 leaseId,
-                lease.get().getLeaseNumber(),
+                l.getLeaseNumber(),
                 actorId,
                 actorName,
-                metadata
+                enriched
         );
     }
 }

@@ -22,4 +22,6 @@ public interface PaymentIntentJpaRepository extends JpaRepository<PaymentIntentJ
      * inside its own short transaction, rather than locking rows here).
      */
     List<PaymentIntentJpaEntity> findByStatusAndCreatedAtBefore(PaymentIntentStatus status, Instant cutoff);
+
+    List<PaymentIntentJpaEntity> findByStatusInAndCreatedAtBefore(List<PaymentIntentStatus> statuses, Instant cutoff);
 }

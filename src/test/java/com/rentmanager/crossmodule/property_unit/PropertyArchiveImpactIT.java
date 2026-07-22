@@ -40,7 +40,9 @@ class PropertyArchiveImpactIT {
                 property.getId(),
                 "U-99",
                 "Unit",
+                null,
                 new BigDecimal("1000"),
+                null,
                 "desc",
                 "CORR"
         );

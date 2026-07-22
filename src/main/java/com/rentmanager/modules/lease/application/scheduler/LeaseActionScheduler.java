@@ -6,27 +6,55 @@ import com.rentmanager.modules.lease.domain.enums.LeaseType;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowEngine;
+import com.rentmanager.modules.unit.domain.model.Unit;
+import com.rentmanager.modules.unit.domain.repository.UnitRepository;
 import com.rentmanager.shared.events.DomainEventPublisher;
 import com.rentmanager.shared.exception.ErrorCode;
 import com.rentmanager.shared.exception.LeaseStateException;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class LeaseActionScheduler {
 
     private final LeaseRepository leaseRepository;
     private final DomainEventPublisher eventPublisher;
     private final LeaseActivationOrchestrator leaseActivationOrchestrator;
     private final LeaseWorkflowEngine leaseWorkflowEngine;
+    private UnitRepository unitRepository;
+
+    // 4-arg constructor — used by expiry-only tests that don't need UnitRepository
+    public LeaseActionScheduler(
+            LeaseRepository leaseRepository,
+            DomainEventPublisher eventPublisher,
+            LeaseActivationOrchestrator leaseActivationOrchestrator,
+            LeaseWorkflowEngine leaseWorkflowEngine
+    ) {
+        this(leaseRepository, eventPublisher, leaseActivationOrchestrator, leaseWorkflowEngine, null);
+    }
+
+    @Autowired
+    public LeaseActionScheduler(
+            LeaseRepository leaseRepository,
+            DomainEventPublisher eventPublisher,
+            LeaseActivationOrchestrator leaseActivationOrchestrator,
+            LeaseWorkflowEngine leaseWorkflowEngine,
+            UnitRepository unitRepository
+    ) {
+        this.leaseRepository = leaseRepository;
+        this.eventPublisher = eventPublisher;
+        this.leaseActivationOrchestrator = leaseActivationOrchestrator;
+        this.leaseWorkflowEngine = leaseWorkflowEngine;
+        this.unitRepository = unitRepository;
+    }
 
     /**
      * Runs daily — activates leases whose move-in date has arrived.
@@ -63,12 +91,29 @@ public class LeaseActionScheduler {
             return;
         }
 
+        UUID tenantId = lease.getTenantId();
+
         // ---------------- STATE TRANSITION ----------------
         lease.activatePending();
+
+        // ---------------- MARK UNIT OCCUPIED ----------------
+        // On move-in date the scheduler activates the lease; the unit must
+        // also transition to OCCUPIED so property occupancy rollup works.
+        UUID unitId = lease.getUnitId();
+        if (unitId != null && unitRepository != null) {
+            Unit unit = unitRepository.findByIdAndTenantId(unitId, tenantId)
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Unit not found for lease activation. unitId=" + unitId));
+            unit.markOccupied("lease-activation-" + lease.getId());
+            var unitEvents = unit.pullDomainEvents();
+            unitRepository.save(unit);
+            eventPublisher.publishAll(unitEvents);
+        }
+
         leaseRepository.save(lease);
 
         // ---------------- RENT LEDGER: POST OPENING CHARGE ----------------
-        leaseActivationOrchestrator.onLeaseActivated(lease.getTenantId(), lease);
+        leaseActivationOrchestrator.onLeaseActivated(tenantId, lease);
 
         // ---------------- DOMAIN EVENTS ----------------
         eventPublisher.publishAll(lease.pullDomainEvents());

@@ -75,4 +75,34 @@ public class PaymentIntentExpirySweepService {
                     paymentIntentId, intent.getUnitId(), unit.getOccupancyStatus());
         }
     }
+
+    /**
+     * Safety net for units stuck in PENDING_PAYMENT whose PaymentIntent
+     * has already reached a terminal state (FAILED/EXPIRED) but the unit
+     * was never released — typically because MpesaCallbackService's
+     * {@code releaseUnitIfPendingPayment()} encountered a transient DB
+     * error that was swallowed, leaving the unit orphaned.
+     *
+     * Does NOT modify the PaymentIntent — it's already in its terminal
+     * state. Only releases the unit if it is still PENDING_PAYMENT.
+     */
+    @Transactional
+    public void releaseOrphanedUnit(UUID paymentIntentId) {
+        PaymentIntent intent = paymentIntentRepository.findById(paymentIntentId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "PaymentIntent vanished during orphaned-unit sweep: " + paymentIntentId));
+
+        Unit unit = unitRepository.findByIdForUpdate(intent.getUnitId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "Unit vanished during orphaned-unit sweep: " + intent.getUnitId()));
+
+        if (unit.getOccupancyStatus() == UnitOccupancyStatus.PENDING_PAYMENT) {
+            unit.releasePendingPayment(paymentIntentId.toString());
+            unitRepository.save(unit);
+            eventPublisher.publishAll(unit.pullDomainEvents());
+            entityManager.flush();
+            log.warn("Released unit orphaned in PENDING_PAYMENT. paymentIntentId={} unitId={} intentStatus={}",
+                    paymentIntentId, intent.getUnitId(), intent.getStatus());
+        }
+    }
 }

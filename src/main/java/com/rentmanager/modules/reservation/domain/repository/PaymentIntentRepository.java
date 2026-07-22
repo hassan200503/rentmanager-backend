@@ -25,4 +25,12 @@ public interface PaymentIntentRepository {
      * MpesaCallbackService already handles directly and immediately.
      */
     List<PaymentIntent> findByStatusAndCreatedAtBefore(PaymentIntentStatus status, Instant cutoff);
+
+    /**
+     * Used by the orphaned-unit release sweep to find PaymentIntents in
+     * terminal failure states whose units may still be PENDING_PAYMENT
+     * (e.g. the M-Pesa callback marked the intent FAILED but failed to
+     * release the unit due to a transient DB error that was swallowed).
+     */
+    List<PaymentIntent> findByStatusInAndCreatedAtBefore(List<PaymentIntentStatus> statuses, Instant cutoff);
 }

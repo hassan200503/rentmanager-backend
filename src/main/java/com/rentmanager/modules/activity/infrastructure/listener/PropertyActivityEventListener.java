@@ -6,6 +6,7 @@ import com.rentmanager.modules.property.domain.event.PropertyActivatedEvent;
 import com.rentmanager.modules.property.domain.event.PropertyArchivedEvent;
 import com.rentmanager.modules.property.domain.event.PropertyCreatedEvent;
 import com.rentmanager.modules.property.domain.event.PropertyOccupancyChangedEvent;
+import com.rentmanager.modules.property.domain.event.PropertyUpdatedEvent;
 import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 
@@ -39,21 +40,31 @@ public class PropertyActivityEventListener {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onPropertyCreated(PropertyCreatedEvent event) {
+        log.debug("onPropertyCreated FIRED for property {}", event.getPropertyId());
+        record(event.getTenantId(), event.eventType(), event.getPropertyId(), Map.of());
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onPropertyUpdated(PropertyUpdatedEvent event) {
+        log.debug("onPropertyUpdated FIRED for property {}", event.getPropertyId());
         record(event.getTenantId(), event.eventType(), event.getPropertyId(), Map.of());
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onPropertyActivated(PropertyActivatedEvent event) {
+        log.debug("onPropertyActivated FIRED for property {}", event.getAggregateId());
         record(event.getTenantId(), event.eventType(), event.getAggregateId(), Map.of());
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onPropertyArchived(PropertyArchivedEvent event) {
+        log.debug("onPropertyArchived FIRED for property {}", event.getAggregateId());
         record(event.getTenantId(), event.eventType(), event.getAggregateId(), Map.of());
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onPropertyOccupancyChanged(PropertyOccupancyChangedEvent event) {
+        log.debug("onPropertyOccupancyChanged FIRED for property {}", event.getAggregateId());
         Map<String, Object> metadata = Map.of(
                 "previousOccupancy", occupancyName(event.getPreviousOccupancy()),
                 "newOccupancy", occupancyName(event.getNewOccupancy())

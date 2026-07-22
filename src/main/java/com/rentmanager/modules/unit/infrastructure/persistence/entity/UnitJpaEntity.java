@@ -52,6 +52,10 @@ public class UnitJpaEntity {
 
     private BigDecimal rentAmount;
 
+    private BigDecimal depositAmount;
+
+    private String floor;
+
     @Column(columnDefinition = "TEXT")
     private String description;
 

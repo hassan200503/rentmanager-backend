@@ -6,8 +6,12 @@ import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -53,6 +57,7 @@ public class ActivityLogService {
         );
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void record(
             UUID tenantId,
             String eventType,
@@ -67,13 +72,26 @@ public class ActivityLogService {
                 tenantId, eventType, entityType, entityId, entityName, actorId, actorName, metadata
         );
 
-        repository.save(activity);
+        ActivityLog saved = repository.save(activity);
+        log.debug("ActivityLog saved: id={} eventType={} entityName={}", saved.getId(), saved.getEventType(), saved.getEntityName());
 
         broadcast(tenantId, activity);
     }
 
     public List<ActivityLog> recent(UUID tenantId, int limit) {
-        return repository.findByTenantIdOrderByCreatedAtDesc(tenantId, PageRequest.of(0, limit));
+        return repository.findByTenantIdOrderByCreatedAtDesc(tenantId, PageRequest.of(0, limit)).getContent();
+    }
+
+    public Page<ActivityLog> findAll(UUID tenantId, String entityType, String eventType, Pageable pageable) {
+        if (entityType != null && !entityType.isBlank() && eventType != null && !eventType.isBlank()) {
+            return repository.findByTenantIdAndEntityTypeAndEventTypeOrderByCreatedAtDesc(tenantId, entityType, eventType, pageable);
+        } else if (entityType != null && !entityType.isBlank()) {
+            return repository.findByTenantIdAndEntityTypeOrderByCreatedAtDesc(tenantId, entityType, pageable);
+        } else if (eventType != null && !eventType.isBlank()) {
+            return repository.findByTenantIdAndEventTypeOrderByCreatedAtDesc(tenantId, eventType, pageable);
+        } else {
+            return repository.findByTenantIdOrderByCreatedAtDesc(tenantId, pageable);
+        }
     }
 
     public SseEmitter subscribe(UUID tenantId) {
