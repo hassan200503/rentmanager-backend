@@ -8,6 +8,7 @@ import com.rentmanager.modules.rentledger.infrastructure.persistence.repository.
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import org.springframework.data.domain.Pageable;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -48,5 +49,15 @@ public class RentTransactionRepositoryAdapter implements RentTransactionReposito
     @Override
     public Optional<RentTransaction> findByExternalReference(UUID tenantId, String externalReference) {
         return jpaRepository.findByTenantIdAndExternalReference(tenantId, externalReference).map(mapper::toDomain);
+    }
+
+    @Override
+    public List<RentTransaction> findAllByTenant(UUID tenantId) {
+        return jpaRepository.findByTenantIdOrderByOccurredAtDesc(tenantId, Pageable.unpaged()).stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    public long countByTenantId(UUID tenantId) {
+        return jpaRepository.countByTenantId(tenantId);
     }
 }

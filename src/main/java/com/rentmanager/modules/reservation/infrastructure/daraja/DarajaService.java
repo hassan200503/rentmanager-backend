@@ -54,6 +54,38 @@ public class DarajaService {
             String description,
             DarajaCredentials credentials
     ) {
+        return initiateSTKPush(mpesaPhone, amount, accountRef, description, credentials, properties.getCallbackUrl());
+    }
+
+    /**
+     * Same as the 5-arg {@code initiateSTKPush}, but takes an explicit
+     * {@code callbackUrl} instead of always using the deposit flow's
+     * {@code properties.getCallbackUrl()}.
+     *
+     * WHY THIS EXISTS: Daraja's CallBackURL is set per STK-push-request, not
+     * per Daraja app registration — whatever URL is sent here is exactly
+     * where Safaricom POSTs the result. The 5-arg overload previously
+     * hardcoded the reservation module's own callback URL internally, which
+     * was harmless while only the deposit flow called this method, but
+     * would have silently broken rent payments the moment a second caller
+     * (RentPaymentInitiationService) reused it: every rent-payment STK push
+     * would have had its callback delivered to
+     * ReservationController#mpesaCallback instead of the rent-payment
+     * callback endpoint, where MpesaCallbackService would fail to find a
+     * matching PaymentIntent and throw — meaning the customer's payment
+     * would succeed on their phone but never post to the rent ledger.
+     *
+     * The 5-arg overload is kept and unchanged for the existing deposit
+     * call site (InitiateReservationServiceImpl) — this is purely additive.
+     */
+    public String initiateSTKPush(
+            String mpesaPhone,
+            BigDecimal amount,
+            String accountRef,
+            String description,
+            DarajaCredentials credentials,
+            String callbackUrl
+    ) {
         if (credentials == null || !credentials.isConfigured()) {
             // Defensive guard, not the primary check — callers (e.g.
             // UnitReservationTransactionService) should already validate
@@ -63,6 +95,9 @@ public class DarajaService {
             throw new DarajaException(
                     "Cannot initiate STK Push: landlord has not configured Daraja credentials"
             );
+        }
+        if (callbackUrl == null || callbackUrl.isBlank()) {
+            throw new DarajaException("Cannot initiate STK Push: callbackUrl is required");
         }
 
         String token = fetchAccessToken(credentials);
@@ -79,7 +114,7 @@ public class DarajaService {
         body.put("PartyA", phone);
         body.put("PartyB", credentials.getBusinessShortCode());
         body.put("PhoneNumber", phone);
-        body.put("CallBackURL", properties.getCallbackUrl());
+        body.put("CallBackURL", callbackUrl);
         body.put("AccountReference", accountRef);
         body.put("TransactionDesc", description);
 

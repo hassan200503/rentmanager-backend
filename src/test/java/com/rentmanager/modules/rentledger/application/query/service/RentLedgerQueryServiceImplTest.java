@@ -8,8 +8,10 @@ import com.rentmanager.modules.rentledger.domain.enums.RentTransactionType;
 import com.rentmanager.modules.rentledger.domain.exception.RentLedgerEntryNotFoundException;
 import com.rentmanager.modules.rentledger.domain.model.RentLedgerEntry;
 import com.rentmanager.modules.rentledger.domain.model.RentTransaction;
+import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentLedgerEntryRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentTransactionRepository;
+import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -47,6 +49,10 @@ class RentLedgerQueryServiceImplTest {
     private RentLedgerEntryRepository rentLedgerEntryRepository;
     @Mock
     private RentTransactionRepository rentTransactionRepository;
+    @Mock
+    private LeaseRepository leaseRepository;
+    @Mock
+    private TenantProfileRepository tenantProfileRepository;
 
     private RentLedgerQueryServiceImpl service;
 
@@ -57,7 +63,7 @@ class RentLedgerQueryServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new RentLedgerQueryServiceImpl(rentLedgerEntryRepository, rentTransactionRepository);
+        service = new RentLedgerQueryServiceImpl(rentLedgerEntryRepository, rentTransactionRepository, leaseRepository, tenantProfileRepository);
     }
 
     private RentLedgerEntry newEntry() {

@@ -234,7 +234,7 @@ public class RentLedgerEntry extends AggregateRoot {
 
         if (!transaction.reducesBalanceOwed()) {
             throw new RentLedgerStateException(
-                    "applyTransaction only accepts PAYMENT, WAIVER, or CREDIT_APPLIED; got " + transaction.getType(),
+                    "applyTransaction only accepts PAYMENT, WAIVER, CREDIT_APPLIED, or DEPOSIT; got " + transaction.getType(),
                     ErrorCode.RENT_LEDGER_ENTRY_UNSUPPORTED_TRANSACTION_TYPE
             );
         }

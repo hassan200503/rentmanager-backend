@@ -26,4 +26,20 @@ public interface RentLedgerEntryJpaRepository extends JpaRepository<RentLedgerEn
     );
 
     List<RentLedgerEntryJpaEntity> findByTenantIdAndStatus(UUID tenantId, RentLedgerStatus status);
+
+    /**
+     * Backs {@code RentLedgerEntryRepository.findLatestByLeaseId} — used by
+     * {@code RentChargeScheduler} to resume posting from the most recent
+     * period already on record for a lease.
+     */
+    Optional<RentLedgerEntryJpaEntity> findFirstByLeaseIdOrderByBillingPeriodStartDesc(UUID leaseId);
+
+    /**
+     * Backs {@code RentLedgerEntryRepository.findAllByStatusInAndDueDateLessThanEqual}
+     * — tenant-agnostic cross-tenant sweep used by {@code RentOverdueScheduler}.
+     */
+    List<RentLedgerEntryJpaEntity> findAllByStatusInAndDueDateLessThanEqual(
+            List<RentLedgerStatus> statuses,
+            LocalDate cutoffDate
+    );
 }

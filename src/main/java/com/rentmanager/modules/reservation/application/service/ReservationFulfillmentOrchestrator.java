@@ -8,6 +8,7 @@ import com.rentmanager.modules.lease.domain.enums.LeaseType;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.notification.sms.SmsService;
+import com.rentmanager.modules.rentledger.application.service.RentLedgerApplicationService;
 import com.rentmanager.modules.reservation.application.command.validator.ReservationFulfillmentValidator;
 import com.rentmanager.modules.reservation.domain.event.ReservationDepositPaidEvent;
 import com.rentmanager.modules.reservation.domain.model.Reservation;
@@ -108,6 +109,7 @@ public class ReservationFulfillmentOrchestrator {
     private final DomainEventPublisher eventPublisher;
     private final ReservationFulfillmentCompensationService compensationService;
     private final ReservationFulfillmentStepZeroService stepZeroService;
+    private final RentLedgerApplicationService rentLedgerApplicationService;
 
     // TODO: confirm — does a default lease term length exist anywhere
     // (e.g. tenant-configurable per property), or is 12 months a safe
@@ -227,6 +229,17 @@ public class ReservationFulfillmentOrchestrator {
             eventPublisher.publishAll(lease.pullDomainEvents());
             saga.leaseId = lease.getId();
             saga.leaseCreated = true;
+
+            // Record the deposit transaction in the rent ledger immediately,
+            // so it appears live in the transactions dashboard. The deposit
+            // was already collected via M-Pesa STK Push during reservation.
+            rentLedgerApplicationService.postDeposit(
+                    landlordTenantId,
+                    "reservation-deposit-" + reservationId,
+                    lease.getId(),
+                    event.getDepositAmount()
+            );
+            saga.depositPosted = true;
 
             // ---- Step 5: Unit reserved ----
             unit.markReserved(reservation.getId().toString());

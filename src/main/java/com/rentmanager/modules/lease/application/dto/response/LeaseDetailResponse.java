@@ -29,6 +29,8 @@ public record LeaseDetailResponse(
         LocalDate createdAt,
         LocalDate updatedAt,
         Long version,
+        String tenantFullName,
+        String tenantPhone,
 
         // NEW this session: lifecycle metadata, previously persisted
         // correctly (as of the V34/LeaseEntity/LeaseMapper fix) but never

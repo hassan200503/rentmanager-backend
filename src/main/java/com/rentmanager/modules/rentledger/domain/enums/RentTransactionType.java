@@ -28,5 +28,8 @@ public enum RentTransactionType {
     CREDIT_APPLIED,
 
     /** Reduces or increases the balance owed. A manual correction, always with a reason recorded via recordedBy/source. */
-    ADJUSTMENT
+    ADJUSTMENT,
+
+    /** Reduces the balance owed. A security deposit payment received via the reservation flow. */
+    DEPOSIT
 }

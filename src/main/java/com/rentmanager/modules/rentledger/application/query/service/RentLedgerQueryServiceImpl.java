@@ -1,17 +1,22 @@
 package com.rentmanager.modules.rentledger.application.query.service;
 
+import com.rentmanager.modules.lease.domain.model.Lease;
+import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.rentledger.api.dto.response.RentLedgerEntryResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.RentTransactionResponse;
+import com.rentmanager.modules.rentledger.api.dto.response.RentTransactionSummaryResponse;
 import com.rentmanager.modules.rentledger.domain.enums.RentLedgerStatus;
 import com.rentmanager.modules.rentledger.domain.exception.RentLedgerEntryNotFoundException;
-import com.rentmanager.modules.rentledger.domain.exception.RentLedgerStateException;
 import com.rentmanager.modules.rentledger.domain.repository.RentLedgerEntryRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentTransactionRepository;
+import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
+import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
 import com.rentmanager.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 import java.util.UUID;
 
 /**
@@ -40,6 +45,8 @@ public class RentLedgerQueryServiceImpl implements RentLedgerQueryService {
 
     private final RentLedgerEntryRepository rentLedgerEntryRepository;
     private final RentTransactionRepository rentTransactionRepository;
+    private final LeaseRepository leaseRepository;
+    private final TenantProfileRepository tenantProfileRepository;
 
     @Override
     public RentLedgerEntryResponse getById(UUID tenantId, UUID entryId) {
@@ -78,6 +85,53 @@ public class RentLedgerQueryServiceImpl implements RentLedgerQueryService {
         return rentTransactionRepository.findByLedgerEntry(tenantId, entryId)
                 .stream()
                 .map(RentTransactionResponse::from)
+                .toList();
+    }
+
+    @Override
+    public List<RentTransactionSummaryResponse> getAllTransactions(UUID tenantId) {
+        List<com.rentmanager.modules.rentledger.domain.model.RentTransaction> transactions =
+                rentTransactionRepository.findAllByTenant(tenantId);
+
+        if (transactions.isEmpty()) return List.of();
+
+        Set<UUID> leaseIds = transactions.stream()
+                .map(com.rentmanager.modules.rentledger.domain.model.RentTransaction::getLeaseId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Map<UUID, Lease> leaseMap = leaseRepository.findAllByIdIn(leaseIds).stream()
+                .collect(Collectors.toMap(Lease::getId, l -> l));
+
+        Set<UUID> profileIds = leaseMap.values().stream()
+                .map(Lease::getTenantProfileId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Map<UUID, TenantProfile> profileMap = profileIds.isEmpty()
+                ? Collections.emptyMap()
+                : tenantProfileRepository.findAllById(profileIds).stream()
+                        .collect(Collectors.toMap(TenantProfile::getId, p -> p));
+
+        return transactions.stream()
+                .map(tx -> {
+                    Lease lease = leaseMap.get(tx.getLeaseId());
+                    TenantProfile profile = lease != null ? profileMap.get(lease.getTenantProfileId()) : null;
+                    return new RentTransactionSummaryResponse(
+                            tx.getId(),
+                            tx.getLedgerEntryId(),
+                            tx.getLeaseId(),
+                            tx.getType().name(),
+                            tx.getAmount(),
+                            tx.getExternalReference(),
+                            tx.getSource().name(),
+                            tx.getRecordedBy(),
+                            tx.getOccurredAt(),
+                            profile != null ? profile.getFullName() : null,
+                            profile != null ? profile.getPhone() : null,
+                            lease != null ? lease.getLeaseNumber() : null
+                    );
+                })
                 .toList();
     }
 }

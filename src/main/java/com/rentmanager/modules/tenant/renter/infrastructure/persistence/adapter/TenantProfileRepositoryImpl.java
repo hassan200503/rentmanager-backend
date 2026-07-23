@@ -7,7 +7,7 @@ import com.rentmanager.modules.tenant.renter.infrastructure.persistence.reposito
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-import java.util.Optional;
+import java.util.*;
 import java.util.UUID;
 
 @Component
@@ -76,5 +76,10 @@ public class TenantProfileRepositoryImpl implements TenantProfileRepository {
     @Override
     public void deleteById(UUID id) {
         jpaRepository.deleteById(id);
+    }
+
+    @Override
+    public List<TenantProfile> findAllById(Collection<UUID> ids) {
+        return jpaRepository.findAllById(ids).stream().map(this::toDomain).toList();
     }
 }

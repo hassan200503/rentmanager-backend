@@ -2,7 +2,7 @@ package com.rentmanager.modules.tenant.renter.domain.repository;
 
 import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
 
-import java.util.Optional;
+import java.util.*;
 import java.util.UUID;
 
 public interface TenantProfileRepository {
@@ -25,4 +25,6 @@ public interface TenantProfileRepository {
      * reused from a prior successful reservation.
      */
     void deleteById(UUID id);
+
+    List<TenantProfile> findAllById(Collection<UUID> ids);
 }

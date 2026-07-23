@@ -5,6 +5,7 @@ import com.rentmanager.modules.rentledger.application.service.RentLedgerApplicat
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.UUID;
@@ -66,5 +67,15 @@ public class LeaseActivationOrchestrator {
                 billingPeriodEnd,
                 dueDate
         );
+
+        if (lease.getSecurityDeposit() != null
+                && lease.getSecurityDeposit().compareTo(BigDecimal.ZERO) > 0) {
+            rentLedgerApplicationService.postDeposit(
+                    tenantId,
+                    correlationId,
+                    lease.getId(),
+                    lease.getSecurityDeposit()
+            );
+        }
     }
 }

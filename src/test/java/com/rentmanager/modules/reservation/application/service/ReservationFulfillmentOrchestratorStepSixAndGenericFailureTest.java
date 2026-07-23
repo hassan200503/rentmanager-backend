@@ -12,6 +12,7 @@ import com.rentmanager.modules.reservation.domain.model.Reservation;
 import com.rentmanager.modules.reservation.domain.repository.ReservationRepository;
 import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
 import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
+import com.rentmanager.modules.rentledger.application.service.RentLedgerApplicationService;
 import com.rentmanager.modules.unit.domain.enums.UnitOccupancyStatus;
 import com.rentmanager.modules.unit.domain.enums.UnitStatus;
 import com.rentmanager.modules.unit.domain.model.Unit;
@@ -70,6 +71,7 @@ class ReservationFulfillmentOrchestratorStepSixAndGenericFailureTest {
     @Mock private DomainEventPublisher eventPublisher;
     @Mock private ReservationFulfillmentCompensationService compensationService;
     @Mock private ReservationFulfillmentStepZeroService stepZeroService;
+    @Mock private RentLedgerApplicationService rentLedgerApplicationService;
 
     private ReservationFulfillmentOrchestrator orchestrator;
 
@@ -89,7 +91,8 @@ class ReservationFulfillmentOrchestratorStepSixAndGenericFailureTest {
                 fulfillmentValidator,
                 eventPublisher,
                 compensationService,
-                stepZeroService
+                stepZeroService,
+                rentLedgerApplicationService
         );
 
         lenient().when(leaseRepository.findByUnitIdAndStatus(eq(unitId), eq(LeaseStatus.PENDING_ACTIVATION)))

@@ -12,5 +12,7 @@ public record LeaseSummaryResponse(
         LeaseStatusDTO status,
         LocalDate startDate,
         LocalDate endDate,
-        BigDecimal rentAmount
+        BigDecimal rentAmount,
+        String tenantFullName,
+        String tenantPhone
 ) {}

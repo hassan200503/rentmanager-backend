@@ -145,6 +145,63 @@ public class RentLedgerApplicationService {
     }
 
     /**
+     * Posts a DEPOSIT transaction against the first ledger entry for the
+     * given lease. The deposit was already collected via M-Pesa during the
+     * reservation flow; this records it in the rent ledger so the deposit
+     * appears as a "Deposit" row in the transactions dashboard.
+     *
+     * Idempotent: if a DEPOSIT transaction already exists for this lease
+     * (checked by externalReference), this is a no-op.
+     */
+    @Transactional
+    public void postDeposit(
+            UUID tenantId,
+            String correlationId,
+            UUID leaseId,
+            BigDecimal depositAmount
+    ) {
+        String depositRef = "deposit-" + leaseId;
+        Optional<RentTransaction> existing =
+                rentTransactionRepository.findByExternalReference(tenantId, depositRef);
+        if (existing.isPresent()) {
+            log.info("postDeposit is a no-op: deposit already recorded for leaseId={}", leaseId);
+            return;
+        }
+
+        List<RentLedgerEntry> entries = rentLedgerEntryRepository.findByLease(tenantId, leaseId);
+        if (entries.isEmpty()) {
+            log.warn("postDeposit: no ledger entry found for leaseId={}", leaseId);
+            return;
+        }
+
+        RentLedgerEntry entry = entries.get(0);
+
+        RentTransaction depositTransaction = RentTransaction.create(
+                tenantId,
+                entry.getId(),
+                leaseId,
+                RentTransactionType.DEPOSIT,
+                depositAmount,
+                depositRef,
+                RentTransactionSource.SYSTEM,
+                "SYSTEM",
+                LocalDateTime.now()
+        );
+
+        entry.applyTransaction(correlationId, depositTransaction);
+
+        try {
+            rentTransactionRepository.save(depositTransaction);
+        } catch (DataIntegrityViolationException e) {
+            log.info("postDeposit: external_reference uniqueness constraint caught a concurrent duplicate. leaseId={}", leaseId);
+            return;
+        }
+
+        rentLedgerEntryRepository.save(entry);
+        publish(entry);
+    }
+
+    /**
      * daysInMonth and occupiedDays are both computed against
      * billingPeriodStart's calendar month — correct as long as the lease's
      * opening period never spans a month boundary (billingPeriodEnd is

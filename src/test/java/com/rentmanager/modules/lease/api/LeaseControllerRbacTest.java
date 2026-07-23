@@ -307,6 +307,8 @@ class LeaseControllerRbacTest {
                 LocalDate.now(),
                 LocalDate.now(),
                 0L,
+                null,  // tenantFullName
+                null,  // tenantPhone
                 null,  // signedAt
                 null,  // activatedAt
                 null,  // terminatedAt
@@ -345,7 +347,9 @@ class LeaseControllerRbacTest {
                 LeaseStatusDTO.ACTIVE,
                 LocalDate.now(),
                 LocalDate.now().plusYears(1),
-                BigDecimal.TEN
+                BigDecimal.TEN,
+                "Test Tenant",
+                "+254700000000"
         );
         // Shape confirmed from LeaseApplicationService.search(): new PageResponse<>(
         // result, request.page(), request.size(), result.size(), 1, true, true)

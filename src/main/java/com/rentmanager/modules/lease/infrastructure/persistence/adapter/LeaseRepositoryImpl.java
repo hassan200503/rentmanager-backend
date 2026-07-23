@@ -8,12 +8,14 @@ import com.rentmanager.modules.lease.infrastructure.persistence.entity.LeaseEnti
 import com.rentmanager.modules.lease.infrastructure.persistence.mapper.LeaseMapper;
 import com.rentmanager.modules.lease.infrastructure.persistence.repository.JpaLeaseRepository;
 import com.rentmanager.modules.lease.infrastructure.persistence.specification.LeaseSpecification;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.UUID;
 
 /**
@@ -122,6 +124,17 @@ public class LeaseRepositoryImpl implements LeaseRepository {
 
     @Override
     @Transactional(readOnly = true)
+    public Page<Lease> search(UUID tenantId, UUID propertyId, LeaseStatus status, LocalDate fromDate, LocalDate toDate, Pageable pageable) {
+        Specification<LeaseEntity> spec = Specification.where(LeaseSpecification.hasTenant(tenantId));
+        if (propertyId != null) spec = spec.and(LeaseSpecification.hasProperty(propertyId));
+        if (status != null) spec = spec.and(LeaseSpecification.hasStatus(status.name()));
+        if (fromDate != null) spec = spec.and(LeaseSpecification.startsAfter(fromDate));
+        if (toDate != null) spec = spec.and(LeaseSpecification.endsBefore(toDate));
+        return jpaRepository.findAll(spec, pageable).map(mapper::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public long countAll() {
         return jpaRepository.count();
     }
@@ -148,6 +161,22 @@ public class LeaseRepositoryImpl implements LeaseRepository {
     ) {
         return jpaRepository
                 .findAllByStatusInAndLeaseTypeInAndEndDateLessThanEqual(statuses, leaseTypes, date)
+                .stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Lease> findAllByIdIn(Collection<UUID> ids) {
+        return jpaRepository.findAllById(ids).stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Lease> findAllByStatusIn(List<LeaseStatus> statuses) {
+        return jpaRepository
+                .findAllByStatusIn(statuses)
                 .stream()
                 .map(mapper::toDomain)
                 .toList();

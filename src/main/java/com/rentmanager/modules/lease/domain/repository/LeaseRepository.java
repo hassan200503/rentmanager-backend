@@ -3,10 +3,11 @@ package com.rentmanager.modules.lease.domain.repository;
 import com.rentmanager.modules.lease.domain.enums.LeaseStatus;
 import com.rentmanager.modules.lease.domain.enums.LeaseType;
 import com.rentmanager.modules.lease.domain.model.Lease;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDate;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.UUID;
 
 /**
@@ -55,6 +56,18 @@ public interface LeaseRepository {
     );
 
     /**
+     * Tenant-agnostic finder used by {@code RentChargeScheduler}: leases in
+     * any of the given statuses, across all tenants. Mirrors the
+     * tenant-agnostic shape already established by
+     * {@code findAllByStatusAndStartDateLessThanEqual} and
+     * {@code findAllByStatusInAndLeaseTypeInAndEndDateLessThanEqual} above —
+     * scheduled sweeps run outside any single tenant's request scope, so
+     * they query across tenants and rely on each returned {@code Lease}
+     * carrying its own {@code tenantId} for downstream calls.
+     */
+    List<Lease> findAllByStatusIn(List<LeaseStatus> statuses);
+
+    /**
      * Optional domain-level convenience query
      * (can be derived from active + unit filter in service if needed)
      */
@@ -83,4 +96,8 @@ public interface LeaseRepository {
     boolean hasActiveLeaseForUnit(UUID unitId);
 
     long countAll();
+
+    List<Lease> findAllByIdIn(Collection<UUID> ids);
+
+    Page<Lease> search(UUID tenantId, UUID propertyId, LeaseStatus status, LocalDate fromDate, LocalDate toDate, Pageable pageable);
 }

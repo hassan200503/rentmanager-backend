@@ -23,4 +23,8 @@ public interface RentTransactionRepository {
      * MpesaCallbackService already relies on for PaymentIntent.
      */
     Optional<RentTransaction> findByExternalReference(UUID tenantId, String externalReference);
+
+    List<RentTransaction> findAllByTenant(UUID tenantId);
+
+    long countByTenantId(UUID tenantId);
 }

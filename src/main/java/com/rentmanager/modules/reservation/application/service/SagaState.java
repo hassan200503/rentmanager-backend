@@ -16,6 +16,8 @@ class SagaState {
     UUID leaseId;
     boolean leaseCreated;
 
+    boolean depositPosted;
+
     UUID unitId;
     boolean unitReserved;
 }

@@ -6,6 +6,7 @@ import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.notification.sms.SmsService;
 import com.rentmanager.modules.reservation.application.command.validator.ReservationFulfillmentValidator;
+import com.rentmanager.modules.rentledger.application.service.RentLedgerApplicationService;
 import com.rentmanager.modules.reservation.domain.event.ReservationDepositPaidEvent;
 import com.rentmanager.modules.reservation.domain.model.PaymentIntent;
 import com.rentmanager.modules.reservation.domain.model.Reservation;
@@ -135,6 +136,7 @@ class ReservationFulfillmentOrchestratorConcurrencyTest {
     @MockBean private UnitRepository unitRepository;
     @MockBean private DomainEventPublisher eventPublisher;
     @MockBean private ReservationFulfillmentValidator fulfillmentValidator;
+    @MockBean private RentLedgerApplicationService rentLedgerApplicationService;
 
     @Test
     void concurrentFulfillment_loserIsRethrownNotCompensated_winnerCompletesNormally() throws Exception {

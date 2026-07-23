@@ -3,6 +3,7 @@ package com.rentmanager.modules.rentledger.api.controller;
 import com.rentmanager.contract.common.ApiResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.RentLedgerEntryResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.RentTransactionResponse;
+import com.rentmanager.modules.rentledger.api.dto.response.RentTransactionSummaryResponse;
 import com.rentmanager.modules.rentledger.application.query.service.RentLedgerQueryService;
 import com.rentmanager.modules.rentledger.domain.enums.RentLedgerStatus;
 import com.rentmanager.shared.security.principal.AuthenticatedUser;
@@ -100,6 +101,19 @@ public class RentLedgerQueryController {
 
         return ResponseEntity.ok(
                 ApiResponse.ok("Rent ledger transactions retrieved successfully", response)
+        );
+    }
+
+    @GetMapping("/transactions")
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
+    public ResponseEntity<ApiResponse<List<RentTransactionSummaryResponse>>> getAllTransactions(
+            @AuthenticationPrincipal AuthenticatedUser user
+    ) {
+        List<RentTransactionSummaryResponse> response =
+                rentLedgerQueryService.getAllTransactions(requireTenantId(user));
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("All transactions retrieved successfully", response)
         );
     }
 

@@ -39,4 +39,10 @@ public interface JpaLeaseRepository extends JpaRepository<LeaseEntity, UUID>,
             LocalDate date
     );
 
+    /**
+     * Backs {@code LeaseRepository.findAllByStatusIn} — used by
+     * {@code RentChargeScheduler}'s tenant-agnostic sweep.
+     */
+    List<LeaseEntity> findAllByStatusIn(List<LeaseStatus> statuses);
+
 }

@@ -39,5 +39,24 @@ public interface RentLedgerEntryRepository {
 
     List<RentLedgerEntry> findByTenantAndStatus(UUID tenantId, RentLedgerStatus status);
 
+    /**
+     * Tenant-agnostic: the most recently posted entry for a lease, ordered
+     * by billing period. Used by {@code RentChargeScheduler} to resume
+     * posting from wherever it last left off, rather than replaying every
+     * month of a lease's history on each run.
+     */
+    Optional<RentLedgerEntry> findLatestByLeaseId(UUID leaseId);
+
+    /**
+     * Tenant-agnostic sibling of {@code findByTenantAndStatusInAndDueDateLessThanEqual}
+     * above, used by {@code RentOverdueScheduler}'s cross-tenant sweep.
+     * Grace period (per-lease) is applied by the caller after this broad
+     * fetch, not folded into this query.
+     */
+    List<RentLedgerEntry> findAllByStatusInAndDueDateLessThanEqual(
+            List<RentLedgerStatus> statuses,
+            LocalDate cutoffDate
+    );
+
     void delete(UUID id);
 }

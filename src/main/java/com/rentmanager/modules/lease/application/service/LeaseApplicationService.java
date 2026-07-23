@@ -8,6 +8,7 @@ import com.rentmanager.modules.lease.application.dto.request.CreateLeaseRequest;
 import com.rentmanager.modules.lease.application.dto.request.LeaseActionRequest;
 import com.rentmanager.modules.lease.application.dto.request.UpdateLeaseRequest;
 import com.rentmanager.modules.lease.application.orchestration.LeaseActivationOrchestrator;
+import com.rentmanager.modules.lease.domain.enums.LeaseStatus;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowEngine;
@@ -19,6 +20,8 @@ import com.rentmanager.shared.security.context.TenantContext;
 import com.rentmanager.shared.exception.ErrorCode;
 import com.rentmanager.shared.exception.ResourceNotFoundException;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,7 +30,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 import java.util.UUID;
 
 @Service
@@ -130,7 +134,11 @@ public class LeaseApplicationService {
     // =========================================================
     public LeaseDetailResponse getById(UUID leaseId) {
         UUID tenantId = TenantContext.getTenantId();
-        return toDetailResponse(load(leaseId, tenantId));
+        Lease lease = load(leaseId, tenantId);
+        TenantProfile profile = lease.getTenantProfileId() != null
+                ? tenantProfileRepository.findById(lease.getTenantProfileId()).orElse(null)
+                : null;
+        return toDetailResponse(lease, profile);
     }
     // =========================================================
 
@@ -140,23 +148,44 @@ public class LeaseApplicationService {
 
         UUID tenantId = TenantContext.getTenantId();
 
-        var result = leaseRepository.findAllByTenant(tenantId).stream()
-                .filter(l -> request.propertyId() == null || l.getPropertyId().equals(request.propertyId()))
-                .filter(l -> request.status() == null || l.getStatus().name().equals(request.status().name()))
-                .filter(l -> request.fromDate() == null || !l.getStartDate().isBefore(request.fromDate()))
-                .filter(l -> request.toDate() == null || !l.getEndDate().isAfter(request.toDate()))
-                .map(this::toSummary)
+        LeaseStatus statusFilter = request.status() != null ? LeaseStatus.valueOf(request.status().name()) : null;
+
+        Page<Lease> leasePage = leaseRepository.search(
+                tenantId,
+                request.propertyId(),
+                statusFilter,
+                request.fromDate(),
+                request.toDate(),
+                PageRequest.of(request.page(), request.size())
+        );
+
+        List<Lease> leases = leasePage.getContent();
+        Map<UUID, TenantProfile> profileMap = loadProfiles(leases);
+
+        List<LeaseSummaryResponse> result = leases.stream()
+                .map(l -> toSummary(l, profileMap.get(l.getTenantProfileId())))
                 .toList();
 
         return new PageResponse<>(
                 result,
-                request.page(),
-                request.size(),
-                result.size(),
-                1,
-                true,
-                true
+                leasePage.getNumber(),
+                leasePage.getSize(),
+                leasePage.getTotalElements(),
+                leasePage.getTotalPages(),
+                leasePage.isFirst(),
+                leasePage.isLast()
         );
+    }
+
+    private Map<UUID, TenantProfile> loadProfiles(List<Lease> leases) {
+        Set<UUID> profileIds = leases.stream()
+                .map(Lease::getTenantProfileId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (profileIds.isEmpty()) return Collections.emptyMap();
+        return tenantProfileRepository.findAllById(profileIds)
+                .stream()
+                .collect(Collectors.toMap(TenantProfile::getId, p -> p));
     }
 
 
@@ -311,7 +340,7 @@ public class LeaseApplicationService {
     // (signedAt/activatedAt/terminatedAt/expiredAt/renewedAt/cancelledAt/
     // terminationType/terminationReason), previously persisted correctly
     // but never surfaced here. See LeaseDetailResponse for field details.
-    private LeaseDetailResponse toDetailResponse(Lease lease) {
+    private LeaseDetailResponse toDetailResponse(Lease lease, TenantProfile profile) {
         return new LeaseDetailResponse(
                 lease.getId(),
                 lease.getLeaseNumber(),
@@ -330,6 +359,8 @@ public class LeaseApplicationService {
                 lease.getCreatedAt().atZone(java.time.ZoneId.systemDefault()).toLocalDate(),
                 lease.getUpdatedAt().atZone(java.time.ZoneId.systemDefault()).toLocalDate(),
                 lease.getVersion(),
+                profile != null ? profile.getFullName() : null,
+                profile != null ? profile.getPhone() : null,
                 lease.getSignedAt(),
                 lease.getActivatedAt(),
                 lease.getTerminatedAt(),
@@ -342,14 +373,16 @@ public class LeaseApplicationService {
     }
 
     // =========================================================
-    private LeaseSummaryResponse toSummary(Lease lease) {
+    private LeaseSummaryResponse toSummary(Lease lease, TenantProfile profile) {
         return new LeaseSummaryResponse(
                 lease.getId(),
                 lease.getLeaseNumber(),
                 map(lease.getStatus()),
                 lease.getStartDate(),
                 lease.getEndDate(),
-                lease.getRentAmount()
+                lease.getRentAmount(),
+                profile != null ? profile.getFullName() : null,
+                profile != null ? profile.getPhone() : null
         );
     }
 

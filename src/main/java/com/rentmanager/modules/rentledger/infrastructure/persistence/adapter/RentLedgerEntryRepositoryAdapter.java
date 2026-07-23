@@ -65,6 +65,18 @@ public class RentLedgerEntryRepositoryAdapter implements RentLedgerEntryReposito
     }
 
     @Override
+    public Optional<RentLedgerEntry> findLatestByLeaseId(UUID leaseId) {
+        return jpaRepository.findFirstByLeaseIdOrderByBillingPeriodStartDesc(leaseId).map(mapper::toDomain);
+    }
+
+    @Override
+    public List<RentLedgerEntry> findAllByStatusInAndDueDateLessThanEqual(
+            List<RentLedgerStatus> statuses, LocalDate cutoffDate) {
+        return jpaRepository.findAllByStatusInAndDueDateLessThanEqual(statuses, cutoffDate)
+                .stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
     public void delete(UUID id) {
         jpaRepository.deleteById(id);
     }

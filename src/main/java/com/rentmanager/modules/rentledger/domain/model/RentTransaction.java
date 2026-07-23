@@ -186,7 +186,8 @@ public class RentTransaction extends AggregateRoot {
     public boolean reducesBalanceOwed() {
         return type == RentTransactionType.PAYMENT
                 || type == RentTransactionType.WAIVER
-                || type == RentTransactionType.CREDIT_APPLIED;
+                || type == RentTransactionType.CREDIT_APPLIED
+                || type == RentTransactionType.DEPOSIT;
         // REFUND deliberately excluded: a refund reduces amountPaid (money
         // handed back), not the balance owed — it's the mechanism for
         // resolving an OVERPAID entry, applied via a dedicated method on

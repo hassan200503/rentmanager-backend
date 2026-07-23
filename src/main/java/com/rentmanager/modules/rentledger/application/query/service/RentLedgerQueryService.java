@@ -4,6 +4,7 @@ import com.rentmanager.modules.rentledger.api.dto.response.RentLedgerEntryRespon
 import com.rentmanager.modules.rentledger.api.dto.response.RentTransactionResponse;
 import com.rentmanager.modules.rentledger.domain.enums.RentLedgerStatus;
 
+import com.rentmanager.modules.rentledger.api.dto.response.RentTransactionSummaryResponse;
 import java.util.List;
 import java.util.UUID;
 
@@ -16,4 +17,6 @@ public interface RentLedgerQueryService {
     List<RentLedgerEntryResponse> getByStatus(UUID tenantId, RentLedgerStatus status);
 
     List<RentTransactionResponse> getTransactionsForEntry(UUID tenantId, UUID entryId);
+
+    List<RentTransactionSummaryResponse> getAllTransactions(UUID tenantId);
 }

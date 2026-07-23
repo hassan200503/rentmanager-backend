@@ -303,6 +303,8 @@ class LeaseControllerSecurityTest {
                 LocalDate.now(),
                 LocalDate.now(),
                 1L,
+                null,  // tenantFullName
+                null,  // tenantPhone
                 null,  // signedAt
                 null,  // activatedAt
                 null,  // terminatedAt

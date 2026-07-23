@@ -91,8 +91,9 @@ public class UnitReservationTransactionService {
             );
         }
 
-        BigDecimal depositAmount = unit.getRentAmount()
-                .multiply(BigDecimal.valueOf(DEPOSIT_MONTHS));
+        BigDecimal depositAmount = unit.getDepositAmount() != null
+                ? unit.getDepositAmount()
+                : unit.getRentAmount().multiply(BigDecimal.valueOf(DEPOSIT_MONTHS));
 
         String formDataJson;
         try {
