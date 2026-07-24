@@ -130,4 +130,21 @@ public class UnitCommandController {
                 ApiResponse.ok("Unit marked as vacant", "SUCCESS")
         );
     }
+
+    @DeleteMapping("/{unitId}")
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER')")
+    public ResponseEntity<ApiResponse<Void>> deleteUnit(
+            @PathVariable UUID unitId
+    ) {
+        UUID tenantId = TenantContext.getTenantId();
+
+        try {
+            unitCommandService.delete(tenantId, unitId);
+            return ResponseEntity.ok(ApiResponse.ok(null));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.ok(ApiResponse.fail(ex.getMessage(), "NOT_FOUND"));
+        } catch (Exception ex) {
+            return ResponseEntity.ok(ApiResponse.fail("Failed to delete unit.", "CONFLICT"));
+        }
+    }
 }

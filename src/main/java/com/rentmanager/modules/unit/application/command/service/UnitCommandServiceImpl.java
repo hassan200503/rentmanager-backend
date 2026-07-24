@@ -160,6 +160,14 @@ public class UnitCommandServiceImpl implements UnitCommandService {
         eventPublisher.publishAll(events);
     }
 
+    @Override
+    public void delete(UUID tenantId, UUID unitId) {
+        Unit unit = unitRepository.findByIdAndTenantId(unitId, tenantId)
+                .orElseThrow(() -> new IllegalArgumentException("Unit not found"));
+
+        unitRepository.delete(unit);
+    }
+
     private String generateCorrelationId() {
         return "CORR-" + System.currentTimeMillis();
     }

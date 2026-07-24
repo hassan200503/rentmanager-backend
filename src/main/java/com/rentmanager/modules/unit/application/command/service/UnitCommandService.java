@@ -38,6 +38,5 @@ public interface UnitCommandService {
      */
     void markVacant(UUID tenantId, UUID unitId, String correlationId);
 
-
-
+    void delete(UUID tenantId, UUID unitId);
 }

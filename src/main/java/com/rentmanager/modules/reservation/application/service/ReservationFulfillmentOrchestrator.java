@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.math.BigDecimal;
 import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -181,6 +182,13 @@ public class ReservationFulfillmentOrchestrator {
             TenantProfile tenantProfile;
             if (existingProfile.isPresent()) {
                 tenantProfile = existingProfile.get();
+                tenantProfile.updateDetails(
+                        event.getFullName(),
+                        event.getEmail(),
+                        event.getPhone(),
+                        event.getNationalId()
+                );
+                tenantProfileRepository.save(tenantProfile);
                 saga.tenantProfileCreatedThisRun = false;
             } else {
                 tenantProfile = tenantProfileRepository.save(TenantProfile.create(
@@ -233,12 +241,20 @@ public class ReservationFulfillmentOrchestrator {
             // Record the deposit transaction in the rent ledger immediately,
             // so it appears live in the transactions dashboard. The deposit
             // was already collected via M-Pesa STK Push during reservation.
-            rentLedgerApplicationService.postDeposit(
-                    landlordTenantId,
-                    "reservation-deposit-" + reservationId,
-                    lease.getId(),
-                    event.getDepositAmount()
-            );
+            // Note: if no ledger entry exists yet (lease not activated),
+            // postDeposit is a no-op. The deposit is posted by
+            // LeaseActivationOrchestrator.onLeaseActivated when the lease
+            // is activated.
+            if (lease.getSecurityDeposit() != null
+                    && lease.getSecurityDeposit().compareTo(BigDecimal.ZERO) > 0) {
+                rentLedgerApplicationService.postDeposit(
+                        landlordTenantId,
+                        "reservation-deposit-" + reservationId,
+                        lease.getId(),
+                        lease.getSecurityDeposit(),
+                        reservation.getMpesaReceiptNumber()
+                );
+            }
             saga.depositPosted = true;
 
             // ---- Step 5: Unit reserved ----

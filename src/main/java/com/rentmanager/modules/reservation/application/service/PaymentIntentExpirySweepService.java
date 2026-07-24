@@ -89,12 +89,20 @@ public class PaymentIntentExpirySweepService {
     @Transactional
     public void releaseOrphanedUnit(UUID paymentIntentId) {
         PaymentIntent intent = paymentIntentRepository.findById(paymentIntentId)
-                .orElseThrow(() -> new IllegalStateException(
-                        "PaymentIntent vanished during orphaned-unit sweep: " + paymentIntentId));
+                .orElse(null);
+        if (intent == null) {
+            log.warn("PaymentIntent vanished during orphaned-unit sweep, nothing to release. paymentIntentId={}",
+                    paymentIntentId);
+            return;
+        }
 
         Unit unit = unitRepository.findByIdForUpdate(intent.getUnitId())
-                .orElseThrow(() -> new IllegalStateException(
-                        "Unit vanished during orphaned-unit sweep: " + intent.getUnitId()));
+                .orElse(null);
+        if (unit == null) {
+            log.warn("Unit vanished during orphaned-unit sweep, nothing to release. paymentIntentId={} unitId={}",
+                    paymentIntentId, intent.getUnitId());
+            return;
+        }
 
         if (unit.getOccupancyStatus() == UnitOccupancyStatus.PENDING_PAYMENT) {
             unit.releasePendingPayment(paymentIntentId.toString());

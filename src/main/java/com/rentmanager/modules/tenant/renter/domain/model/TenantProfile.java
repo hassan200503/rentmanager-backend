@@ -99,6 +99,21 @@ public class TenantProfile extends AggregateRoot {
         return profile;
     }
 
+    public void updateDetails(String fullName, String email, String phone, String nationalId) {
+        if (fullName != null && !fullName.isBlank()) {
+            this.fullName = fullName;
+        }
+        if (email != null && !email.isBlank()) {
+            this.email = email;
+        }
+        if (phone != null && !phone.isBlank()) {
+            this.phone = phone;
+        }
+        if (nationalId != null && !nationalId.isBlank()) {
+            this.nationalId = nationalId;
+        }
+    }
+
     public String getClerkUserId() { return clerkUserId; }
     public String getFullName() { return fullName; }
     public String getEmail() { return email; }

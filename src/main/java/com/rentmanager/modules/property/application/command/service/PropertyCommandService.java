@@ -24,4 +24,6 @@ public interface PropertyCommandService {
 
 
     PropertyResponse markPartiallyOccupied(UUID tenantId, UUID propertyId);
+
+    void deleteProperty(UUID tenantId, UUID propertyId);
 }

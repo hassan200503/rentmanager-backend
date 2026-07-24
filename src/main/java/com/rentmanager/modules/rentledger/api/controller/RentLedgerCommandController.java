@@ -79,6 +79,19 @@ public class RentLedgerCommandController {
         return ApiResponse.ok(RentLedgerEntryResponse.from(entry));
     }
 
+    @DeleteMapping("/transactions/{transactionId}")
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER')")
+    public ApiResponse<Void> deleteTransaction(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @PathVariable UUID transactionId
+    ) {
+        rentLedgerApplicationService.deleteTransaction(
+                requireTenantId(user),
+                transactionId
+        );
+        return ApiResponse.ok("Transaction deleted", null);
+    }
+
     @PostMapping("/entries/{entryId}/adjustments")
     @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER')")
     public ApiResponse<RentLedgerEntryResponse> applyAdjustment(

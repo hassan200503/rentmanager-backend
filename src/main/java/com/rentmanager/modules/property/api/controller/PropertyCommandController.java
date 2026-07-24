@@ -93,6 +93,23 @@ public class PropertyCommandController {
         );
     }
 
+    // ---------------- DELETE ----------------
+    @DeleteMapping("/{propertyId}")
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER')")
+    public ApiResponse<Void> deleteProperty(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @PathVariable UUID propertyId
+    ) {
+        try {
+            propertyCommandService.deleteProperty(requireTenantId(user), propertyId);
+            return ApiResponse.ok(null);
+        } catch (IllegalArgumentException ex) {
+            return ApiResponse.fail(ex.getMessage(), "NOT_FOUND");
+        } catch (Exception ex) {
+            return ApiResponse.fail("Failed to delete property. Ensure all associated units are deleted first.", "CONFLICT");
+        }
+    }
+
     private UUID requireTenantId(AuthenticatedUser user) {
         UUID tenantId = user.getTenantId();
         if (tenantId == null) {

@@ -27,4 +27,6 @@ public interface RentTransactionRepository {
     List<RentTransaction> findAllByTenant(UUID tenantId);
 
     long countByTenantId(UUID tenantId);
+
+    void deleteById(UUID id);
 }

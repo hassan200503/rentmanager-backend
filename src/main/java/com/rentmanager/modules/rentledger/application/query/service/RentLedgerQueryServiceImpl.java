@@ -129,7 +129,8 @@ public class RentLedgerQueryServiceImpl implements RentLedgerQueryService {
                             tx.getOccurredAt(),
                             profile != null ? profile.getFullName() : null,
                             profile != null ? profile.getPhone() : null,
-                            lease != null ? lease.getLeaseNumber() : null
+                            lease != null ? lease.getLeaseNumber() : null,
+                            lease != null ? lease.getStatus().name() : null
                     );
                 })
                 .toList();

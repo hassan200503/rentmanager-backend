@@ -60,4 +60,9 @@ public class RentTransactionRepositoryAdapter implements RentTransactionReposito
     public long countByTenantId(UUID tenantId) {
         return jpaRepository.countByTenantId(tenantId);
     }
+
+    @Override
+    public void deleteById(UUID id) {
+        jpaRepository.deleteById(id);
+    }
 }

@@ -163,6 +163,15 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
         return propertyMapper.toResponse(saved);
     }
 
+    // ---------------- DELETE ----------------
+    @Override
+    public void deleteProperty(UUID tenantId, UUID propertyId) {
+        Property property = propertyRepository.findByIdAndTenantId(propertyId, tenantId)
+                .orElseThrow(() -> new IllegalArgumentException("Property not found"));
+
+        propertyRepository.delete(property);
+    }
+
     // ---------------- INTERNAL ----------------
     private String generateCorrelationId() {
         return "PROP-" + UUID.randomUUID();

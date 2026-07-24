@@ -160,21 +160,63 @@ public class RentLedgerApplicationService {
             UUID leaseId,
             BigDecimal depositAmount
     ) {
-        String depositRef = "deposit-" + leaseId;
+        postDeposit(tenantId, correlationId, leaseId, depositAmount, null);
+    }
+
+    @Transactional
+    public void postDeposit(
+            UUID tenantId,
+            String correlationId,
+            UUID leaseId,
+            BigDecimal depositAmount,
+            String mpesaReceiptNumber
+    ) {
+        String depositRef = mpesaReceiptNumber != null ? mpesaReceiptNumber : "deposit-" + leaseId;
+        String canonicalRef = "deposit-" + leaseId;
         Optional<RentTransaction> existing =
-                rentTransactionRepository.findByExternalReference(tenantId, depositRef);
+                rentTransactionRepository.findByExternalReference(tenantId, canonicalRef);
         if (existing.isPresent()) {
             log.info("postDeposit is a no-op: deposit already recorded for leaseId={}", leaseId);
             return;
         }
 
         List<RentLedgerEntry> entries = rentLedgerEntryRepository.findByLease(tenantId, leaseId);
+
+        RentLedgerEntry entry;
         if (entries.isEmpty()) {
-            log.warn("postDeposit: no ledger entry found for leaseId={}", leaseId);
-            return;
+            Lease lease = leaseRepository.findByIdAndTenantId(leaseId, tenantId)
+                    .orElseThrow(() -> new RentLedgerStateException(
+                            "lease not found: " + leaseId, ErrorCode.LEASE_NOT_FOUND));
+
+            LocalDate billingPeriodStart = lease.getStartDate();
+            LocalDate billingPeriodEnd = YearMonth.from(billingPeriodStart).atEndOfMonth();
+
+            boolean prorated = billingPeriodStart.getDayOfMonth() > 1;
+            BigDecimal amountDue = prorated
+                    ? prorate(lease.getRentAmount(), billingPeriodStart)
+                    : lease.getRentAmount();
+
+            entry = RentLedgerEntry.create(
+                    tenantId, correlationId, leaseId, lease.getUnitId(),
+                    lease.getTenantProfileId(), billingPeriodStart, billingPeriodEnd,
+                    billingPeriodStart, amountDue, prorated
+            );
+            entry = rentLedgerEntryRepository.save(entry);
+
+            RentTransaction chargeTransaction = RentTransaction.create(
+                    tenantId, entry.getId(), leaseId,
+                    RentTransactionType.RENT_CHARGE, amountDue,
+                    null, RentTransactionSource.SYSTEM, "SYSTEM",
+                    billingPeriodStart.atStartOfDay()
+            );
+            rentTransactionRepository.save(chargeTransaction);
+        } else {
+            entry = entries.get(0);
         }
 
-        RentLedgerEntry entry = entries.get(0);
+        RentTransactionSource source = mpesaReceiptNumber != null
+                ? RentTransactionSource.MPESA
+                : RentTransactionSource.SYSTEM;
 
         RentTransaction depositTransaction = RentTransaction.create(
                 tenantId,
@@ -183,7 +225,7 @@ public class RentLedgerApplicationService {
                 RentTransactionType.DEPOSIT,
                 depositAmount,
                 depositRef,
-                RentTransactionSource.SYSTEM,
+                source,
                 "SYSTEM",
                 LocalDateTime.now()
         );
@@ -446,6 +488,39 @@ public class RentLedgerApplicationService {
         publish(targetEntry);
         // sourceEntry registers no event on resolveOverpaymentAsCredit() by
         // design — its status change is visible to any direct reader.
+    }
+
+    // ------------------------------------------------------------------
+    // Transaction deletion (permanent delete from system)
+    // ------------------------------------------------------------------
+
+    /**
+     * Permanently deletes a transaction and recalculates the parent ledger
+     * entry's {@code amountPaid} and {@code status} to reflect the removal.
+     *
+     * RENT_CHARGE transactions cannot be deleted (the entry must remain
+     * intact). ADJUSTMENT transactions cannot be deleted because the
+     * direction (signed delta) is not stored on the transaction record.
+     */
+    @Transactional
+    public void deleteTransaction(UUID tenantId, UUID transactionId) {
+        RentTransaction transaction = rentTransactionRepository.findByIdAndTenantId(transactionId, tenantId)
+                .orElseThrow(() -> new RentLedgerStateException(
+                        "transaction not found: " + transactionId,
+                        ErrorCode.RESOURCE_NOT_FOUND
+                ));
+
+        RentLedgerEntry entry = rentLedgerEntryRepository.findByIdAndTenantId(
+                        transaction.getLedgerEntryId(), tenantId)
+                .orElseThrow(() -> new RentLedgerStateException(
+                        "rent ledger entry not found: " + transaction.getLedgerEntryId(),
+                        ErrorCode.RESOURCE_NOT_FOUND
+                ));
+
+        entry.removeTransaction(transaction);
+
+        rentTransactionRepository.deleteById(transaction.getId());
+        rentLedgerEntryRepository.save(entry);
     }
 
     // ------------------------------------------------------------------

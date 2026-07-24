@@ -417,6 +417,52 @@ public class RentLedgerEntry extends AggregateRoot {
     }
 
     // ------------------------------------------------------------------
+    // Transaction reversal (delete support)
+    // ------------------------------------------------------------------
+
+    /**
+     * Reverses the effect of a previously-applied transaction when it is
+     * permanently deleted from the system. No domain event is registered
+     * — we are correcting history, not applying new business state.
+     *
+     * RENT_CHARGE cannot be removed (it is the entry's foundational charge;
+     * delete the entire entry instead). ADJUSTMENT cannot be removed
+     * because the direction (delta sign) is not stored on the transaction
+     * record — only {@code delta.abs()} is persisted.
+     */
+    public void removeTransaction(RentTransaction transaction) {
+        requireMatchingLedgerEntry(transaction);
+
+        switch (transaction.getType()) {
+            case PAYMENT:
+            case WAIVER:
+            case CREDIT_APPLIED:
+            case DEPOSIT:
+                this.amountPaid = this.amountPaid.subtract(transaction.getAmount());
+                if (this.amountPaid.compareTo(BigDecimal.ZERO) < 0) {
+                    this.amountPaid = BigDecimal.ZERO.setScale(2);
+                }
+                break;
+            case REFUND:
+                this.amountPaid = this.amountPaid.add(transaction.getAmount());
+                break;
+            case RENT_CHARGE:
+                throw new RentLedgerStateException(
+                        "Cannot remove RENT_CHARGE transaction; delete the entire entry instead",
+                        ErrorCode.RENT_LEDGER_ENTRY_UNSUPPORTED_TRANSACTION_TYPE
+                );
+            case ADJUSTMENT:
+                throw new RentLedgerStateException(
+                        "Cannot remove ADJUSTMENT transaction; direction (signed delta) is not stored",
+                        ErrorCode.RENT_LEDGER_ENTRY_UNSUPPORTED_TRANSACTION_TYPE
+                );
+        }
+
+        this.updatedAt = Instant.now();
+        recomputeStatus();
+    }
+
+    // ------------------------------------------------------------------
     // Queries
     // ------------------------------------------------------------------
 

@@ -16,5 +16,6 @@ public record RentTransactionSummaryResponse(
         LocalDateTime occurredAt,
         String tenantFullName,
         String tenantPhone,
-        String leaseNumber
+        String leaseNumber,
+        String leaseStatus
 ) {}
