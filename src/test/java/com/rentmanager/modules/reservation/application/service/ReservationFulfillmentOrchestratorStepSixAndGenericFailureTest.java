@@ -153,6 +153,7 @@ class ReservationFulfillmentOrchestratorStepSixAndGenericFailureTest {
                 BigDecimal.valueOf(15000),
                 null,
                 "Nice unit",
+                null,
                 null
         );
     }

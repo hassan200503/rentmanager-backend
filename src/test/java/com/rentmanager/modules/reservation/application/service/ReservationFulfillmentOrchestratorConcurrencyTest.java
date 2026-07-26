@@ -209,6 +209,7 @@ class ReservationFulfillmentOrchestratorConcurrencyTest {
                 BigDecimal.valueOf(15000),
                 null,
                 "Nice unit",
+                null,
                 null
         );
         when(unitRepository.findById(unitId)).thenReturn(Optional.of(unit));

@@ -27,6 +27,7 @@ public class UnitPersistenceMapper {
                 .floor(unit.getFloor())
                 .description(unit.getDescription())
                 .vacatedAt(unit.getVacatedAt())
+                .version(unit.getVersion())
                 .build();
     }
 
@@ -49,7 +50,8 @@ public class UnitPersistenceMapper {
                 entity.getRentAmount(),
                 entity.getDepositAmount(),
                 entity.getDescription(),
-                entity.getVacatedAt()
+                entity.getVacatedAt(),
+                entity.getVersion()
         );
     }
 }

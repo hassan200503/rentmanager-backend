@@ -33,4 +33,10 @@ public interface PaymentIntentRepository {
      * release the unit due to a transient DB error that was swallowed).
      */
     List<PaymentIntent> findByStatusInAndCreatedAtBefore(List<PaymentIntentStatus> statuses, Instant cutoff);
+
+    /**
+     * Deletes a PaymentIntent. Used by the orphaned-unit sweep to clean
+     * up terminal-state intents after the unit is confirmed released.
+     */
+    void delete(PaymentIntent paymentIntent);
 }

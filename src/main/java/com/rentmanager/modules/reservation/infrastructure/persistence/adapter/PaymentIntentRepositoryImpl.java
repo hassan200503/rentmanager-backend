@@ -52,6 +52,12 @@ public class PaymentIntentRepositoryImpl implements PaymentIntentRepository {
                 .toList();
     }
 
+    @Override
+    public void delete(PaymentIntent paymentIntent) {
+        PaymentIntentJpaEntity entity = toEntity(paymentIntent);
+        jpaRepository.delete(entity);
+    }
+
     // -------------------------------------------------------
     // MAPPING
     // -------------------------------------------------------

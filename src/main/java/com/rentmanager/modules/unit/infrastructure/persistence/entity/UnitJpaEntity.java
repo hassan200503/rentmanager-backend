@@ -59,6 +59,7 @@ public class UnitJpaEntity {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-
+    @Version
+    private Long version;
 
 }

@@ -13,6 +13,7 @@ import com.rentmanager.shared.exception.ErrorCode;
 import com.rentmanager.shared.exception.LeaseStateException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,27 @@ public class LeaseActionScheduler {
     private final LeaseActivationOrchestrator leaseActivationOrchestrator;
     private final LeaseWorkflowEngine leaseWorkflowEngine;
     private UnitRepository unitRepository;
+
+    // ------------------------------------------------------------------
+    // SELF-INVOCATION FIX: @Transactional only takes effect when a call
+    // passes through Spring's CGLIB proxy for this bean. runDaily() and
+    // runDailyExpiry() previously called activateOne()/expireOne() via a
+    // plain `this.` call, which bypasses the proxy entirely — so those
+    // methods silently ran with NO transaction, causing
+    // TransactionRequiredException inside UnitRepositoryAdapter's
+    // pessimistic-lock query (findByIdForUpdate). Injecting a @Lazy
+    // self-reference and calling through it forces the call back through
+    // the proxy so @Transactional actually applies. @Lazy is required
+    // here — a non-lazy self-autowire would try to fully construct this
+    // bean while it's still being constructed. Field injection (not
+    // constructor) is deliberate for the same reason. This field is only
+    // used by runDaily()/runDailyExpiry(); tests that call
+    // activateOne()/expireOne() directly (e.g. the 4-arg-constructor
+    // expiry-only tests) never touch it and are unaffected.
+    // ------------------------------------------------------------------
+    @Autowired
+    @Lazy
+    private LeaseActionScheduler self;
 
     // 4-arg constructor — used by expiry-only tests that don't need UnitRepository
     public LeaseActionScheduler(
@@ -58,8 +80,16 @@ public class LeaseActionScheduler {
 
     /**
      * Runs daily — activates leases whose move-in date has arrived.
+     *
+     * ============================================================
+     * TEMPORARY TEST OVERRIDE (revert before merging/deploying):
+     * Original: @Scheduled(cron = "0 0 1 * * *") // 1:00 AM daily
+     * Swapped to fixedRate so activation fires every 5 minutes
+     * instead of waiting for the daily 1:00 AM window, purely to
+     * make manual/local testing faster.
+     * ============================================================
      */
-    @Scheduled(cron = "0 0 1 * * *") // 1:00 AM daily — adjust to your timezone/needs
+    @Scheduled(fixedRate = 5 * 60 * 1000, initialDelay = 5 * 60 * 1000) // TEMP-TEST: every 5 min
     public void runDaily() {
 
         List<Lease> leases =
@@ -72,7 +102,9 @@ public class LeaseActionScheduler {
 
         for (Lease lease : leases) {
             try {
-                activateOne(lease);
+                // Call through the proxied self-reference, not `this` —
+                // see the self-invocation fix note on the `self` field.
+                self.activateOne(lease);
             } catch (Exception e) {
                 log.error("Failed to activate lease id={}", lease.getId(), e);
                 // continue processing remaining leases rather than aborting the batch
@@ -101,7 +133,7 @@ public class LeaseActionScheduler {
         // also transition to OCCUPIED so property occupancy rollup works.
         UUID unitId = lease.getUnitId();
         if (unitId != null && unitRepository != null) {
-            Unit unit = unitRepository.findByIdAndTenantId(unitId, tenantId)
+            Unit unit = unitRepository.findByIdForUpdate(unitId)
                     .orElseThrow(() -> new IllegalArgumentException(
                             "Unit not found for lease activation. unitId=" + unitId));
             unit.markOccupied("lease-activation-" + lease.getId());
@@ -134,8 +166,16 @@ public class LeaseActionScheduler {
      *
      * Eligible source statuses are ACTIVE and RENEWED, per this session's
      * decision to treat RENEWED as equivalent to ACTIVE going forward.
+     *
+     * ============================================================
+     * TEMPORARY TEST OVERRIDE (revert before merging/deploying):
+     * Original: @Scheduled(cron = "0 30 1 * * *") // 1:30 AM daily
+     * Swapped to fixedRate so expiry fires every 10 minutes instead
+     * of waiting for the daily 1:30 AM window, purely to make
+     * manual/local testing faster.
+     * ============================================================
      */
-    @Scheduled(cron = "0 30 1 * * *") // 1:30 AM daily
+    @Scheduled(fixedRate = 10 * 60 * 1000, initialDelay = 10 * 60 * 1000) // TEMP-TEST: every 10 min
     public void runDailyExpiry() {
 
         List<Lease> leases =
@@ -149,7 +189,9 @@ public class LeaseActionScheduler {
 
         for (Lease lease : leases) {
             try {
-                expireOne(lease);
+                // Call through the proxied self-reference, not `this` —
+                // see the self-invocation fix note on the `self` field.
+                self.expireOne(lease);
             } catch (Exception e) {
                 log.error("Failed to expire lease id={}", lease.getId(), e);
             }

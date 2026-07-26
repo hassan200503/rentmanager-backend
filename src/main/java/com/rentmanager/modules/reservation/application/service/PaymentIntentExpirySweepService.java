@@ -85,13 +85,19 @@ public class PaymentIntentExpirySweepService {
      *
      * Does NOT modify the PaymentIntent — it's already in its terminal
      * state. Only releases the unit if it is still PENDING_PAYMENT.
+     *
+     * Once the unit is confirmed released (either just now by us, or
+     * previously by another path), the PaymentIntent is no longer needed
+     * and is deleted to prevent unbounded growth of terminal-state
+     * intents in the database and stop repeated "vanished" log noise
+     * every sweep cycle.
      */
     @Transactional
     public void releaseOrphanedUnit(UUID paymentIntentId) {
         PaymentIntent intent = paymentIntentRepository.findById(paymentIntentId)
                 .orElse(null);
         if (intent == null) {
-            log.warn("PaymentIntent vanished during orphaned-unit sweep, nothing to release. paymentIntentId={}",
+            log.debug("PaymentIntent already deleted (swept previously). paymentIntentId={}",
                     paymentIntentId);
             return;
         }
@@ -99,18 +105,46 @@ public class PaymentIntentExpirySweepService {
         Unit unit = unitRepository.findByIdForUpdate(intent.getUnitId())
                 .orElse(null);
         if (unit == null) {
-            log.warn("Unit vanished during orphaned-unit sweep, nothing to release. paymentIntentId={} unitId={}",
+            log.warn("Unit referenced by terminal PaymentIntent no longer exists. " +
+                    "Deleting orphaned PaymentIntent. paymentIntentId={} unitId={}",
                     paymentIntentId, intent.getUnitId());
+            paymentIntentRepository.delete(intent);
             return;
         }
 
-        if (unit.getOccupancyStatus() == UnitOccupancyStatus.PENDING_PAYMENT) {
-            unit.releasePendingPayment(paymentIntentId.toString());
-            unitRepository.save(unit);
-            eventPublisher.publishAll(unit.pullDomainEvents());
-            entityManager.flush();
-            log.warn("Released unit orphaned in PENDING_PAYMENT. paymentIntentId={} unitId={} intentStatus={}",
-                    paymentIntentId, intent.getUnitId(), intent.getStatus());
+        switch (unit.getOccupancyStatus()) {
+            case PENDING_PAYMENT -> {
+                unit.releasePendingPayment(paymentIntentId.toString());
+                unitRepository.save(unit);
+                eventPublisher.publishAll(unit.pullDomainEvents());
+                entityManager.flush();
+                log.warn("Released unit orphaned in PENDING_PAYMENT. paymentIntentId={} unitId={} intentStatus={}",
+                        paymentIntentId, intent.getUnitId(), intent.getStatus());
+                // Unit released; PaymentIntent is no longer actionable
+                deleteTerminalIntent(intent);
+            }
+            case VACANT -> {
+                // Unit was already released by a prior path (e.g. releaseUnitAndFailIntent).
+                // This is the expected happy case for most FAILED intents — just clean up.
+                log.debug("Unit already VACANT for terminal PaymentIntent. Cleaning up. " +
+                        "paymentIntentId={} unitId={}", paymentIntentId, intent.getUnitId());
+                deleteTerminalIntent(intent);
+            }
+            case RESERVED, OCCUPIED -> {
+                // Data integrity concern: terminal PaymentIntent but unit is in an
+                // active occupancy state. This should not happen under normal operation.
+                log.warn("Terminal PaymentIntent references unit in unexpected state. " +
+                                "paymentIntentId={} unitId={} unitStatus={} intentStatus={} " +
+                                "— manual review recommended, skipping auto cleanup.",
+                        paymentIntentId, intent.getUnitId(), unit.getOccupancyStatus(),
+                        intent.getStatus());
+            }
         }
+    }
+
+    private void deleteTerminalIntent(PaymentIntent intent) {
+        paymentIntentRepository.delete(intent);
+        log.info("Cleaned up terminal PaymentIntent. paymentIntentId={} status={}",
+                intent.getId(), intent.getStatus());
     }
 }

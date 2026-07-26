@@ -179,7 +179,8 @@ public class Unit extends AggregateRoot {
             BigDecimal rentAmount,
             BigDecimal depositAmount,
             String description,
-            LocalDateTime vacatedAt
+            LocalDateTime vacatedAt,
+            Long version
     ) {
         Unit unit = Unit.builder()
                 .propertyId(propertyId)
@@ -196,6 +197,7 @@ public class Unit extends AggregateRoot {
 
         unit.setId(id);
         unit.assignTenant(tenantId);
+        unit.setVersion(version);
         return unit;
     }
 
