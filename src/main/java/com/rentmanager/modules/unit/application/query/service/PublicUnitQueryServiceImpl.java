@@ -1,6 +1,7 @@
 package com.rentmanager.modules.unit.application.query.service;
 
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
+
 import com.rentmanager.modules.unit.application.dto.response.PublicUnitResponse;
 import com.rentmanager.modules.unit.application.mapper.UnitMapper;
 import com.rentmanager.modules.unit.domain.model.Unit;
@@ -9,6 +10,9 @@ import com.rentmanager.modules.unit.domain.repository.UnitMediaRepository;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
 import com.rentmanager.shared.exception.ErrorCode;
 import com.rentmanager.shared.exception.ResourceNotFoundException;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.NoResultException;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -16,6 +20,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -27,6 +32,9 @@ public class PublicUnitQueryServiceImpl implements PublicUnitQueryService {
     private final UnitMediaRepository unitMediaRepository;
     private final UnitMapper unitMapper;
     private final PropertyRepository propertyRepository;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     // =====================================================
     // PUBLIC LISTING HARDENING (2026-07-08)
@@ -72,6 +80,7 @@ public class PublicUnitQueryServiceImpl implements PublicUnitQueryService {
                 .toList();
 
         response.setImages(images);
+        attachLandlordVerified(response, unit);
         return response;
     }
 
@@ -93,6 +102,7 @@ public class PublicUnitQueryServiceImpl implements PublicUnitQueryService {
         return units.map(unit -> {
             PublicUnitResponse response = unitMapper.toPublicResponse(unit);
             response.setImages(imagesByUnitId.getOrDefault(unit.getId(), List.of()));
+            attachLandlordVerified(response, unit);
             return response;
         });
     }
@@ -130,8 +140,23 @@ public class PublicUnitQueryServiceImpl implements PublicUnitQueryService {
                 .map(UnitMedia::getUrl)
                 .toList();
         response.setImages(images);
+        attachLandlordVerified(response, unit);
 
         return response;
+    }
+
+    private void attachLandlordVerified(PublicUnitResponse response, Unit unit) {
+        try {
+            String sql = "SELECT verified FROM tenants WHERE id = :tenantId";
+            Object raw = entityManager
+                    .createNativeQuery(sql)
+                    .setParameter("tenantId", unit.getTenantId())
+                    .getSingleResult();
+            Boolean verified = raw instanceof Boolean b ? b : false;
+            response.setLandlordVerified(Boolean.TRUE.equals(verified));
+        } catch (NoResultException e) {
+            response.setLandlordVerified(false);
+        }
     }
 
     // TODO (out of scope for this task, flagged not forgotten):

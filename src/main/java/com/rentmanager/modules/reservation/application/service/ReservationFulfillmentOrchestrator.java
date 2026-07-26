@@ -2,6 +2,7 @@ package com.rentmanager.modules.reservation.application.service;
 
 import com.rentmanager.modules.identity.clerk.ClerkService;
 import com.rentmanager.modules.identity.clerk.ClerkUserCreationResult;
+import com.rentmanager.modules.identity.clerk.SignInTokenResult;
 import com.rentmanager.modules.lease.domain.enums.BillingCycle;
 import com.rentmanager.modules.lease.domain.enums.LeaseStatus;
 import com.rentmanager.modules.lease.domain.enums.LeaseType;
@@ -28,7 +29,6 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.math.BigDecimal;
-import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -36,8 +36,9 @@ import java.util.UUID;
  * Orchestrates the full Phase 4 chain as a compensating saga:
  * 0. Claim the reservation for fulfillment (DEPOSIT_PAID -> FULFILLING),
  *    committed independently — see ReservationFulfillmentStepZeroService.
- * 1. Create tenant account in Clerk (track if NEWLY created vs reused)
- * 2. Send SMS with credentials
+ * 1. Create tenant account in Clerk (track if NEWLY created vs reused);
+ *    no password is set — authentication uses single-use sign-in tokens.
+ * 2. Create a Clerk sign-in token (7-day expiry) and send the link via SMS
  * 3. Create or reuse TenantProfile (track if NEWLY created vs reused)
  * 4. Auto-create Lease in PENDING_ACTIVATION
  * 5. Mark Unit reserved
@@ -116,6 +117,7 @@ public class ReservationFulfillmentOrchestrator {
     // (e.g. tenant-configurable per property), or is 12 months a safe
     // hardcoded default for now?
     private static final int DEFAULT_LEASE_TERM_MONTHS = 12;
+    private static final int SIGN_IN_TOKEN_EXPIRY_SECONDS = 604800; // 7 days
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -150,24 +152,22 @@ public class ReservationFulfillmentOrchestrator {
         SagaState saga = new SagaState();
 
         try {
-            // ---- Step 1: Clerk account ----
-            String password = generateTemporaryPassword();
+            // ---- Step 1: Clerk account (no password — sign-in tokens only) ----
             ClerkUserCreationResult clerkResult = clerkService.createTenantUser(
                     event.getFullName(),
                     event.getEmail(),
-                    event.getPhone(),
-                    password
+                    event.getPhone()
             );
             String clerkUserId = clerkResult.clerkUserId();
             saga.clerkUserId = clerkUserId;
             saga.clerkUserCreatedThisRun = clerkResult.newlyCreated();
 
-            // ---- Step 2: SMS ----
-            if (clerkResult.newlyCreated()) {
-                smsService.sendCredentials(event.getPhone(), password);
-            } else {
-                smsService.sendReservationConfirmed(event.getPhone());
-            }
+            // ---- Step 2: Sign-in token + SMS ----
+            SignInTokenResult tokenResult = clerkService.createSignInToken(
+                    clerkUserId,
+                    SIGN_IN_TOKEN_EXPIRY_SECONDS
+            );
+            smsService.sendSignInLink(event.getPhone(), tokenResult.url());
 
             // ---- Step 3: TenantProfile ----
             Unit unit = unitRepository.findById(event.getUnitId())
@@ -291,16 +291,6 @@ public class ReservationFulfillmentOrchestrator {
                     "Reservation fulfillment failed after compensation; rolling back saga transaction. " +
                             "reservationId=" + reservationId, e);
         }
-    }
-
-    private String generateTemporaryPassword() {
-        SecureRandom random = new SecureRandom();
-        String chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < 10; i++) {
-            sb.append(chars.charAt(random.nextInt(chars.length())));
-        }
-        return sb.toString();
     }
 
     private String generateLeaseNumber(Unit unit) {

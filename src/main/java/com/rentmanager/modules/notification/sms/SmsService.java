@@ -6,4 +6,6 @@ public interface SmsService {
 
     void sendReservationConfirmed(String phone);
 
+    void sendSignInLink(String phone, String linkUrl);
+
 }

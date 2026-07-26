@@ -5,6 +5,8 @@ public interface ClerkService {
     /**
      * Creates a tenant user in the external identity system, or reuses an
      * existing one if the email is already registered. Idempotent by design.
+     * Tenant users are created WITHOUT a password — authentication is
+     * handled via single-use sign-in tokens.
      *
      * The returned newlyCreated flag reflects what THIS call actually did —
      * it is the single source of truth for whether the account is new.
@@ -12,7 +14,7 @@ public interface ClerkService {
      * against existsByEmail, since a check-then-create across two calls
      * is inherently racy.
      */
-    ClerkUserCreationResult createTenantUser(String fullName, String email, String phone, String password);
+    ClerkUserCreationResult createTenantUser(String fullName, String email, String phone);
 
     /**
      * Creates a landlord-org staff/manager user in the external identity
@@ -29,6 +31,13 @@ public interface ClerkService {
      * already exists.
      */
     ClerkUserCreationResult createStaffUser(String fullName, String email, String phone, String password);
+
+    /**
+     * Creates a single-use sign-in token for the given Clerk user,
+     * valid for expiresInSeconds. The returned SignInTokenResult
+     * contains the url that should be delivered to the user (e.g. via SMS).
+     */
+    SignInTokenResult createSignInToken(String clerkUserId, int expiresInSeconds);
 
     /**
      * Checks whether a Clerk user already exists for this email, without

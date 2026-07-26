@@ -4,8 +4,13 @@ import com.rentmanager.contract.common.ApiResponse;
 import com.rentmanager.modules.reservation.application.dto.InitiateReservationRequest;
 import com.rentmanager.modules.reservation.application.dto.InitiateReservationResponse;
 import com.rentmanager.modules.reservation.application.dto.PaymentStatusResponse;
+import com.rentmanager.modules.reservation.application.dto.ResendSignInLinkRequest;
+import com.rentmanager.modules.reservation.application.dto.ResendSignInLinkResponse;
+import com.rentmanager.modules.reservation.application.dto.ReservationDetailResponse;
 import com.rentmanager.modules.reservation.application.service.InitiateReservationService;
 import com.rentmanager.modules.reservation.application.service.PaymentStatusQueryService;
+import com.rentmanager.modules.reservation.application.service.ResendSignInLinkService;
+import com.rentmanager.modules.reservation.application.service.ReservationDetailQueryService;
 import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaProperties;
 import com.rentmanager.modules.reservation.infrastructure.daraja.MpesaCallbackPayload;
 import com.rentmanager.modules.reservation.infrastructure.daraja.MpesaCallbackService;
@@ -29,6 +34,8 @@ public class ReservationController {
     private final InitiateReservationService initiateReservationService;
     private final MpesaCallbackService mpesaCallbackService;
     private final PaymentStatusQueryService paymentStatusQueryService;
+    private final ReservationDetailQueryService reservationDetailQueryService;
+    private final ResendSignInLinkService resendSignInLinkService;
     private final DarajaProperties darajaProperties;
 
     /**
@@ -94,6 +101,47 @@ public class ReservationController {
         return ResponseEntity.ok(ApiResponse.ok(
                 "Payment status retrieved",
                 paymentStatusQueryService.getStatus(id)
+        ));
+    }
+
+    /**
+     * Confirmation page fetches this to show reservation details.
+     * Returns tenant name, deposit amount, status, etc.
+     *
+     * GET /api/v1/public/reservations/{reservationId}
+     */
+    @GetMapping("/{reservationId}")
+    public ResponseEntity<ApiResponse<ReservationDetailResponse>> getDetail(
+            @PathVariable UUID reservationId
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                "Reservation details retrieved",
+                reservationDetailQueryService.getDetail(reservationId)
+        ));
+    }
+
+    /**
+     * Re-sends the sign-in link SMS for a completed reservation.
+     * The caller must provide the reservation's phone number to
+     * verify they know both the reservation ID and the contact phone.
+     * <p>
+     * POST /api/v1/public/reservations/{reservationId}/resend-link
+     */
+    @PostMapping("/{reservationId}/resend-link")
+    public ResponseEntity<ApiResponse<ResendSignInLinkResponse>> resendLink(
+            @PathVariable UUID reservationId,
+            @Valid @RequestBody ResendSignInLinkRequest request
+    ) {
+        boolean sent = resendSignInLinkService.resend(reservationId, request.phone());
+        if (sent) {
+            return ResponseEntity.ok(ApiResponse.ok(
+                    "Sign-in link sent",
+                    new ResendSignInLinkResponse(true, "Sign-in link sent via SMS")
+            ));
+        }
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.fail(
+                "Could not send sign-in link — verify reservation ID and phone number",
+                "RESEND_FAILED"
         ));
     }
 }

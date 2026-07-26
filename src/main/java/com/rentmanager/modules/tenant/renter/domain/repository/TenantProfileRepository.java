@@ -13,6 +13,8 @@ public interface TenantProfileRepository {
 
     Optional<TenantProfile> findByTenantIdAndClerkUserId(UUID tenantId, String clerkUserId);
 
+    Optional<TenantProfile> findByClerkUserId(String clerkUserId);
+
     boolean existsByClerkUserId(String clerkUserId);
 
     boolean existsById(UUID id);

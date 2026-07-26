@@ -25,4 +25,10 @@ public class LoggingSmsService implements SmsService {
                         "(SmsService not wired to a real provider)",
                 PhoneMasker.mask(phone));
     }
+
+    @Override
+    public void sendSignInLink(String phone, String linkUrl) {
+        log.warn("[SMS STUB] Would send sign-in link to {}: {} (SmsService not wired to a real provider)",
+                PhoneMasker.mask(phone), linkUrl);
+    }
 }

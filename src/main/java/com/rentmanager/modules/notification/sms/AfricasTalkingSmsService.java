@@ -41,6 +41,11 @@ public class AfricasTalkingSmsService implements SmsService {
         send(phone, buildReservationConfirmedMessage());
     }
 
+    @Override
+    public void sendSignInLink(String phone, String linkUrl) {
+        send(phone, buildSignInLinkMessage(linkUrl));
+    }
+
     private void send(String phone, String message) {
         String normalized = normalizePhoneNumber(phone);
 
@@ -94,6 +99,14 @@ public class AfricasTalkingSmsService implements SmsService {
                 Sign in with your existing RentManager account.
                 Forgot password? Use "Forgot password" on the sign-in page.
                 - RentManager""";
+    }
+
+    private String buildSignInLinkMessage(String linkUrl) {
+        return """
+                Your RentManager portal is ready.
+                Click this link to sign in (expires in 7 days):
+                %s
+                - RentManager""".formatted(linkUrl);
     }
 
     private String normalizePhoneNumber(String raw) {

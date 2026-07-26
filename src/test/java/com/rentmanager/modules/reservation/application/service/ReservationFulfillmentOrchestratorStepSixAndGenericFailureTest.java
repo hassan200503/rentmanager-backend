@@ -179,9 +179,13 @@ class ReservationFulfillmentOrchestratorStepSixAndGenericFailureTest {
         when(clerkService.createTenantUser(
                 eq(reservation.getFullName()),
                 eq(reservation.getEmail()),
-                eq(reservation.getPhone()),
-                any(String.class))
+                eq(reservation.getPhone()))
         ).thenReturn(new ClerkUserCreationResult(clerkUserId, true));
+
+        when(clerkService.createSignInToken(eq(clerkUserId), anyInt()))
+                .thenReturn(new com.rentmanager.modules.identity.clerk.SignInTokenResult(
+                        "sht_test", "test_token", "https://example.com/sign-in/ticket/test_token"
+                ));
 
         when(unitRepository.findById(unitId)).thenReturn(Optional.of(unit));
 
@@ -199,8 +203,7 @@ class ReservationFulfillmentOrchestratorStepSixAndGenericFailureTest {
         assertThatThrownBy(() -> orchestrator.on(event))
                 .isSameAs(lockEx);
 
-        verify(smsService).sendCredentials(eq(reservation.getPhone()), any(String.class));
-        verify(smsService, never()).sendReservationConfirmed(any());
+        verify(smsService).sendSignInLink(eq(reservation.getPhone()), any(String.class));
 
         ArgumentCaptor<SagaState> sagaCaptor = ArgumentCaptor.forClass(SagaState.class);
         verify(compensationService, times(1))
@@ -228,7 +231,7 @@ class ReservationFulfillmentOrchestratorStepSixAndGenericFailureTest {
                 .thenReturn(Optional.of(reservation));
 
         RuntimeException clerkFailure = new RuntimeException("Clerk API unavailable");
-        when(clerkService.createTenantUser(any(), any(), any(), any()))
+        when(clerkService.createTenantUser(any(), any(), any()))
                 .thenThrow(clerkFailure);
 
         assertThatThrownBy(() -> orchestrator.on(event))

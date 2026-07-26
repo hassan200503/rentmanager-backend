@@ -84,6 +84,30 @@ public class MpesaCallbackPayload {
                     .findFirst()
                     .orElse(null);
         }
+
+        public String getPhoneNumber() {
+            return items == null ? null : items.stream()
+                    .filter(i -> "PhoneNumber".equals(i.getName()))
+                    .map(MetadataItem::getStringValue)
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        public String getAmount() {
+            return items == null ? null : items.stream()
+                    .filter(i -> "Amount".equals(i.getName()))
+                    .map(MetadataItem::getStringValue)
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        public String getTransactionDate() {
+            return items == null ? null : items.stream()
+                    .filter(i -> "TransactionDate".equals(i.getName()))
+                    .map(MetadataItem::getStringValue)
+                    .findFirst()
+                    .orElse(null);
+        }
     }
 
     @Getter

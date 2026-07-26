@@ -8,6 +8,8 @@ import com.rentmanager.modules.unit.domain.model.Unit;
 import com.rentmanager.modules.unit.domain.repository.UnitMediaRepository;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
 import com.rentmanager.shared.exception.ResourceNotFoundException;
+import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -16,12 +18,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -41,6 +45,19 @@ class PublicUnitQueryServiceImplTest {
 
     @Mock
     private PropertyRepository propertyRepository;
+
+    @Mock
+    private EntityManager entityManager;
+
+    @BeforeEach
+    void setUp() {
+        ReflectionTestUtils.setField(service, "entityManager", entityManager);
+
+        var query = mock(jakarta.persistence.Query.class);
+        lenient().when(entityManager.createNativeQuery(anyString())).thenReturn(query);
+        lenient().when(query.setParameter(anyString(), any())).thenReturn(query);
+        lenient().when(query.getSingleResult()).thenReturn(false);
+    }
 
     private final UUID UNIT_ID = UUID.randomUUID();
     private final UUID PROPERTY_ID = UUID.randomUUID();

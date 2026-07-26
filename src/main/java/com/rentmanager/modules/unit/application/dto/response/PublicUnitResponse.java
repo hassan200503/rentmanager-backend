@@ -56,8 +56,9 @@ public class PublicUnitResponse {
 
 
     private String propertyName;
-    private String propertyArea;   // or however you want to render "Kilimani, Nairobi" — derived from Address
+    private String propertyArea;
     private LocalDateTime vacatedAt;
+    private boolean landlordVerified;
 
     public String getPropertyName() { return propertyName; }
     public void setPropertyName(String propertyName) { this.propertyName = propertyName; }
@@ -67,5 +68,8 @@ public class PublicUnitResponse {
 
     public LocalDateTime getVacatedAt() { return vacatedAt; }
     public void setVacatedAt(LocalDateTime vacatedAt) { this.vacatedAt = vacatedAt; }
+
+    public boolean isLandlordVerified() { return landlordVerified; }
+    public void setLandlordVerified(boolean landlordVerified) { this.landlordVerified = landlordVerified; }
 
 }

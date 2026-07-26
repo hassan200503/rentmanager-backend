@@ -34,6 +34,11 @@ public class TenantProfileRepositoryImpl implements TenantProfileRepository {
     }
 
     @Override
+    public Optional<TenantProfile> findByClerkUserId(String clerkUserId) {
+        return jpaRepository.findByClerkUserId(clerkUserId).map(this::toDomain);
+    }
+
+    @Override
     public boolean existsByClerkUserId(String clerkUserId) {
         return jpaRepository.existsByClerkUserId(clerkUserId);
     }

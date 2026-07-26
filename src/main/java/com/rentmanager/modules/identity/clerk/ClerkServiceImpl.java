@@ -20,8 +20,8 @@ public class ClerkServiceImpl implements ClerkService {
     private final RestTemplate restTemplate;
 
     @Override
-    public ClerkUserCreationResult createTenantUser(String fullName, String email, String phone, String password) {
-        return createClerkUser(fullName, email, phone, password, "createTenantUser");
+    public ClerkUserCreationResult createTenantUser(String fullName, String email, String phone) {
+        return createClerkUser(fullName, email, phone, null, "createTenantUser");
     }
 
     @Override
@@ -29,11 +29,50 @@ public class ClerkServiceImpl implements ClerkService {
         return createClerkUser(fullName, email, phone, password, "createStaffUser");
     }
 
+    @Override
+    public SignInTokenResult createSignInToken(String clerkUserId, int expiresInSeconds) {
+        HttpHeaders headers = buildAuthHeaders();
+
+        Map<String, Object> body = Map.of(
+                "user_id", clerkUserId,
+                "expires_in_seconds", expiresInSeconds
+        );
+
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    properties.getBaseUrl() + "/sign_in_tokens",
+                    HttpMethod.POST,
+                    request,
+                    Map.class
+            );
+
+            Map<?, ?> responseBody = response.getBody();
+            if (responseBody == null || !responseBody.containsKey("id")) {
+                throw new ClerkException("Sign-in token creation failed — no id in response");
+            }
+
+            String tokenId = (String) responseBody.get("id");
+            String token = (String) responseBody.get("token");
+            String url = (String) responseBody.get("url");
+
+            log.info("Sign-in token created. clerkUserId={}, tokenId={}, expiresIn={}s",
+                    clerkUserId, tokenId, expiresInSeconds);
+
+            return new SignInTokenResult(tokenId, token, url);
+
+        } catch (Exception e) {
+            log.error("Sign-in token creation failed for clerkUserId={}", clerkUserId, e);
+            throw new ClerkException("Sign-in token creation failed: " + e.getMessage(), e);
+        }
+    }
+
     /**
      * Shared Clerk API call underlying both createTenantUser and
      * createStaffUser. logContext is included purely for log
      * disambiguation between the two call sites — it has no effect on
-     * behavior.
+     * behavior. Password may be null (tenant flow — no password set).
      */
     private ClerkUserCreationResult createClerkUser(
             String fullName,
@@ -54,14 +93,15 @@ public class ClerkServiceImpl implements ClerkService {
         String firstName = names[0];
         String lastName = names[1];
 
-        Map<String, Object> body = Map.of(
-                "first_name", firstName,
-                "last_name", lastName,
-                "email_address", List.of(email),
-                "phone_number", List.of(normalizePhone(phone)),
-                "password", password,
-                "skip_password_checks", true
-        );
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("first_name", firstName);
+        body.put("last_name", lastName);
+        body.put("email_address", List.of(email));
+        body.put("phone_number", List.of(normalizePhone(phone)));
+        if (password != null) {
+            body.put("password", password);
+            body.put("skip_password_checks", true);
+        }
 
         HttpHeaders headers = buildAuthHeaders();
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);

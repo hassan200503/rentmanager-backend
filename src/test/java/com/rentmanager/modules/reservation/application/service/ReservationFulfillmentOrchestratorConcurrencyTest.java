@@ -191,8 +191,13 @@ class ReservationFulfillmentOrchestratorConcurrencyTest {
         when(leaseRepository.findByUnitIdAndStatus(any(), any())).thenReturn(Optional.empty());
 
         String clerkUserId = "clerk_test_user_id";
-        when(clerkService.createTenantUser(any(), any(), any(), any()))
+        when(clerkService.createTenantUser(any(), any(), any()))
                 .thenReturn(new ClerkUserCreationResult(clerkUserId, true));
+
+        when(clerkService.createSignInToken(eq(clerkUserId), anyInt()))
+                .thenReturn(new com.rentmanager.modules.identity.clerk.SignInTokenResult(
+                        "sht_test", "test_token", "https://example.com/sign-in/ticket/test_token"
+                ));
 
         // Full happy-path stubs so the WINNING thread genuinely completes
         // steps 1-6, rather than tripping over an unstubbed mock and

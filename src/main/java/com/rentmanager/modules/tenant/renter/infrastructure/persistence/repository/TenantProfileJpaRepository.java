@@ -12,6 +12,8 @@ public interface TenantProfileJpaRepository extends JpaRepository<TenantProfileE
 
     Optional<TenantProfileEntity> findByTenantIdAndClerkUserId(UUID tenantId, String clerkUserId);
 
+    Optional<TenantProfileEntity> findByClerkUserId(String clerkUserId);
+
     boolean existsByTenantIdAndEmail(UUID tenantId, String email);
     boolean existsByClerkUserId(String clerkUserId);
 
