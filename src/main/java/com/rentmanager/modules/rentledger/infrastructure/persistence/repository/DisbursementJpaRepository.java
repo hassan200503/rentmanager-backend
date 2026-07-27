@@ -10,4 +10,5 @@ import java.util.UUID;
 public interface DisbursementJpaRepository extends JpaRepository<DisbursementJpaEntity, UUID> {
     List<DisbursementJpaEntity> findByTenantIdOrderByCreatedAtDesc(UUID tenantId);
     List<DisbursementJpaEntity> findByStatusInOrderByCreatedAtAsc(List<DisbursementStatus> statuses);
+    List<DisbursementJpaEntity> findByTenantIdAndStatusInOrderByCreatedAtDesc(UUID tenantId, List<DisbursementStatus> statuses);
 }

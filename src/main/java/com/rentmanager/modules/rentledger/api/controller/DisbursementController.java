@@ -13,6 +13,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import com.rentmanager.modules.rentledger.domain.enums.DisbursementStatus;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -22,6 +24,32 @@ public class DisbursementController {
 
     private final B2CDisbursementService b2cDisbursementService;
     private final DisbursementRepository disbursementRepository;
+
+    @GetMapping
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER')")
+    public ResponseEntity<ApiResponse<List<DisbursementResponse>>> list(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @RequestParam(required = false) String status
+    ) {
+        UUID tenantId = user.getTenantId();
+        if (tenantId == null) {
+            return ResponseEntity.badRequest().body(ApiResponse.fail(
+                    "No tenant associated with your account", "TENANT_REQUIRED"));
+        }
+
+        List<Disbursement> disbursements;
+        if (status != null && !status.isEmpty()) {
+            DisbursementStatus ds = DisbursementStatus.valueOf(status.toUpperCase());
+            disbursements = disbursementRepository.findByTenantIdAndStatusIn(tenantId, List.of(ds));
+        } else {
+            disbursements = disbursementRepository.findByTenantId(tenantId);
+        }
+
+        List<DisbursementResponse> responses = disbursements.stream()
+                .map(DisbursementResponse::from)
+                .toList();
+        return ResponseEntity.ok(ApiResponse.ok("Disbursements retrieved", responses));
+    }
 
     @PostMapping
     @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER')")
@@ -72,7 +100,7 @@ public class DisbursementController {
                 DisbursementResponse.from(disbursement)));
     }
 
-    private record DisbursementResponse(
+    public record DisbursementResponse(
             UUID id,
             UUID leaseId,
             UUID ledgerEntryId,

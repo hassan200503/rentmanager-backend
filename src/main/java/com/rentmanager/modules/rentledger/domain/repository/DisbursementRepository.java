@@ -13,4 +13,5 @@ public interface DisbursementRepository {
     Optional<Disbursement> findByIdAndTenantId(UUID id, UUID tenantId);
     List<Disbursement> findByStatusIn(List<com.rentmanager.modules.rentledger.domain.enums.DisbursementStatus> statuses);
     List<Disbursement> findByTenantId(UUID tenantId);
+    List<Disbursement> findByTenantIdAndStatusIn(UUID tenantId, List<com.rentmanager.modules.rentledger.domain.enums.DisbursementStatus> statuses);
 }

@@ -45,6 +45,13 @@ public class DisbursementRepositoryAdapter implements DisbursementRepository {
     }
 
     @Override
+    public List<Disbursement> findByTenantIdAndStatusIn(UUID tenantId, List<DisbursementStatus> statuses) {
+        return jpaRepository.findByTenantIdAndStatusInOrderByCreatedAtDesc(tenantId, statuses).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
     public List<Disbursement> findByTenantId(UUID tenantId) {
         return jpaRepository.findByTenantIdOrderByCreatedAtDesc(tenantId).stream()
                 .map(this::toDomain)
