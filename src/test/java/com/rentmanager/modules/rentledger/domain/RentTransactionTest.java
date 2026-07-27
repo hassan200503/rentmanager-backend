@@ -203,12 +203,13 @@ class RentTransactionTest {
         }
 
         @Test
-        void refundIsExcludedFromBothHelpers() {
-            // Deliberate: REFUND reduces amountPaid, not balance owed — it's handled via
-            // resolveOverpaymentWithRefund(), never through the generic apply-transaction path.
+        void refundReducesBalanceOwed() {
+            // REFUND reduces amountPaid by subtracting from it (money handed back to tenant)
+            // rather than increasing it, but still affects the entry's balance and is thus
+            // accepted by applyTransaction with subtractive logic.
             RentTransaction tx = validTransaction(RentTransactionType.REFUND, BigDecimal.TEN);
             assertThat(tx.increasesBalanceOwed()).isFalse();
-            assertThat(tx.reducesBalanceOwed()).isFalse();
+            assertThat(tx.reducesBalanceOwed()).isTrue();
         }
 
         @Test

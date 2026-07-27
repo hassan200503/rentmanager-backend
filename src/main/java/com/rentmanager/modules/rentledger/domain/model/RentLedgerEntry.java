@@ -229,17 +229,26 @@ public class RentLedgerEntry extends AggregateRoot {
      * mismatched id would silently corrupt the wrong entry's balance.
      */
     public void applyTransaction(String correlationId, RentTransaction transaction) {
-        requireNotSettledOrOverpaid();
+        if (transaction.getType() != RentTransactionType.REFUND) {
+            requireNotSettledOrOverpaid();
+        }
         requireMatchingLedgerEntry(transaction);
 
         if (!transaction.reducesBalanceOwed()) {
             throw new RentLedgerStateException(
-                    "applyTransaction only accepts PAYMENT, WAIVER, CREDIT_APPLIED, or DEPOSIT; got " + transaction.getType(),
+                    "applyTransaction only accepts PAYMENT, WAIVER, CREDIT_APPLIED, DEPOSIT, or REFUND; got " + transaction.getType(),
                     ErrorCode.RENT_LEDGER_ENTRY_UNSUPPORTED_TRANSACTION_TYPE
             );
         }
 
-        this.amountPaid = this.amountPaid.add(transaction.getAmount());
+        if (transaction.getType() == RentTransactionType.REFUND) {
+            this.amountPaid = this.amountPaid.subtract(transaction.getAmount());
+            if (this.amountPaid.compareTo(BigDecimal.ZERO) < 0) {
+                this.amountPaid = BigDecimal.ZERO.setScale(2);
+            }
+        } else {
+            this.amountPaid = this.amountPaid.add(transaction.getAmount());
+        }
         this.updatedAt = Instant.now();
 
         boolean wasAlreadyOverpaid = this.status == RentLedgerStatus.OVERPAID;

@@ -54,6 +54,7 @@ public class DisbursementRepositoryAdapter implements DisbursementRepository {
     private DisbursementJpaEntity toEntity(Disbursement d) {
         return DisbursementJpaEntity.builder()
                 .id(d.getId())
+                .version(d.getVersion())
                 .tenantId(d.getTenantId())
                 .leaseId(d.getLeaseId())
                 .ledgerEntryId(d.getLedgerEntryId())
@@ -78,7 +79,8 @@ public class DisbursementRepositoryAdapter implements DisbursementRepository {
                 e.getCommandId(), e.getStatus(),
                 e.getMpesaTransactionId(), e.getMpesaConversationId(),
                 e.getMpesaOriginatorConversationId(), e.getFailureReason(),
-                e.getCreatedAt(), e.getUpdatedAt()
+                e.getCreatedAt(), e.getUpdatedAt(),
+                e.getVersion()
         );
     }
 }

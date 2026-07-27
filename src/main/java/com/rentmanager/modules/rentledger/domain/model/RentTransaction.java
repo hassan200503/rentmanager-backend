@@ -182,15 +182,18 @@ public class RentTransaction extends AggregateRoot {
     /**
      * True for transaction types that reduce the balance owed / count
      * toward amountPaid on the parent ledger entry.
+     *
+     * REFUND also returns true: although a refund reduces amountPaid
+     * (money handed back) rather than increasing it, it still affects the
+     * entry's balance and is applied through applyTransaction with
+     * subtractive logic. The dedicated resolveOverpaymentWithRefund path
+     * is used when an OVERPAID entry's exact excess is being resolved.
      */
     public boolean reducesBalanceOwed() {
         return type == RentTransactionType.PAYMENT
                 || type == RentTransactionType.WAIVER
                 || type == RentTransactionType.CREDIT_APPLIED
-                || type == RentTransactionType.DEPOSIT;
-        // REFUND deliberately excluded: a refund reduces amountPaid (money
-        // handed back), not the balance owed — it's the mechanism for
-        // resolving an OVERPAID entry, applied via a dedicated method on
-        // RentLedgerEntry rather than the generic apply-transaction path.
+                || type == RentTransactionType.DEPOSIT
+                || type == RentTransactionType.REFUND;
     }
 }

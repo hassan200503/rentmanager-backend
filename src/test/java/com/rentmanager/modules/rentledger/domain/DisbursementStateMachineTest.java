@@ -185,7 +185,8 @@ class DisbursementStateMachineTest {
                 id, tenantId, leaseId, entryId,
                 amount, phone, name, commandId,
                 status, txnId, convId, ocId,
-                failureReason, now, later
+                failureReason, now, later,
+                0L
         );
 
         assertEquals(id, d.getId());
@@ -213,7 +214,8 @@ class DisbursementStateMachineTest {
                 DisbursementStatus.FAILED,
                 null, "CONV-FAIL", "OCID-FAIL",
                 "Queue timeout",
-                Instant.now(), Instant.now()
+                Instant.now(), Instant.now(),
+                0L
         );
 
         assertEquals(DisbursementStatus.FAILED, d.getStatus());

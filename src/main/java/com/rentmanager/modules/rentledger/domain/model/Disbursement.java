@@ -75,7 +75,8 @@ public class Disbursement extends AggregateRoot {
             String commandId, DisbursementStatus status,
             String mpesaTransactionId, String mpesaConversationId,
             String mpesaOriginatorConversationId, String failureReason,
-            Instant createdAt, Instant updatedAt
+            Instant createdAt, Instant updatedAt,
+            Long version
     ) {
         Disbursement d = new Disbursement();
         d.setId(id);
@@ -93,6 +94,7 @@ public class Disbursement extends AggregateRoot {
         d.failureReason = failureReason;
         d.createdAt = createdAt;
         d.updatedAt = updatedAt;
+        d.setVersion(version);
         return d;
     }
 
