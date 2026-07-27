@@ -1,0 +1,112 @@
+package com.rentmanager.modules.rentledger.domain.model;
+
+import com.rentmanager.modules.rentledger.domain.enums.DisbursementStatus;
+import com.rentmanager.domain.base.AggregateRoot;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.UUID;
+
+public class Disbursement extends AggregateRoot {
+
+    private UUID leaseId;
+    private UUID ledgerEntryId;
+    private BigDecimal amount;
+    private String recipientPhone;
+    private String recipientName;
+    private String commandId;
+    private DisbursementStatus status;
+    private String mpesaTransactionId;
+    private String mpesaConversationId;
+    private String mpesaOriginatorConversationId;
+    private String failureReason;
+    private Instant createdAt;
+    private Instant updatedAt;
+
+    private Disbursement() {}
+
+    public static Disbursement create(
+            UUID tenantId,
+            UUID leaseId,
+            UUID ledgerEntryId,
+            BigDecimal amount,
+            String recipientPhone,
+            String recipientName,
+            String commandId
+    ) {
+        Disbursement d = new Disbursement();
+        d.setId(UUID.randomUUID());
+        d.assignTenant(tenantId);
+        d.leaseId = leaseId;
+        d.ledgerEntryId = ledgerEntryId;
+        d.amount = amount.setScale(2, java.math.RoundingMode.HALF_UP);
+        d.recipientPhone = recipientPhone;
+        d.recipientName = recipientName;
+        d.commandId = commandId;
+        d.status = DisbursementStatus.INITIATED;
+        d.createdAt = Instant.now();
+        d.updatedAt = Instant.now();
+        return d;
+    }
+
+    public void markPending(String originatorConversationId) {
+        this.mpesaOriginatorConversationId = originatorConversationId;
+        this.status = DisbursementStatus.PENDING;
+        this.updatedAt = Instant.now();
+    }
+
+    public void markSuccess(String transactionId, String conversationId) {
+        this.mpesaTransactionId = transactionId;
+        this.mpesaConversationId = conversationId;
+        this.status = DisbursementStatus.SUCCESS;
+        this.updatedAt = Instant.now();
+    }
+
+    public void markFailed(String reason, String conversationId) {
+        this.mpesaConversationId = conversationId;
+        this.failureReason = reason;
+        this.status = DisbursementStatus.FAILED;
+        this.updatedAt = Instant.now();
+    }
+
+    public static Disbursement rehydrate(
+            UUID id, UUID tenantId, UUID leaseId, UUID ledgerEntryId,
+            BigDecimal amount, String recipientPhone, String recipientName,
+            String commandId, DisbursementStatus status,
+            String mpesaTransactionId, String mpesaConversationId,
+            String mpesaOriginatorConversationId, String failureReason,
+            Instant createdAt, Instant updatedAt
+    ) {
+        Disbursement d = new Disbursement();
+        d.setId(id);
+        d.assignTenant(tenantId);
+        d.leaseId = leaseId;
+        d.ledgerEntryId = ledgerEntryId;
+        d.amount = amount;
+        d.recipientPhone = recipientPhone;
+        d.recipientName = recipientName;
+        d.commandId = commandId;
+        d.status = status;
+        d.mpesaTransactionId = mpesaTransactionId;
+        d.mpesaConversationId = mpesaConversationId;
+        d.mpesaOriginatorConversationId = mpesaOriginatorConversationId;
+        d.failureReason = failureReason;
+        d.createdAt = createdAt;
+        d.updatedAt = updatedAt;
+        return d;
+    }
+
+    public UUID getLeaseId() { return leaseId; }
+    public UUID getLedgerEntryId() { return ledgerEntryId; }
+    public BigDecimal getAmount() { return amount; }
+    public String getRecipientPhone() { return recipientPhone; }
+    public String getRecipientName() { return recipientName; }
+    public String getCommandId() { return commandId; }
+    public DisbursementStatus getStatus() { return status; }
+    public String getMpesaTransactionId() { return mpesaTransactionId; }
+    public String getMpesaConversationId() { return mpesaConversationId; }
+    public String getMpesaOriginatorConversationId() { return mpesaOriginatorConversationId; }
+    public String getFailureReason() { return failureReason; }
+    public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
+}

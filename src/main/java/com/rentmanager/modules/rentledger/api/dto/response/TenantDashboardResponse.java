@@ -11,6 +11,7 @@ public record TenantDashboardResponse(
         String tenantPhone,
         String tenantEmail,
         BigDecimal currentBalance,
+        UUID currentEntryId,
         LocalDate nextDueDate,
         BigDecimal nextDueAmount,
         BigDecimal overdueAmount,

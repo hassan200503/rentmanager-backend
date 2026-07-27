@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
@@ -50,6 +51,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class RentOverdueScheduler {
 
+    private static final ZoneId TZ = ZoneId.of("Africa/Nairobi");
+
     private final RentLedgerEntryRepository rentLedgerEntryRepository;
     private final LeaseRepository leaseRepository;
     private final RentLedgerApplicationService rentLedgerApplicationService;
@@ -58,7 +61,7 @@ public class RentOverdueScheduler {
     public void runDaily() {
         List<RentLedgerEntry> candidates = rentLedgerEntryRepository.findAllByStatusInAndDueDateLessThanEqual(
                 List.of(RentLedgerStatus.DUE, RentLedgerStatus.PARTIALLY_PAID),
-                LocalDate.now()
+                LocalDate.now(TZ)
         );
 
         log.info("RentOverdueScheduler: found {} outstanding entry(ies) at or past due date", candidates.size());
@@ -84,11 +87,11 @@ public class RentOverdueScheduler {
         int graceDays = lease.getGracePeriodDays() != null ? lease.getGracePeriodDays() : 0;
         LocalDate overdueThreshold = entry.getDueDate().plusDays(graceDays);
 
-        if (!LocalDate.now().isAfter(overdueThreshold)) {
+        if (!LocalDate.now(TZ).isAfter(overdueThreshold)) {
             return; // still within grace period
         }
 
-        int daysOverdue = (int) ChronoUnit.DAYS.between(entry.getDueDate(), LocalDate.now());
+        int daysOverdue = (int) ChronoUnit.DAYS.between(entry.getDueDate(), LocalDate.now(TZ));
         String correlationId = "rent-overdue-scheduler-" + entry.getId();
 
         rentLedgerApplicationService.markOverdue(

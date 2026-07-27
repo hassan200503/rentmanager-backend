@@ -1,6 +1,8 @@
 package com.rentmanager.modules.rentledger.api.controller;
 
 import com.rentmanager.contract.common.ApiResponse;
+import com.rentmanager.modules.rentledger.api.dto.request.InitiateRentPaymentRequest;
+import com.rentmanager.modules.rentledger.api.dto.response.RentPaymentRequestResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantDashboardResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantLeaseResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantPaymentHistoryResponse;
@@ -8,6 +10,7 @@ import com.rentmanager.modules.rentledger.api.dto.response.TenantPaymentReceiptR
 import com.rentmanager.modules.rentledger.api.dto.response.TenantPaymentSummaryResponse;
 import com.rentmanager.modules.rentledger.application.service.TenantPortalService;
 import com.rentmanager.shared.security.principal.AuthenticatedUser;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -63,5 +66,25 @@ public class TenantPortalController {
     ) {
         TenantPaymentReceiptResponse response = tenantPortalService.getPaymentReceipt(user.getUserId(), transactionId);
         return ResponseEntity.ok(ApiResponse.ok("Payment receipt retrieved successfully", response));
+    }
+
+    @PostMapping("/entries/{entryId}/collect")
+    public ResponseEntity<ApiResponse<RentPaymentRequestResponse>> collect(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @PathVariable UUID entryId,
+            @Valid @RequestBody InitiateRentPaymentRequest request
+    ) {
+        RentPaymentRequestResponse response = tenantPortalService.initiateRentPayment(
+                user.getUserId(), entryId, request.mpesaPhone());
+        return ResponseEntity.ok(ApiResponse.ok("STK push sent. Awaiting payment.", response));
+    }
+
+    @GetMapping("/rent-payment-requests/{id}/status")
+    public ResponseEntity<ApiResponse<RentPaymentRequestResponse>> paymentStatus(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @PathVariable UUID id
+    ) {
+        RentPaymentRequestResponse response = tenantPortalService.getPaymentRequestStatus(user.getUserId(), id);
+        return ResponseEntity.ok(ApiResponse.ok("Payment request status retrieved", response));
     }
 }

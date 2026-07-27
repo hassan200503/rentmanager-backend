@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -86,7 +87,7 @@ public class RentChargeScheduler {
     @Transactional
     public void postDueChargesForLease(Lease lease) {
         YearMonth openingMonth = YearMonth.from(lease.getStartDate());
-        YearMonth currentMonth = YearMonth.now();
+        YearMonth currentMonth = YearMonth.now(ZoneId.of("Africa/Nairobi"));
 
         Optional<RentLedgerEntry> latest = rentLedgerEntryRepository.findLatestByLeaseId(lease.getId());
 

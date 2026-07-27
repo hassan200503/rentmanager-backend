@@ -5,6 +5,7 @@ import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
+import com.rentmanager.modules.rentledger.api.dto.response.RentPaymentRequestResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantDashboardResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantDashboardResponse.PaymentHistoryItem;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantLeaseResponse;
@@ -15,10 +16,13 @@ import com.rentmanager.modules.rentledger.domain.enums.RentLedgerStatus;
 import com.rentmanager.modules.rentledger.domain.enums.RentTransactionSource;
 import com.rentmanager.modules.rentledger.domain.enums.RentTransactionType;
 import com.rentmanager.modules.rentledger.domain.model.RentLedgerEntry;
+import com.rentmanager.modules.rentledger.domain.model.RentPaymentRequest;
 import com.rentmanager.modules.rentledger.domain.model.RentTransaction;
 import com.rentmanager.modules.rentledger.domain.repository.RentLedgerEntryRepository;
+import com.rentmanager.modules.rentledger.domain.repository.RentPaymentRequestRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentTransactionRepository;
 import com.rentmanager.modules.rentledger.domain.exception.RentLedgerStateException;
+import com.rentmanager.modules.rentledger.infrastructure.daraja.RentPaymentInitiationService;
 import com.rentmanager.modules.tenant.domain.model.Tenant;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
@@ -55,6 +59,8 @@ public class TenantPortalService {
     private final TenantRepository tenantRepository;
     private final RentLedgerEntryRepository rentLedgerEntryRepository;
     private final RentTransactionRepository rentTransactionRepository;
+    private final RentPaymentInitiationService rentPaymentInitiationService;
+    private final RentPaymentRequestRepository rentPaymentRequestRepository;
 
     @Transactional(readOnly = true)
     public TenantDashboardResponse getDashboard(UUID userId) {
@@ -83,6 +89,14 @@ public class TenantPortalService {
                 .min(Comparator.comparing(RentLedgerEntry::getDueDate))
                 .orElse(null);
 
+        // First unpaid entry (earliest due date with balance > 0) — used by
+        // the Pay Now button to know which entry to charge.
+        RentLedgerEntry firstUnpaidEntry = entries.stream()
+                .filter(e -> e.getBalanceOwed().compareTo(BigDecimal.ZERO) > 0)
+                .filter(e -> e.getStatus() != RentLedgerStatus.PAID && e.getStatus() != RentLedgerStatus.OVERPAID)
+                .min(Comparator.comparing(RentLedgerEntry::getDueDate))
+                .orElse(null);
+
         List<RentTransaction> allTxns = rentTransactionRepository.findByLease(landlordTenantId, activeLease.getId());
         List<RentTransaction> recentPayments = allTxns.stream()
                 .filter(t -> t.reducesBalanceOwed() || t.getType() == RentTransactionType.PAYMENT)
@@ -96,6 +110,7 @@ public class TenantPortalService {
                 profile.getPhone(),
                 profile.getEmail(),
                 currentBalance,
+                firstUnpaidEntry != null ? firstUnpaidEntry.getId() : null,
                 nextDueEntry != null ? nextDueEntry.getDueDate() : null,
                 nextDueEntry != null ? nextDueEntry.getAmountDue() : BigDecimal.ZERO,
                 overdueAmount,
@@ -308,5 +323,27 @@ public class TenantPortalService {
                 "",
                 mpesaRef
         );
+    }
+
+    @Transactional
+    public RentPaymentRequestResponse initiateRentPayment(UUID userId, UUID entryId, String mpesaPhone) {
+        TenantProfile profile = resolveTenantProfile(userId);
+        UUID tenantId = profile.getTenantId();
+        Lease activeLease = findActiveLease(tenantId, profile.getId());
+        RentLedgerEntry entry = rentLedgerEntryRepository.findByIdAndTenantId(entryId, tenantId)
+                .orElseThrow(() -> new RentLedgerStateException("Entry not found", ErrorCode.RESOURCE_NOT_FOUND));
+        if (!entry.getLeaseId().equals(activeLease.getId())) {
+            throw new RentLedgerStateException("Entry does not belong to your active lease", ErrorCode.RESOURCE_NOT_FOUND);
+        }
+        RentPaymentRequest request = rentPaymentInitiationService.initiate(tenantId, entryId, mpesaPhone);
+        return RentPaymentRequestResponse.from(request);
+    }
+
+    @Transactional(readOnly = true)
+    public RentPaymentRequestResponse getPaymentRequestStatus(UUID userId, UUID requestId) {
+        UUID tenantId = resolveTenantProfile(userId).getTenantId();
+        RentPaymentRequest request = rentPaymentRequestRepository.findByIdAndTenantId(requestId, tenantId)
+                .orElseThrow(() -> new RentLedgerStateException("Payment request not found", ErrorCode.RESOURCE_NOT_FOUND));
+        return RentPaymentRequestResponse.from(request);
     }
 }
