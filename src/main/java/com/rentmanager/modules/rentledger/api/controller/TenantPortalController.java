@@ -1,6 +1,7 @@
 package com.rentmanager.modules.rentledger.api.controller;
 
 import com.rentmanager.contract.common.ApiResponse;
+import com.rentmanager.modules.rentledger.api.dto.request.InitiatePortalPaymentRequest;
 import com.rentmanager.modules.rentledger.api.dto.request.InitiateRentPaymentRequest;
 import com.rentmanager.modules.rentledger.api.dto.response.RentPaymentRequestResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantDashboardResponse;
@@ -76,6 +77,16 @@ public class TenantPortalController {
     ) {
         RentPaymentRequestResponse response = tenantPortalService.initiateRentPayment(
                 user.getUserId(), entryId, request.mpesaPhone());
+        return ResponseEntity.ok(ApiResponse.ok("STK push sent. Awaiting payment.", response));
+    }
+
+    @PostMapping("/rent-payments/initiate")
+    public ResponseEntity<ApiResponse<RentPaymentRequestResponse>> initiatePortalPayment(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @Valid @RequestBody InitiatePortalPaymentRequest request
+    ) {
+        RentPaymentRequestResponse response = tenantPortalService.initiatePortalPayment(
+                user.getUserId(), request.amount(), request.mpesaPhone());
         return ResponseEntity.ok(ApiResponse.ok("STK push sent. Awaiting payment.", response));
     }
 

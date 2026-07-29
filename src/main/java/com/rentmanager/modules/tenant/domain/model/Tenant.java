@@ -39,11 +39,14 @@ public class Tenant extends BaseEntity {
  @Column(name = "email", nullable = false, length = 150)
  private String email;
 
- @Column(name = "phone_number", length = 50)
- private String phoneNumber;
+    @Column(name = "phone_number", length = 50)
+    private String phoneNumber;
 
- @Column(name = "address", length = 255)
- private String address;
+    @Column(name = "payout_phone_number", length = 20)
+    private String payoutPhoneNumber;
+
+    @Column(name = "address", length = 255)
+    private String address;
 
  @Enumerated(EnumType.STRING)
  @Column(name = "status", nullable = false, length = 50)
@@ -330,37 +333,39 @@ public class Tenant extends BaseEntity {
          String clerkOrgId,
          BigDecimal commissionRate,
          DarajaCredentials darajaCredentials,
-         String address
- ) {
-  Tenant tenant = new Tenant();
+          String address,
+          String payoutPhoneNumber
+  ) {
+   Tenant tenant = new Tenant();
 
-  tenant.setId(id);
-  tenant.setVersion(version);
-  tenant.tenantCode = tenantCode;
-  tenant.name = name;
-  tenant.slug = slug;
-  tenant.email = email;
-  tenant.phoneNumber = phoneNumber;
+   tenant.setId(id);
+   tenant.setVersion(version);
+   tenant.tenantCode = tenantCode;
+   tenant.name = name;
+   tenant.slug = slug;
+   tenant.email = email;
+   tenant.phoneNumber = phoneNumber;
 
-  tenant.type = type;
-  tenant.status = status;
-  tenant.subscriptionStatus = subscriptionStatus;
+   tenant.type = type;
+   tenant.status = status;
+   tenant.subscriptionStatus = subscriptionStatus;
 
-  tenant.organizationId = organizationId;
-  tenant.activeSubscriptionId = activeSubscriptionId;
+   tenant.organizationId = organizationId;
+   tenant.activeSubscriptionId = activeSubscriptionId;
 
-  tenant.timezone = timezone;
-  tenant.currency = currency;
-  tenant.locale = locale;
-  tenant.brandingSettings = brandingSettings;
-  tenant.active = active;
-  tenant.onboardingCompleted = onboardingCompleted;
-  tenant.clerkOrgId = clerkOrgId;
-  tenant.commissionRate = commissionRate;
-  tenant.darajaCredentials = darajaCredentials != null ? darajaCredentials : DarajaCredentials.unconfigured();
-  tenant.address = address;
-  return tenant;
- }
+   tenant.timezone = timezone;
+   tenant.currency = currency;
+   tenant.locale = locale;
+   tenant.brandingSettings = brandingSettings;
+   tenant.active = active;
+   tenant.onboardingCompleted = onboardingCompleted;
+   tenant.clerkOrgId = clerkOrgId;
+   tenant.commissionRate = commissionRate;
+   tenant.darajaCredentials = darajaCredentials != null ? darajaCredentials : DarajaCredentials.unconfigured();
+   tenant.address = address;
+   tenant.payoutPhoneNumber = payoutPhoneNumber;
+   return tenant;
+  }
 
  // ----------------------------------------------------------------
  // ORGANIZATION
@@ -485,7 +490,13 @@ public class Tenant extends BaseEntity {
   this.clerkOrgId = clerkOrgId;
  }
 
- public void updateCommissionRate(BigDecimal commissionRate) {
+  public void updatePayoutPhoneNumber(String payoutPhoneNumber) {
+   this.payoutPhoneNumber = payoutPhoneNumber;
+  }
+
+  public String getPayoutPhoneNumber() { return payoutPhoneNumber; }
+
+  public void updateCommissionRate(BigDecimal commissionRate) {
   if (commissionRate == null
           || commissionRate.compareTo(BigDecimal.ZERO) < 0
           || commissionRate.compareTo(BigDecimal.ONE) > 0) {

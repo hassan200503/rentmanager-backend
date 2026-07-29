@@ -335,7 +335,48 @@ public class TenantPortalService {
         if (!entry.getLeaseId().equals(activeLease.getId())) {
             throw new RentLedgerStateException("Entry does not belong to your active lease", ErrorCode.RESOURCE_NOT_FOUND);
         }
-        RentPaymentRequest request = rentPaymentInitiationService.initiate(tenantId, entryId, mpesaPhone);
+        String normalisedPhone = mpesaPhone.strip();
+        if (normalisedPhone.startsWith("07")) {
+            normalisedPhone = "+254" + normalisedPhone.substring(1);
+        } else if (normalisedPhone.startsWith("254")) {
+            normalisedPhone = "+" + normalisedPhone;
+        }
+        RentPaymentRequest request = rentPaymentInitiationService.initiate(tenantId, entryId, normalisedPhone);
+        return RentPaymentRequestResponse.from(request);
+    }
+
+    @Transactional
+    public RentPaymentRequestResponse initiatePortalPayment(UUID userId, BigDecimal amount, String mpesaPhone) {
+        TenantProfile profile = resolveTenantProfile(userId);
+        UUID tenantId = profile.getTenantId();
+        Lease activeLease = findActiveLease(tenantId, profile.getId());
+
+        List<RentLedgerEntry> entries = rentLedgerEntryRepository.findByLease(tenantId, activeLease.getId())
+                .stream()
+                .sorted(Comparator.comparing(RentLedgerEntry::getBillingPeriodStart))
+                .toList();
+
+        RentLedgerEntry targetEntry;
+        List<RentLedgerEntry> unpaid = entries.stream()
+                .filter(e -> e.getStatus().isOutstanding())
+                .toList();
+
+        if (!unpaid.isEmpty()) {
+            targetEntry = unpaid.get(0);
+        } else if (!entries.isEmpty()) {
+            targetEntry = entries.get(entries.size() - 1);
+        } else {
+            throw new RentLedgerStateException("No ledger entries found for your lease", ErrorCode.RESOURCE_NOT_FOUND);
+        }
+
+        String normalisedPhone = mpesaPhone.strip();
+        if (normalisedPhone.startsWith("07")) {
+            normalisedPhone = "+254" + normalisedPhone.substring(1);
+        } else if (normalisedPhone.startsWith("254")) {
+            normalisedPhone = "+" + normalisedPhone;
+        }
+        RentPaymentRequest request = rentPaymentInitiationService.initiateWithAmount(
+                tenantId, targetEntry.getId(), amount, normalisedPhone);
         return RentPaymentRequestResponse.from(request);
     }
 

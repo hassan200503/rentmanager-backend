@@ -185,7 +185,8 @@ class DisbursementStateMachineTest {
                 id, tenantId, leaseId, entryId,
                 amount, phone, name, commandId,
                 status, txnId, convId, ocId,
-                failureReason, now, later,
+                failureReason, 0, false,
+                now, later,
                 0L
         );
 
@@ -202,6 +203,8 @@ class DisbursementStateMachineTest {
         assertEquals(convId, d.getMpesaConversationId());
         assertEquals(ocId, d.getMpesaOriginatorConversationId());
         assertNull(d.getFailureReason());
+        assertEquals(0, d.getRetryCount());
+        assertFalse(d.isRequiresManualAttention());
         assertEquals(now, d.getCreatedAt());
         assertEquals(later, d.getUpdatedAt());
     }
@@ -213,7 +216,7 @@ class DisbursementStateMachineTest {
                 AMOUNT, PHONE, NAME, COMMAND_ID,
                 DisbursementStatus.FAILED,
                 null, "CONV-FAIL", "OCID-FAIL",
-                "Queue timeout",
+                "Queue timeout", 1, false,
                 Instant.now(), Instant.now(),
                 0L
         );
@@ -221,5 +224,6 @@ class DisbursementStateMachineTest {
         assertEquals(DisbursementStatus.FAILED, d.getStatus());
         assertEquals("Queue timeout", d.getFailureReason());
         assertNull(d.getMpesaTransactionId());
+        assertEquals(1, d.getRetryCount());
     }
 }

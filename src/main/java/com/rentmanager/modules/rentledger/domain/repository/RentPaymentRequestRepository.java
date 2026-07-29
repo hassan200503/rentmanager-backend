@@ -1,7 +1,10 @@
 package com.rentmanager.modules.rentledger.domain.repository;
 
+import com.rentmanager.modules.rentledger.domain.enums.RentPaymentRequestStatus;
 import com.rentmanager.modules.rentledger.domain.model.RentPaymentRequest;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -20,4 +23,6 @@ public interface RentPaymentRequestRepository {
      * deposit flow.
      */
     Optional<RentPaymentRequest> findByMpesaCheckoutRequestId(String checkoutRequestId);
+
+    List<RentPaymentRequest> findByStatusAndCreatedAtBefore(RentPaymentRequestStatus status, Instant cutoff);
 }

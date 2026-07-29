@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -87,6 +88,7 @@ class RentPaymentInitiationServiceTest {
                     new BigDecimal("1500.00"), false
             );
 
+            lenient().when(lease.getId()).thenReturn(leaseId);
             lenient().when(lease.getLeaseNumber()).thenReturn("LSE-001");
             lenient().when(darajaService.initiateSTKPush(
                     anyString(), any(), anyString(), anyString(), any(DarajaCredentials.class), anyString()))
@@ -185,6 +187,7 @@ class RentPaymentInitiationServiceTest {
                     LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 31), LocalDate.of(2026, 7, 1),
                     new BigDecimal("1500.00"), false
             );
+            lenient().when(lease.getId()).thenReturn(entryLeaseId);
             when(rentLedgerEntryRepository.findByIdAndTenantId(entryId, tenantId))
                     .thenReturn(Optional.of(customEntry));
             when(leaseRepository.findByIdAndTenantId(entryLeaseId, tenantId))
@@ -221,6 +224,143 @@ class RentPaymentInitiationServiceTest {
             ArgumentCaptor<RentPaymentRequest> requestCaptor = ArgumentCaptor.forClass(RentPaymentRequest.class);
             verify(rentPaymentRequestRepository, atLeastOnce()).save(requestCaptor.capture());
             assertThat(requestCaptor.getAllValues().get(0).getAmount()).isEqualByComparingTo("2750.50");
+        }
+    }
+
+    @Nested
+    class InitiateWithAmount {
+
+        private final BigDecimal customAmount = new BigDecimal("500.00");
+        private RentLedgerEntry entry;
+
+        @BeforeEach
+        void setUp() {
+            entry = RentLedgerEntry.create(
+                    tenantId, "corr", leaseId, UUID.randomUUID(), UUID.randomUUID(),
+                    LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 31), LocalDate.of(2026, 7, 1),
+                    new BigDecimal("1500.00"), false
+            );
+
+            lenient().when(lease.getId()).thenReturn(leaseId);
+            lenient().when(lease.getLeaseNumber()).thenReturn("LSE-001");
+            lenient().when(darajaService.initiateSTKPush(
+                    anyString(), any(), anyString(), anyString(), any(DarajaCredentials.class), anyString()))
+                    .thenReturn(checkoutRequestId);
+        }
+
+        @Test
+        void acceptsCustomAmount() {
+            when(rentLedgerEntryRepository.findByIdAndTenantId(entryId, tenantId))
+                    .thenReturn(Optional.of(entry));
+            when(leaseRepository.findByIdAndTenantId(leaseId, tenantId))
+                    .thenReturn(Optional.of(lease));
+
+            RentPaymentRequest result = service.initiateWithAmount(tenantId, entryId, customAmount, mpesaPhone);
+
+            assertThat(result.getAmount()).isEqualByComparingTo(customAmount);
+            assertThat(result.getStatus()).isEqualTo(RentPaymentRequestStatus.PENDING);
+            verify(darajaService).initiateSTKPush(
+                    eq(mpesaPhone), eq(customAmount), anyString(), anyString(),
+                    any(DarajaCredentials.class), anyString()
+            );
+        }
+
+        @Test
+        void passesCustomAmountUnchanged() {
+            BigDecimal partialAmount = new BigDecimal("750.25");
+            when(rentLedgerEntryRepository.findByIdAndTenantId(entryId, tenantId))
+                    .thenReturn(Optional.of(entry));
+            when(leaseRepository.findByIdAndTenantId(leaseId, tenantId))
+                    .thenReturn(Optional.of(lease));
+
+            RentPaymentRequest result = service.initiateWithAmount(tenantId, entryId, partialAmount, mpesaPhone);
+
+            assertThat(result.getAmount()).isEqualByComparingTo("750.25");
+        }
+
+        @Test
+        void throwsWhenAmountIsNull() {
+            assertThatThrownBy(() -> service.initiateWithAmount(tenantId, entryId, null, mpesaPhone))
+                    .isInstanceOf(RentLedgerStateException.class)
+                    .extracting(ex -> ((RentLedgerStateException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.RENT_TRANSACTION_INVALID_AMOUNT);
+            verifyNoInteractions(rentLedgerEntryRepository, leaseRepository, darajaService);
+        }
+
+        @Test
+        void throwsWhenAmountIsZero() {
+            assertThatThrownBy(() -> service.initiateWithAmount(tenantId, entryId, BigDecimal.ZERO, mpesaPhone))
+                    .isInstanceOf(RentLedgerStateException.class)
+                    .extracting(ex -> ((RentLedgerStateException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.RENT_TRANSACTION_INVALID_AMOUNT);
+        }
+
+        @Test
+        void throwsWhenAmountIsNegative() {
+            assertThatThrownBy(() -> service.initiateWithAmount(tenantId, entryId, new BigDecimal("-100.00"), mpesaPhone))
+                    .isInstanceOf(RentLedgerStateException.class)
+                    .extracting(ex -> ((RentLedgerStateException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.RENT_TRANSACTION_INVALID_AMOUNT);
+        }
+
+        @Test
+        void throwsWhenEntryNotFound() {
+            when(rentLedgerEntryRepository.findByIdAndTenantId(entryId, tenantId))
+                    .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.initiateWithAmount(tenantId, entryId, customAmount, mpesaPhone))
+                    .isInstanceOf(RentLedgerStateException.class)
+                    .extracting(ex -> ((RentLedgerStateException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+            verifyNoInteractions(leaseRepository, darajaService);
+        }
+
+        @Test
+        void throwsWhenLeaseNotFound() {
+            when(rentLedgerEntryRepository.findByIdAndTenantId(entryId, tenantId))
+                    .thenReturn(Optional.of(entry));
+            when(leaseRepository.findByIdAndTenantId(leaseId, tenantId))
+                    .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.initiateWithAmount(tenantId, entryId, customAmount, mpesaPhone))
+                    .isInstanceOf(RentLedgerStateException.class)
+                    .extracting(ex -> ((RentLedgerStateException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.LEASE_NOT_FOUND);
+            verifyNoInteractions(darajaService);
+        }
+
+        @Test
+        void usesPlatformCredentials() {
+            when(rentLedgerEntryRepository.findByIdAndTenantId(entryId, tenantId))
+                    .thenReturn(Optional.of(entry));
+            when(leaseRepository.findByIdAndTenantId(leaseId, tenantId))
+                    .thenReturn(Optional.of(lease));
+
+            service.initiateWithAmount(tenantId, entryId, customAmount, mpesaPhone);
+
+            ArgumentCaptor<DarajaCredentials> credentialsCaptor = ArgumentCaptor.forClass(DarajaCredentials.class);
+            verify(darajaService).initiateSTKPush(
+                    anyString(), any(), anyString(), anyString(),
+                    credentialsCaptor.capture(), anyString()
+            );
+            assertThat(credentialsCaptor.getValue().getConsumerKey()).isEqualTo("test-consumer-key");
+            assertThat(credentialsCaptor.getValue().getConsumerSecret()).isEqualTo("test-consumer-secret");
+        }
+
+        @Test
+        void savesPendingBeforeStkCall() {
+            when(rentLedgerEntryRepository.findByIdAndTenantId(entryId, tenantId))
+                    .thenReturn(Optional.of(entry));
+            when(leaseRepository.findByIdAndTenantId(leaseId, tenantId))
+                    .thenReturn(Optional.of(lease));
+
+            service.initiateWithAmount(tenantId, entryId, customAmount, mpesaPhone);
+
+            InOrder inOrder = inOrder(rentPaymentRequestRepository, darajaService);
+            inOrder.verify(rentPaymentRequestRepository).save(any(RentPaymentRequest.class));
+            inOrder.verify(darajaService).initiateSTKPush(anyString(), any(), anyString(), anyString(),
+                    any(DarajaCredentials.class), anyString());
+            inOrder.verify(rentPaymentRequestRepository).save(any(RentPaymentRequest.class));
         }
     }
 }

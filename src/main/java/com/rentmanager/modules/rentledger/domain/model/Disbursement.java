@@ -20,6 +20,8 @@ public class Disbursement extends AggregateRoot {
     private String mpesaConversationId;
     private String mpesaOriginatorConversationId;
     private String failureReason;
+    private int retryCount;
+    private boolean requiresManualAttention;
     private Instant createdAt;
     private Instant updatedAt;
 
@@ -44,6 +46,8 @@ public class Disbursement extends AggregateRoot {
         d.recipientName = recipientName;
         d.commandId = commandId;
         d.status = DisbursementStatus.INITIATED;
+        d.retryCount = 0;
+        d.requiresManualAttention = false;
         d.createdAt = Instant.now();
         d.updatedAt = Instant.now();
         return d;
@@ -66,6 +70,12 @@ public class Disbursement extends AggregateRoot {
         this.mpesaConversationId = conversationId;
         this.failureReason = reason;
         this.status = DisbursementStatus.FAILED;
+        this.retryCount++;
+        this.updatedAt = Instant.now();
+    }
+
+    public void markRequiresManualAttention() {
+        this.requiresManualAttention = true;
         this.updatedAt = Instant.now();
     }
 
@@ -75,6 +85,7 @@ public class Disbursement extends AggregateRoot {
             String commandId, DisbursementStatus status,
             String mpesaTransactionId, String mpesaConversationId,
             String mpesaOriginatorConversationId, String failureReason,
+            int retryCount, boolean requiresManualAttention,
             Instant createdAt, Instant updatedAt,
             Long version
     ) {
@@ -92,6 +103,8 @@ public class Disbursement extends AggregateRoot {
         d.mpesaConversationId = mpesaConversationId;
         d.mpesaOriginatorConversationId = mpesaOriginatorConversationId;
         d.failureReason = failureReason;
+        d.retryCount = retryCount;
+        d.requiresManualAttention = requiresManualAttention;
         d.createdAt = createdAt;
         d.updatedAt = updatedAt;
         d.setVersion(version);
@@ -109,6 +122,8 @@ public class Disbursement extends AggregateRoot {
     public String getMpesaConversationId() { return mpesaConversationId; }
     public String getMpesaOriginatorConversationId() { return mpesaOriginatorConversationId; }
     public String getFailureReason() { return failureReason; }
+    public int getRetryCount() { return retryCount; }
+    public boolean isRequiresManualAttention() { return requiresManualAttention; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 }

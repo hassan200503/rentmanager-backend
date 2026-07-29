@@ -72,7 +72,8 @@ daraja:
   consumer-secret: ${DARAJA_CONSUMER_SECRET:YOUR_CONSUMER_SECRET}
   business-short-code: ${DARAJA_SHORT_CODE:174379}
   passkey: ${DARAJA_PASSKEY:YOUR_DARAJA_PASSKEY}
-  callback-url: ${DARAJA_CALLBACK_URL:https://yourdomain.com/api/v1/public/reservations/mpesa/callback/YOUR_CALLBACK_SECRET}
+  callback-url: ${DARAJA_CALLBACK_URL}
+  rent-payment-callback-url: ${DARAJA_RENT_PAYMENT_CALLBACK_URL}
   base-url: ${DARAJA_BASE_URL:https://sandbox.safaricom.co.ke}
   callback-secret: ${DARAJA_CALLBACK_SECRET}
   credentials-encryption-key: ${DARAJA_CREDENTIALS_ENCRYPTION_KEY}

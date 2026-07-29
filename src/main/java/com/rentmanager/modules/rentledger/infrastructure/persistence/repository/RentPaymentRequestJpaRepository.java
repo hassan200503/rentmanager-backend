@@ -1,9 +1,12 @@
 package com.rentmanager.modules.rentledger.infrastructure.persistence.repository;
 
+import com.rentmanager.modules.rentledger.domain.enums.RentPaymentRequestStatus;
 import com.rentmanager.modules.rentledger.infrastructure.persistence.entity.RentPaymentRequestJpaEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -16,4 +19,6 @@ public interface RentPaymentRequestJpaRepository extends JpaRepository<RentPayme
     // initiated it — the rent-payment equivalent of
     // PaymentIntentJpaRepository.findByMpesaCheckoutRequestId.
     Optional<RentPaymentRequestJpaEntity> findByMpesaCheckoutRequestId(String mpesaCheckoutRequestId);
+
+    List<RentPaymentRequestJpaEntity> findByStatusAndCreatedAtBefore(RentPaymentRequestStatus status, Instant cutoff);
 }

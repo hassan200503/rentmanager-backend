@@ -70,6 +70,14 @@ public abstract class BaseEntity implements Serializable {
         return updatedAt;
     }
 
+    protected void restoreCreatedAt(Instant createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    protected void restoreUpdatedAt(Instant updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

@@ -234,7 +234,7 @@ class RentTransactionTest {
             RentTransaction tx = RentTransaction.rehydrate(
                     id, tenantId, ledgerEntryId, leaseId, RentTransactionType.PAYMENT,
                     new BigDecimal("250.00"), "MPESA-REF-1", RentTransactionSource.MPESA,
-                    "admin-1", occurredAt, 3L, createdAt, updatedAt
+                    "admin-1", occurredAt, null, null, null, 3L, createdAt, updatedAt
             );
 
             assertThat(tx.getId()).isEqualTo(id);
@@ -243,6 +243,9 @@ class RentTransactionTest {
             assertThat(tx.getVersion()).isEqualTo(3L);
             assertThat(tx.getCreatedAt()).isEqualTo(createdAt);
             assertThat(tx.getUpdatedAt()).isEqualTo(updatedAt);
+            assertThat(tx.getCommissionRatePercent()).isNull();
+            assertThat(tx.getCommissionAmount()).isNull();
+            assertThat(tx.getNetAmount()).isNull();
         }
     }
 }

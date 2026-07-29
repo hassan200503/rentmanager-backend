@@ -74,11 +74,6 @@ public class RentPaymentInitiationService {
             );
         }
 
-        // leaseId is read off the entry itself rather than accepted as a
-        // separate caller-supplied parameter — the previous version took
-        // rentLedgerEntryId and leaseId independently with no check that
-        // they actually belonged together, which is the wrong kind of
-        // caller-trust for an endpoint that moves money.
         UUID leaseId = entry.getLeaseId();
         Lease lease = leaseRepository.findByIdAndTenantId(leaseId, tenantId)
                 .orElseThrow(() -> new RentLedgerStateException(
@@ -86,7 +81,47 @@ public class RentPaymentInitiationService {
                         ErrorCode.LEASE_NOT_FOUND
                 ));
 
-        RentPaymentRequest request = RentPaymentRequest.create(tenantId, leaseId, rentLedgerEntryId, amount);
+        return doInitiate(tenantId, lease, rentLedgerEntryId, amount, mpesaPhone);
+    }
+
+    @Transactional
+    public RentPaymentRequest initiateWithAmount(
+            UUID tenantId,
+            UUID rentLedgerEntryId,
+            BigDecimal amount,
+            String mpesaPhone
+    ) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new RentLedgerStateException(
+                    "payment amount must be > 0",
+                    ErrorCode.RENT_TRANSACTION_INVALID_AMOUNT
+            );
+        }
+
+        RentLedgerEntry entry = rentLedgerEntryRepository.findByIdAndTenantId(rentLedgerEntryId, tenantId)
+                .orElseThrow(() -> new RentLedgerStateException(
+                        "rent ledger entry not found: " + rentLedgerEntryId,
+                        ErrorCode.RESOURCE_NOT_FOUND
+                ));
+
+        UUID leaseId = entry.getLeaseId();
+        Lease lease = leaseRepository.findByIdAndTenantId(leaseId, tenantId)
+                .orElseThrow(() -> new RentLedgerStateException(
+                        "lease not found: " + leaseId,
+                        ErrorCode.LEASE_NOT_FOUND
+                ));
+
+        return doInitiate(tenantId, lease, rentLedgerEntryId, amount, mpesaPhone);
+    }
+
+    private RentPaymentRequest doInitiate(
+            UUID tenantId,
+            Lease lease,
+            UUID rentLedgerEntryId,
+            BigDecimal amount,
+            String mpesaPhone
+    ) {
+        RentPaymentRequest request = RentPaymentRequest.create(tenantId, lease.getId(), rentLedgerEntryId, amount);
         request = rentPaymentRequestRepository.save(request);
 
         DarajaCredentials platformCredentials = DarajaCredentials.of(
@@ -96,9 +131,6 @@ public class RentPaymentInitiationService {
                 darajaProperties.getPasskey()
         );
 
-        // Explicit rent-payment callback URL — NOT the deposit flow's
-        // properties.getCallbackUrl(). See DarajaService's 6-arg
-        // initiateSTKPush javadoc for why this distinction is load-bearing.
         String checkoutRequestId = darajaService.initiateSTKPush(
                 mpesaPhone,
                 amount,
@@ -111,8 +143,8 @@ public class RentPaymentInitiationService {
         request.attachCheckoutRequestId(checkoutRequestId);
         request = rentPaymentRequestRepository.save(request);
 
-        log.info("Rent payment STK push initiated. leaseId={} rentLedgerEntryId={} checkoutRequestId={}",
-                leaseId, rentLedgerEntryId, checkoutRequestId);
+        log.info("Rent payment STK push initiated. leaseId={} rentLedgerEntryId={} amount={} checkoutRequestId={}",
+                lease.getId(), rentLedgerEntryId, amount, checkoutRequestId);
 
         return request;
     }

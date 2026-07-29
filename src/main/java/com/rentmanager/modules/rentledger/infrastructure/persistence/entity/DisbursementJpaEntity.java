@@ -59,6 +59,12 @@ public class DisbursementJpaEntity {
     @Column(name = "failure_reason", length = 500)
     private String failureReason;
 
+    @Column(name = "retry_count", nullable = false)
+    private int retryCount;
+
+    @Column(name = "requires_manual_attention", nullable = false)
+    private boolean requiresManualAttention;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 

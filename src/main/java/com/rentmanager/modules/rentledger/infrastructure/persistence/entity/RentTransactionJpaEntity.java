@@ -45,4 +45,13 @@ public class RentTransactionJpaEntity extends BaseTenantEntity {
 
     @Column(name = "occurred_at", nullable = false)
     private LocalDateTime occurredAt;
+
+    @Column(name = "commission_rate_percent", precision = 5, scale = 2)
+    private BigDecimal commissionRatePercent;
+
+    @Column(name = "commission_amount", precision = 19, scale = 2)
+    private BigDecimal commissionAmount;
+
+    @Column(name = "net_amount", precision = 19, scale = 2)
+    private BigDecimal netAmount;
 }

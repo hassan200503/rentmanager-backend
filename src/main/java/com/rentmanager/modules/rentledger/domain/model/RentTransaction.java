@@ -60,6 +60,12 @@ public class RentTransaction extends AggregateRoot {
     private String recordedBy;
     private LocalDateTime occurredAt;
 
+    // Commission snapshot — populated only for MPESA rent payments.
+    // Null for all other transaction types (CASH, ADMIN_ADJUSTMENT, etc.).
+    private BigDecimal commissionRatePercent;
+    private BigDecimal commissionAmount;
+    private BigDecimal netAmount;
+
     // Shadows BaseEntity's fields — see class javadoc FIX note.
     private Long version;
     private Instant createdAt;
@@ -143,6 +149,9 @@ public class RentTransaction extends AggregateRoot {
             RentTransactionSource source,
             String recordedBy,
             LocalDateTime occurredAt,
+            BigDecimal commissionRatePercent,
+            BigDecimal commissionAmount,
+            BigDecimal netAmount,
             Long version,
             Instant createdAt,
             Instant updatedAt
@@ -156,6 +165,9 @@ public class RentTransaction extends AggregateRoot {
                 .source(source)
                 .recordedBy(recordedBy)
                 .occurredAt(occurredAt)
+                .commissionRatePercent(commissionRatePercent)
+                .commissionAmount(commissionAmount)
+                .netAmount(netAmount)
                 .version(version)
                 .createdAt(createdAt)
                 .updatedAt(updatedAt)
@@ -164,6 +176,12 @@ public class RentTransaction extends AggregateRoot {
         transaction.setId(id);
         transaction.assignTenant(tenantId);
         return transaction;
+    }
+
+    public void applyCommission(BigDecimal commissionRatePercent, BigDecimal commissionAmount, BigDecimal netAmount) {
+        this.commissionRatePercent = commissionRatePercent;
+        this.commissionAmount = commissionAmount;
+        this.netAmount = netAmount;
     }
 
     /**

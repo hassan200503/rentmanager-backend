@@ -55,6 +55,21 @@ public class Address {
     // VALIDATION
     // --------------------------------------------------
 
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(streetAddress);
+        if (state != null && !state.isBlank()) {
+            sb.append(", ").append(state);
+        }
+        sb.append(", ").append(city);
+        if (postalCode != null && !postalCode.isBlank()) {
+            sb.append(" ").append(postalCode);
+        }
+        sb.append(", ").append(country);
+        return sb.toString();
+    }
+
     private static void validate(String value, String fieldName) {
 
         if (value == null || value.isBlank()) {

@@ -8,6 +8,7 @@ import com.rentmanager.modules.rentledger.infrastructure.persistence.repository.
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -52,6 +53,20 @@ public class DisbursementRepositoryAdapter implements DisbursementRepository {
     }
 
     @Override
+    public List<Disbursement> findByStatusInAndRetryCountLessThan(List<DisbursementStatus> statuses, int maxRetries) {
+        return jpaRepository.findByStatusInAndRetryCountLessThanOrderByCreatedAtAsc(statuses, maxRetries).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Disbursement> findByStatusInAndCreatedAtBefore(List<DisbursementStatus> statuses, Instant cutoff) {
+        return jpaRepository.findByStatusInAndCreatedAtBeforeOrderByCreatedAtAsc(statuses, cutoff).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
     public List<Disbursement> findByTenantId(UUID tenantId) {
         return jpaRepository.findByTenantIdOrderByCreatedAtDesc(tenantId).stream()
                 .map(this::toDomain)
@@ -74,6 +89,8 @@ public class DisbursementRepositoryAdapter implements DisbursementRepository {
                 .mpesaConversationId(d.getMpesaConversationId())
                 .mpesaOriginatorConversationId(d.getMpesaOriginatorConversationId())
                 .failureReason(d.getFailureReason())
+                .retryCount(d.getRetryCount())
+                .requiresManualAttention(d.isRequiresManualAttention())
                 .createdAt(d.getCreatedAt())
                 .updatedAt(d.getUpdatedAt())
                 .build();
@@ -86,6 +103,7 @@ public class DisbursementRepositoryAdapter implements DisbursementRepository {
                 e.getCommandId(), e.getStatus(),
                 e.getMpesaTransactionId(), e.getMpesaConversationId(),
                 e.getMpesaOriginatorConversationId(), e.getFailureReason(),
+                e.getRetryCount(), e.isRequiresManualAttention(),
                 e.getCreatedAt(), e.getUpdatedAt(),
                 e.getVersion()
         );

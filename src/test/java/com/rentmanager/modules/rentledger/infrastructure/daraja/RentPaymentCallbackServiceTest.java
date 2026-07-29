@@ -2,19 +2,14 @@ package com.rentmanager.modules.rentledger.infrastructure.daraja;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rentmanager.modules.reservation.infrastructure.daraja.MpesaCallbackPayload;
-import com.rentmanager.modules.rentledger.application.service.RentLedgerApplicationService;
-import com.rentmanager.modules.rentledger.domain.enums.RentPaymentRequestStatus;
-import com.rentmanager.modules.rentledger.domain.enums.RentTransactionSource;
-import com.rentmanager.modules.rentledger.domain.enums.RentTransactionType;
-import com.rentmanager.modules.rentledger.domain.exception.RentLedgerStateException;
 import com.rentmanager.modules.rentledger.domain.model.RentPaymentRequest;
-import com.rentmanager.modules.rentledger.domain.repository.RentPaymentRequestRepository;
-import com.rentmanager.shared.exception.ErrorCode;
+import com.rentmanager.modules.rentledger.domain.model.RentTransaction;
+import com.rentmanager.modules.tenant.domain.model.Tenant;
+import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -22,9 +17,8 @@ import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -32,9 +26,11 @@ import static org.mockito.Mockito.*;
 class RentPaymentCallbackServiceTest {
 
     @Mock
-    private RentPaymentRequestRepository rentPaymentRequestRepository;
+    private RentPaymentCallbackTransactionService txService;
     @Mock
-    private RentLedgerApplicationService rentLedgerApplicationService;
+    private TenantRepository tenantRepository;
+    @Mock
+    private DarajaB2CService darajaB2CService;
 
     private RentPaymentCallbackService service;
 
@@ -42,7 +38,9 @@ class RentPaymentCallbackServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new RentPaymentCallbackService(rentPaymentRequestRepository, rentLedgerApplicationService);
+        service = new RentPaymentCallbackService(
+                txService, tenantRepository, darajaB2CService
+        );
     }
 
     @Nested
@@ -127,107 +125,169 @@ class RentPaymentCallbackServiceTest {
 
         @Test
         void handlesSuccessfulCallback() throws Exception {
-            when(rentPaymentRequestRepository.findByMpesaCheckoutRequestId(checkoutRequestId))
-                    .thenReturn(Optional.of(pendingRequest));
-            when(rentPaymentRequestRepository.save(any()))
-                    .thenAnswer(inv -> inv.getArgument(0));
+            when(txService.processSuccessfulCallback(eq(checkoutRequestId), eq(receiptNumber)))
+                    .thenReturn(new RentPaymentCallbackTransactionService.SuccessfulPaymentResult(
+                            pendingRequest, null, null, null, null
+                    ));
 
             service.handle(successfulPayload());
 
-            assertThat(pendingRequest.getStatus()).isEqualTo(RentPaymentRequestStatus.PAID);
-            assertThat(pendingRequest.getMpesaReceiptNumber()).isEqualTo(receiptNumber);
-
-            ArgumentCaptor<RentPaymentRequest> requestCaptor = ArgumentCaptor.forClass(RentPaymentRequest.class);
-            verify(rentPaymentRequestRepository).save(requestCaptor.capture());
-            assertThat(requestCaptor.getValue().getStatus()).isEqualTo(RentPaymentRequestStatus.PAID);
-            assertThat(requestCaptor.getValue().getMpesaReceiptNumber()).isEqualTo(receiptNumber);
-
-            ArgumentCaptor<String> refCaptor = ArgumentCaptor.forClass(String.class);
-            verify(rentLedgerApplicationService).applyTransaction(
-                    eq(tenantId),
-                    eq("rent-payment-" + pendingRequest.getId()),
-                    eq(rentLedgerEntryId),
-                    eq(RentTransactionType.PAYMENT),
-                    eq(new BigDecimal("1500.00")),
-                    refCaptor.capture(),
-                    eq(RentTransactionSource.MPESA),
-                    eq("SYSTEM"),
-                    any()
-            );
-            assertThat(refCaptor.getValue()).isEqualTo(receiptNumber);
+            verify(txService).processSuccessfulCallback(checkoutRequestId, receiptNumber);
         }
 
         @Test
         void ignoresDuplicateWhenAlreadyPaid() throws Exception {
             pendingRequest.markPaid(receiptNumber);
 
-            when(rentPaymentRequestRepository.findByMpesaCheckoutRequestId(checkoutRequestId))
-                    .thenReturn(Optional.of(pendingRequest));
+            when(txService.processSuccessfulCallback(eq(checkoutRequestId), eq(receiptNumber)))
+                    .thenReturn(null);
 
             service.handle(successfulPayload());
 
-            verify(rentLedgerApplicationService, never())
-                    .applyTransaction(any(), any(), any(), any(), any(), any(), any(), any(), any());
-            verify(rentPaymentRequestRepository, never()).save(any());
-        }
-
-        @Test
-        void ignoresDuplicateWhenAlreadyFailed() throws Exception {
-            pendingRequest.markFailed();
-
-            when(rentPaymentRequestRepository.findByMpesaCheckoutRequestId(checkoutRequestId))
-                    .thenReturn(Optional.of(pendingRequest));
-
-            service.handle(successfulPayload());
-
-            verify(rentLedgerApplicationService, never())
-                    .applyTransaction(any(), any(), any(), any(), any(), any(), any(), any(), any());
-            verify(rentPaymentRequestRepository, never()).save(any());
+            verify(txService).processSuccessfulCallback(checkoutRequestId, receiptNumber);
         }
 
         @Test
         void marksFailedWhenResultCodeNotZero() throws Exception {
-            when(rentPaymentRequestRepository.findByMpesaCheckoutRequestId(checkoutRequestId))
-                    .thenReturn(Optional.of(pendingRequest));
-            when(rentPaymentRequestRepository.save(any()))
-                    .thenAnswer(inv -> inv.getArgument(0));
-
             service.handle(failedPayload(1));
 
-            assertThat(pendingRequest.getStatus()).isEqualTo(RentPaymentRequestStatus.FAILED);
-            verify(rentPaymentRequestRepository).save(pendingRequest);
-            verify(rentLedgerApplicationService, never())
-                    .applyTransaction(any(), any(), any(), any(), any(), any(), any(), any(), any());
+            verify(txService).processFailedCallback(checkoutRequestId, "Request cancelled by user");
+            verify(txService, never()).processSuccessfulCallback(any(), any());
         }
 
         @Test
         void marksFailedWhenReceiptNumberMissing() throws Exception {
-            when(rentPaymentRequestRepository.findByMpesaCheckoutRequestId(checkoutRequestId))
-                    .thenReturn(Optional.of(pendingRequest));
-            when(rentPaymentRequestRepository.save(any()))
-                    .thenAnswer(inv -> inv.getArgument(0));
-
             service.handle(payloadWithoutReceipt());
 
-            assertThat(pendingRequest.getStatus()).isEqualTo(RentPaymentRequestStatus.FAILED);
-            verify(rentPaymentRequestRepository).save(pendingRequest);
-            verify(rentLedgerApplicationService, never())
-                    .applyTransaction(any(), any(), any(), any(), any(), any(), any(), any(), any());
+            verify(txService).processFailedCallback(checkoutRequestId, "No MpesaReceiptNumber in callback");
+            verify(txService, never()).processSuccessfulCallback(any(), any());
         }
 
         @Test
-        void throwsWhenCheckoutRequestIdUnknown() throws Exception {
-            when(rentPaymentRequestRepository.findByMpesaCheckoutRequestId(checkoutRequestId))
-                    .thenReturn(Optional.empty());
+        void initiatesB2CWhenNetAmountPositive() throws Exception {
+            BigDecimal netAmount = new BigDecimal("1425.00");
+            when(txService.processSuccessfulCallback(eq(checkoutRequestId), eq(receiptNumber)))
+                    .thenReturn(new RentPaymentCallbackTransactionService.SuccessfulPaymentResult(
+                            pendingRequest, mock(RentTransaction.class), new BigDecimal("5.00"),
+                            new BigDecimal("75.00"), netAmount
+                    ));
 
-            assertThatThrownBy(() -> service.handle(successfulPayload()))
-                    .isInstanceOf(RentLedgerStateException.class)
-                    .extracting(ex -> ((RentLedgerStateException) ex).getErrorCode())
-                    .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+            Tenant landlord = mock(Tenant.class);
+            when(landlord.getPayoutPhoneNumber()).thenReturn("+254700000000");
+            when(landlord.getName()).thenReturn("Test Landlord");
+            when(tenantRepository.findById(tenantId)).thenReturn(Optional.of(landlord));
 
-            verify(rentLedgerApplicationService, never())
-                    .applyTransaction(any(), any(), any(), any(), any(), any(), any(), any(), any());
-            verify(rentPaymentRequestRepository, never()).save(any());
+            String originatorConversationId = "OCID_test";
+            when(darajaB2CService.initiateB2C(
+                    eq(netAmount), eq("+254700000000"), eq("Test Landlord"),
+                    anyString(), eq("BusinessPayment")
+            )).thenReturn(originatorConversationId);
+
+            service.handle(successfulPayload());
+
+            verify(txService).processSuccessfulCallback(checkoutRequestId, receiptNumber);
+            verify(darajaB2CService).initiateB2C(
+                    eq(netAmount), eq("+254700000000"), eq("Test Landlord"),
+                    anyString(), eq("BusinessPayment")
+            );
+            verify(txService).createDisbursement(
+                    eq(tenantId), eq(pendingRequest.getLeaseId()),
+                    eq(pendingRequest.getRentLedgerEntryId()),
+                    eq(netAmount), eq("+254700000000"), eq("Test Landlord"),
+                    eq(originatorConversationId)
+            );
+        }
+
+        @Test
+        void skipsB2CWhenNetAmountIsNull() throws Exception {
+            when(txService.processSuccessfulCallback(eq(checkoutRequestId), eq(receiptNumber)))
+                    .thenReturn(new RentPaymentCallbackTransactionService.SuccessfulPaymentResult(
+                            pendingRequest, mock(RentTransaction.class), new BigDecimal("5.00"),
+                            new BigDecimal("75.00"), null
+                    ));
+
+            service.handle(successfulPayload());
+
+            verify(txService).processSuccessfulCallback(checkoutRequestId, receiptNumber);
+            verifyNoInteractions(darajaB2CService);
+            verify(txService, never()).createDisbursement(any(), any(), any(), any(), any(), any(), any());
+        }
+
+        @Test
+        void skipsB2CWhenNetAmountIsZero() throws Exception {
+            when(txService.processSuccessfulCallback(eq(checkoutRequestId), eq(receiptNumber)))
+                    .thenReturn(new RentPaymentCallbackTransactionService.SuccessfulPaymentResult(
+                            pendingRequest, mock(RentTransaction.class), new BigDecimal("5.00"),
+                            new BigDecimal("75.00"), BigDecimal.ZERO
+                    ));
+
+            service.handle(successfulPayload());
+
+            verify(txService).processSuccessfulCallback(checkoutRequestId, receiptNumber);
+            verifyNoInteractions(darajaB2CService);
+        }
+
+        @Test
+        void skipsB2CWhenLandlordNotFound() throws Exception {
+            BigDecimal netAmount = new BigDecimal("1425.00");
+            when(txService.processSuccessfulCallback(eq(checkoutRequestId), eq(receiptNumber)))
+                    .thenReturn(new RentPaymentCallbackTransactionService.SuccessfulPaymentResult(
+                            pendingRequest, mock(RentTransaction.class), new BigDecimal("5.00"),
+                            new BigDecimal("75.00"), netAmount
+                    ));
+            when(tenantRepository.findById(tenantId)).thenReturn(Optional.empty());
+
+            service.handle(successfulPayload());
+
+            verify(txService).processSuccessfulCallback(checkoutRequestId, receiptNumber);
+            verifyNoInteractions(darajaB2CService);
+        }
+
+        @Test
+        void skipsB2CWhenLandlordHasNoPayoutPhone() throws Exception {
+            BigDecimal netAmount = new BigDecimal("1425.00");
+            when(txService.processSuccessfulCallback(eq(checkoutRequestId), eq(receiptNumber)))
+                    .thenReturn(new RentPaymentCallbackTransactionService.SuccessfulPaymentResult(
+                            pendingRequest, mock(RentTransaction.class), new BigDecimal("5.00"),
+                            new BigDecimal("75.00"), netAmount
+                    ));
+
+            Tenant landlord = mock(Tenant.class);
+            when(landlord.getPayoutPhoneNumber()).thenReturn(null);
+            when(tenantRepository.findById(tenantId)).thenReturn(Optional.of(landlord));
+
+            service.handle(successfulPayload());
+
+            verify(txService).processSuccessfulCallback(checkoutRequestId, receiptNumber);
+            verifyNoInteractions(darajaB2CService);
+        }
+
+        @Test
+        void createsFailedDisbursementWhenB2CInitiationThrows() throws Exception {
+            BigDecimal netAmount = new BigDecimal("1425.00");
+            when(txService.processSuccessfulCallback(eq(checkoutRequestId), eq(receiptNumber)))
+                    .thenReturn(new RentPaymentCallbackTransactionService.SuccessfulPaymentResult(
+                            pendingRequest, mock(RentTransaction.class), new BigDecimal("5.00"),
+                            new BigDecimal("75.00"), netAmount
+                    ));
+
+            Tenant landlord = mock(Tenant.class);
+            when(landlord.getPayoutPhoneNumber()).thenReturn("+254700000000");
+            when(landlord.getName()).thenReturn("Test Landlord");
+            when(tenantRepository.findById(tenantId)).thenReturn(Optional.of(landlord));
+
+            when(darajaB2CService.initiateB2C(
+                    any(), anyString(), anyString(), anyString(), anyString()
+            )).thenThrow(new RuntimeException("Daraja API error"));
+
+            service.handle(successfulPayload());
+
+            verify(txService).createFailedDisbursement(
+                    eq(tenantId), eq(pendingRequest.getLeaseId()),
+                    eq(pendingRequest.getRentLedgerEntryId()),
+                    eq(netAmount), eq("+254700000000"), eq("Test Landlord"),
+                    anyString()
+            );
         }
     }
 }
