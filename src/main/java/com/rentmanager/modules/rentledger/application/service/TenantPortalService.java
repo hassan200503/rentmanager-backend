@@ -5,7 +5,10 @@ import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
+import com.rentmanager.modules.rentledger.api.autopay.dto.AutoPaySettingsResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.RentPaymentRequestResponse;
+import com.rentmanager.modules.rentledger.application.autopay.AutoPayService;
+import com.rentmanager.modules.rentledger.domain.model.autopay.AutoPaySettings;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantDashboardResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantDashboardResponse.PaymentHistoryItem;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantLeaseResponse;
@@ -13,6 +16,7 @@ import com.rentmanager.modules.rentledger.api.dto.response.TenantPaymentHistoryR
 import com.rentmanager.modules.rentledger.api.dto.response.TenantPaymentReceiptResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantPaymentSummaryResponse;
 import com.rentmanager.modules.rentledger.domain.enums.RentLedgerStatus;
+import com.rentmanager.modules.rentledger.domain.enums.RentPaymentRequestStatus;
 import com.rentmanager.modules.rentledger.domain.enums.RentTransactionSource;
 import com.rentmanager.modules.rentledger.domain.enums.RentTransactionType;
 import com.rentmanager.modules.rentledger.domain.model.RentLedgerEntry;
@@ -61,6 +65,7 @@ public class TenantPortalService {
     private final RentTransactionRepository rentTransactionRepository;
     private final RentPaymentInitiationService rentPaymentInitiationService;
     private final RentPaymentRequestRepository rentPaymentRequestRepository;
+    private final AutoPayService autoPayService;
 
     @Transactional(readOnly = true)
     public TenantDashboardResponse getDashboard(UUID userId) {
@@ -385,6 +390,43 @@ public class TenantPortalService {
         UUID tenantId = resolveTenantProfile(userId).getTenantId();
         RentPaymentRequest request = rentPaymentRequestRepository.findByIdAndTenantId(requestId, tenantId)
                 .orElseThrow(() -> new RentLedgerStateException("Payment request not found", ErrorCode.RESOURCE_NOT_FOUND));
+
+        if (request.getStatus() == RentPaymentRequestStatus.PAID && request.getMpesaReceiptNumber() != null) {
+            return rentTransactionRepository.findByExternalReference(tenantId, request.getMpesaReceiptNumber())
+                    .map(txn -> RentPaymentRequestResponse.from(request, txn.getId()))
+                    .orElse(RentPaymentRequestResponse.from(request));
+        }
+
         return RentPaymentRequestResponse.from(request);
+    }
+// -------------------------------------------------------
+    // AUTO-PAY METHODS
+    // -------------------------------------------------------
+
+    @Transactional(readOnly = true)
+    public AutoPaySettingsResponse getAutoPaySettings(UUID userId) {
+        TenantProfile profile = resolveTenantProfile(userId);
+        Lease activeLease = findActiveLease(profile.getTenantId(), profile.getId());
+        AutoPaySettings settings = autoPayService.getSettings(profile.getTenantId(), activeLease.getId())
+                .orElse(AutoPaySettings.create(profile.getTenantId(), activeLease.getId(), profile.getId(), ""));
+        return AutoPaySettingsResponse.from(settings);
+    }
+
+    @Transactional
+    public AutoPaySettingsResponse toggleAutoPay(UUID userId, boolean enable, String mpesaPhone) {
+        TenantProfile profile = resolveTenantProfile(userId);
+        Lease activeLease = findActiveLease(profile.getTenantId(), profile.getId());
+        AutoPaySettings settings = autoPayService.toggle(
+                profile.getTenantId(), activeLease.getId(), profile.getId(), enable, mpesaPhone);
+        return AutoPaySettingsResponse.from(settings);
+    }
+
+    @Transactional
+    public AutoPaySettingsResponse updateAutoPayPhone(UUID userId, String mpesaPhone) {
+        TenantProfile profile = resolveTenantProfile(userId);
+        Lease activeLease = findActiveLease(profile.getTenantId(), profile.getId());
+        AutoPaySettings settings = autoPayService.updatePhone(
+                profile.getTenantId(), activeLease.getId(), mpesaPhone);
+        return AutoPaySettingsResponse.from(settings);
     }
 }

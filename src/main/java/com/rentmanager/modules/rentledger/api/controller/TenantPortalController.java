@@ -1,8 +1,11 @@
 package com.rentmanager.modules.rentledger.api.controller;
 
 import com.rentmanager.contract.common.ApiResponse;
+import com.rentmanager.modules.rentledger.api.autopay.dto.AutoPaySettingsResponse;
 import com.rentmanager.modules.rentledger.api.dto.request.InitiatePortalPaymentRequest;
 import com.rentmanager.modules.rentledger.api.dto.request.InitiateRentPaymentRequest;
+import com.rentmanager.modules.rentledger.api.dto.request.ToggleAutoPayRequest;
+import com.rentmanager.modules.rentledger.api.dto.request.UpdateAutoPayPhoneRequest;
 import com.rentmanager.modules.rentledger.api.dto.response.RentPaymentRequestResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantDashboardResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantLeaseResponse;
@@ -97,5 +100,37 @@ public class TenantPortalController {
     ) {
         RentPaymentRequestResponse response = tenantPortalService.getPaymentRequestStatus(user.getUserId(), id);
         return ResponseEntity.ok(ApiResponse.ok("Payment request status retrieved", response));
+    }
+// -------------------------------------------------------
+    // AUTO-PAY ENDPOINTS
+    // -------------------------------------------------------
+
+    @GetMapping("/auto-pay")
+    public ResponseEntity<ApiResponse<AutoPaySettingsResponse>> getAutoPaySettings(
+            @AuthenticationPrincipal AuthenticatedUser user
+    ) {
+        AutoPaySettingsResponse response = tenantPortalService.getAutoPaySettings(user.getUserId());
+        return ResponseEntity.ok(ApiResponse.ok("Auto-pay settings retrieved", response));
+    }
+
+    @PostMapping("/auto-pay/toggle")
+    public ResponseEntity<ApiResponse<AutoPaySettingsResponse>> toggleAutoPay(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @Valid @RequestBody ToggleAutoPayRequest request
+    ) {
+        AutoPaySettingsResponse response = tenantPortalService.toggleAutoPay(
+                user.getUserId(), request.enabled(), request.mpesaPhone());
+        return ResponseEntity.ok(ApiResponse.ok(
+                request.enabled() ? "Auto-pay enabled" : "Auto-pay disabled", response));
+    }
+
+    @PostMapping("/auto-pay/phone")
+    public ResponseEntity<ApiResponse<AutoPaySettingsResponse>> updateAutoPayPhone(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @Valid @RequestBody UpdateAutoPayPhoneRequest request
+    ) {
+        AutoPaySettingsResponse response = tenantPortalService.updateAutoPayPhone(
+                user.getUserId(), request.mpesaPhone());
+        return ResponseEntity.ok(ApiResponse.ok("Auto-pay phone updated", response));
     }
 }

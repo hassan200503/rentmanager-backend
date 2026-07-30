@@ -17,7 +17,8 @@ public record RentPaymentRequestResponse(
         UUID rentLedgerEntryId,
         BigDecimal amount,
         RentPaymentRequestStatus status,
-        String mpesaReceiptNumber
+        String mpesaReceiptNumber,
+        UUID transactionId
 ) {
     public static RentPaymentRequestResponse from(RentPaymentRequest request) {
         return new RentPaymentRequestResponse(
@@ -26,7 +27,20 @@ public record RentPaymentRequestResponse(
                 request.getRentLedgerEntryId(),
                 request.getAmount(),
                 request.getStatus(),
-                request.getMpesaReceiptNumber()
+                request.getMpesaReceiptNumber(),
+                null
+        );
+    }
+
+    public static RentPaymentRequestResponse from(RentPaymentRequest request, UUID transactionId) {
+        return new RentPaymentRequestResponse(
+                request.getId(),
+                request.getLeaseId(),
+                request.getRentLedgerEntryId(),
+                request.getAmount(),
+                request.getStatus(),
+                request.getMpesaReceiptNumber(),
+                transactionId
         );
     }
 }

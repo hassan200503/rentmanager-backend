@@ -6,6 +6,7 @@ import com.rentmanager.modules.lease.domain.enums.LeaseType;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
+import com.rentmanager.modules.rentledger.application.autopay.AutoPayService;
 import com.rentmanager.modules.rentledger.domain.exception.RentLedgerStateException;
 import com.rentmanager.modules.rentledger.domain.model.RentPaymentRequest;
 import com.rentmanager.modules.rentledger.domain.model.RentLedgerEntry;
@@ -68,6 +69,7 @@ class TenantPortalServiceTest {
     private RentTransactionRepository rentTransactionRepository;
     private RentPaymentInitiationService rentPaymentInitiationService;
     private RentPaymentRequestRepository rentPaymentRequestRepository;
+    private AutoPayService autoPayService;
 
     private TenantPortalService service;
 
@@ -92,6 +94,7 @@ class TenantPortalServiceTest {
         rentTransactionRepository = mock(RentTransactionRepository.class);
         rentPaymentInitiationService = mock(RentPaymentInitiationService.class);
         rentPaymentRequestRepository = mock(RentPaymentRequestRepository.class);
+        autoPayService = mock(AutoPayService.class);
 
         service = new TenantPortalService(
                 userRepository,
@@ -103,7 +106,8 @@ class TenantPortalServiceTest {
                 rentLedgerEntryRepository,
                 rentTransactionRepository,
                 rentPaymentInitiationService,
-                rentPaymentRequestRepository
+                rentPaymentRequestRepository,
+                autoPayService
         );
 
         renterUser = buildUser(USER_ID, CLERK_USER_ID, LANDLORD_TENANT_ID);

@@ -140,6 +140,11 @@ public class RentLedgerApplicationService {
         );
         rentTransactionRepository.save(chargeTransaction);
 
+        // Auto-credit overpayment from the prior period, if any, so the
+        // deposit excess (or any overpayment) rolls forward to the next
+        // entry rather than sitting on the old entry permanently.
+        autoCreditOverpayment(tenantId, correlationId, leaseId, billingPeriodStart, entry);
+
         publish(entry);
         return entry;
     }
@@ -172,10 +177,11 @@ public class RentLedgerApplicationService {
             String mpesaReceiptNumber
     ) {
         String depositRef = mpesaReceiptNumber != null ? mpesaReceiptNumber : "deposit-" + leaseId;
-        String canonicalRef = "deposit-" + leaseId;
-        Optional<RentTransaction> existing =
-                rentTransactionRepository.findByExternalReference(tenantId, canonicalRef);
-        if (existing.isPresent()) {
+        List<RentTransaction> existingDeposits = rentTransactionRepository.findByLease(tenantId, leaseId)
+                .stream()
+                .filter(t -> t.getType() == RentTransactionType.DEPOSIT)
+                .toList();
+        if (!existingDeposits.isEmpty()) {
             log.info("postDeposit is a no-op: deposit already recorded for leaseId={}", leaseId);
             return;
         }
@@ -526,6 +532,35 @@ public class RentLedgerApplicationService {
     // ------------------------------------------------------------------
     // Internal helpers
     // ------------------------------------------------------------------
+
+    private void autoCreditOverpayment(
+            UUID tenantId,
+            String correlationId,
+            UUID leaseId,
+            LocalDate billingPeriodStart,
+            RentLedgerEntry currentEntry
+    ) {
+        List<RentLedgerEntry> entries = rentLedgerEntryRepository.findByLease(tenantId, leaseId);
+        RentLedgerEntry previousEntry = null;
+        for (RentLedgerEntry e : entries) {
+            if (e.getBillingPeriodEnd().isBefore(billingPeriodStart)
+                    && (previousEntry == null
+                    || e.getBillingPeriodEnd().isAfter(previousEntry.getBillingPeriodEnd()))) {
+                previousEntry = e;
+            }
+        }
+        if (previousEntry != null
+                && previousEntry.getExcessAmount().compareTo(BigDecimal.ZERO) > 0) {
+            resolveOverpaymentAsCredit(
+                    tenantId,
+                    correlationId + "-auto-credit",
+                    previousEntry.getId(),
+                    currentEntry.getId(),
+                    "SYSTEM",
+                    LocalDateTime.now()
+            );
+        }
+    }
 
     private void publish(RentLedgerEntry entry) {
         List<com.rentmanager.domain.base.DomainEvent> events = new ArrayList<>(entry.pullDomainEvents());
