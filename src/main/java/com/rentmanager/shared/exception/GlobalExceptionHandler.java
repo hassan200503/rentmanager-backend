@@ -2,8 +2,10 @@ package com.rentmanager.shared.exception;
 
 import com.rentmanager.contract.common.ApiResponse;
 import com.rentmanager.modules.rentledger.domain.exception.RentLedgerEntryNotFoundException;
+import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaException;
 import com.rentmanager.shared.error.ErrorTrackingService;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -320,6 +322,47 @@ public class GlobalExceptionHandler {
     }
 
     // =========================================================
+    // DATA INTEGRITY (CONCURRENT RACE LOSERS)
+    // =========================================================
+    // Constraint violations are surfaced as 409 so a concurrent request
+    // that loses a uniqueness race (e.g. the V52
+    // uk_sub_payment_requests_pending guard that prevents two live STK
+    // pushes for the same tenant) gets a clean "already in progress"
+    // response instead of a misleading 500. The frontend already knows
+    // SUBSCRIPTION_PAYMENT_ALREADY_PENDING from the pre-check path.
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Object>> handleDataIntegrityViolation(
+            DataIntegrityViolationException ex,
+            HttpServletRequest request
+    ) {
+        String message = ex.getMessage() != null ? ex.getMessage() : "";
+        boolean pendingSubscriptionRace = message.contains("uk_sub_payment_requests_pending");
+
+        errorTrackingService.capture(
+                ex,
+                "BUSINESS",
+                pendingSubscriptionRace ? "CONCURRENT_SUBSCRIPTION_PAYMENT" : "DATA_INTEGRITY",
+                resolveModule(request),
+                request,
+                Map.of("constraint", pendingSubscriptionRace ? "uk_sub_payment_requests_pending" : "unknown")
+        );
+
+        if (pendingSubscriptionRace) {
+            return ResponseEntity
+                    .status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.fail(
+                            "A subscription payment is already pending - complete the M-Pesa prompt on your phone",
+                            "SUBSCRIPTION_PAYMENT_ALREADY_PENDING"));
+        }
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.fail(
+                        "Operation conflicts with existing data - please retry",
+                        "CONFLICT"));
+    }
+
+    // =========================================================
     // FALLBACK (KEEP LAST)
     // =========================================================
     @ExceptionHandler(Exception.class)
@@ -340,6 +383,32 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.fail("Internal server error", "INTERNAL_ERROR"));
+    }
+
+    /**
+     * Payment-provider (Daraja) failures: 502 Bad Gateway so callers know
+     * the provider — not the API contract — rejected the request, and the
+     * exception message surfaces Safaricom's own error text (e.g. "Bad
+     * Request - Invalid CallBackURL") for actionable frontend diagnostics.
+     */
+    @ExceptionHandler(DarajaException.class)
+    public ResponseEntity<ApiResponse<Object>> handleDaraja(
+            DarajaException ex,
+            HttpServletRequest request
+    ) {
+
+        errorTrackingService.capture(
+                ex,
+                "SYSTEM",
+                "DARAJA_ERROR",
+                resolveModule(request),
+                request,
+                Map.of("type", ex.getClass().getSimpleName())
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_GATEWAY)
+                .body(ApiResponse.fail(ex.getMessage(), "DARAJA_ERROR"));
     }
 
     // =========================================================

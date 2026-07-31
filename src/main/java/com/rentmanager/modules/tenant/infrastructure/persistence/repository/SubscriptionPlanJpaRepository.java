@@ -9,7 +9,7 @@ import java.util.UUID;
 
 public interface SubscriptionPlanJpaRepository extends JpaRepository<SubscriptionPlanEntity, UUID> {
 
-    Optional<SubscriptionPlanEntity> findByPlanCode(String planCode);
+    Optional<SubscriptionPlanEntity> findByCode(String code);
 
-    boolean existsByPlanCode(String planCode);
+    boolean existsByCode(String code);
 }

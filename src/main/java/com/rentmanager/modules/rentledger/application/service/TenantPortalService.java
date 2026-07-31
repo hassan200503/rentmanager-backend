@@ -27,6 +27,7 @@ import com.rentmanager.modules.rentledger.domain.repository.RentPaymentRequestRe
 import com.rentmanager.modules.rentledger.domain.repository.RentTransactionRepository;
 import com.rentmanager.modules.rentledger.domain.exception.RentLedgerStateException;
 import com.rentmanager.modules.rentledger.infrastructure.daraja.RentPaymentInitiationService;
+import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;
 import com.rentmanager.modules.tenant.domain.model.Tenant;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
@@ -145,6 +146,19 @@ public class TenantPortalService {
             address = property.getAddress().toString();
         }
 
+        String landlordLogoUrl = null;
+        if (landlord.getBrandingSettings() != null) {
+            landlordLogoUrl = landlord.getBrandingSettings().getLogoUrl();
+        }
+
+        // GRACE_PERIOD (Phase 1): a premium landlord whose renewal payment
+        // failed still counts as verified - they remain a paying customer
+        // until the grace window ends and the scheduler reverts them.
+        boolean landlordVerified = landlord.getSubscriptionStatus() != null
+                && (landlord.getSubscriptionStatus() == SubscriptionStatus.ACTIVE
+                    || landlord.getSubscriptionStatus() == SubscriptionStatus.TRIAL
+                    || landlord.getSubscriptionStatus() == SubscriptionStatus.GRACE_PERIOD);
+
         return new TenantLeaseResponse(
                 activeLease.getId(),
                 activeLease.getLeaseNumber(),
@@ -160,6 +174,11 @@ public class TenantPortalService {
                 landlord.getName(),
                 landlord.getPhoneNumber(),
                 landlord.getEmail(),
+                landlord.getTenantCode(),
+                landlord.getAddress(),
+                landlordLogoUrl,
+                landlord.getCreatedAt() != null ? landlord.getCreatedAt().toString() : null,
+                landlordVerified,
                 ""
         );
     }

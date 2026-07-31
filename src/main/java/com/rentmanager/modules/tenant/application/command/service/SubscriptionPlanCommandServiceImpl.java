@@ -34,6 +34,7 @@ public class SubscriptionPlanCommandServiceImpl implements SubscriptionPlanComma
                 request.getMaxStorageGb(),
                 request.getMonthlyPrice(),
                 request.getYearlyPrice(),
+                true,
                 true
         );
 
@@ -44,7 +45,11 @@ public class SubscriptionPlanCommandServiceImpl implements SubscriptionPlanComma
 
     @Override
     public void deactivate(UUID id) {
-        SubscriptionPlan plan = repository.findById(id);
+        SubscriptionPlan plan = repository.findById(id)
+                .orElseThrow(() -> new com.rentmanager.shared.exception.ResourceNotFoundException(
+                        "Subscription plan not found: " + id,
+                        com.rentmanager.shared.exception.ErrorCode.RESOURCE_NOT_FOUND
+                ));
         plan.deactivate();
         repository.save(plan);
     }
@@ -62,7 +67,8 @@ public class SubscriptionPlanCommandServiceImpl implements SubscriptionPlanComma
                 plan.getMaxStorageGb(),
                 plan.getMonthlyPrice(),
                 plan.getYearlyPrice(),
-                plan.isActive()
+                plan.isActive(),
+                plan.isSelfService()
         );
     }
 }

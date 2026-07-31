@@ -66,7 +66,13 @@ public interface TenantPersistenceMapper {
                 entity.getCommissionRate(),
                 darajaCredentials,
                 entity.getAddress(),
-                entity.getPayoutPhoneNumber()
+                entity.getPayoutPhoneNumber(),
+                entity.getBillingMode(),
+                entity.getSubscriptionPlanId(),
+                entity.getPlanStartDate(),
+                entity.getPlanEndDate(),
+                entity.getPlanGraceEndsAt(),
+                entity.isPlanAutoRenew()
         );
     }
 }

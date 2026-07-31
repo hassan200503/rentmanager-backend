@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 @Getter
 @Entity
@@ -50,6 +51,14 @@ public class SubscriptionPlan extends BaseEntity {
  private boolean active;
 
  /**
+  * Self-serve eligibility: FALSE plans (e.g. ENTERPRISE, custom pricing)
+  * cannot be subscribed to through the tenant-facing switch API - they are
+  * assigned manually after sales contact.
+  */
+ @Column(name = "self_service", nullable = false)
+ private boolean selfService;
+
+ /**
   * REQUIRED for JPA
   */
 
@@ -68,7 +77,8 @@ public class SubscriptionPlan extends BaseEntity {
          Integer maxStorageGb,
          BigDecimal monthlyPrice,
          BigDecimal yearlyPrice,
-         boolean active
+         boolean active,
+         boolean selfService
  ) {
   this.code = code;
   this.name = name;
@@ -81,6 +91,7 @@ public class SubscriptionPlan extends BaseEntity {
   this.monthlyPrice = monthlyPrice;
   this.yearlyPrice = yearlyPrice;
   this.active = active;
+  this.selfService = selfService;
  }
 
  /**
@@ -110,6 +121,7 @@ public class SubscriptionPlan extends BaseEntity {
           null,
           null,
           null,
+          true,
           true
   );
  }
@@ -128,7 +140,8 @@ public class SubscriptionPlan extends BaseEntity {
          Integer maxStorageGb,
          BigDecimal monthlyPrice,
          BigDecimal yearlyPrice,
-         boolean active
+         boolean active,
+         boolean selfService
  ) {
   return new SubscriptionPlan(
           code,
@@ -141,12 +154,57 @@ public class SubscriptionPlan extends BaseEntity {
           maxStorageGb,
           monthlyPrice,
           yearlyPrice,
-          active
+          active,
+          selfService
   );
+ }
+
+ /**
+  * REHYDRATION (RECOMMENDED FOR PERSISTENCE MAPPERS - RESTORES IDENTITY).
+  * Same convention as Tenant / SubscriptionStandingOrder / 
+  * SubscriptionPaymentRequest rehydrate(...) factories.
+  */
+ public static SubscriptionPlan rehydrate(
+         UUID id,
+         Long version,
+         String code,
+         String name,
+         String description,
+         BillingCycle billingCycle,
+         Integer maxProperties,
+         Integer maxUnits,
+         Integer maxUsers,
+         Integer maxStorageGb,
+         BigDecimal monthlyPrice,
+         BigDecimal yearlyPrice,
+         boolean active,
+         boolean selfService
+ ) {
+  SubscriptionPlan plan = new SubscriptionPlan(
+          code,
+          name,
+          description,
+          billingCycle,
+          maxProperties,
+          maxUnits,
+          maxUsers,
+          maxStorageGb,
+          monthlyPrice,
+          yearlyPrice,
+          active,
+          selfService
+  );
+  plan.setId(id);
+  plan.setVersion(version);
+  return plan;
  }
 
  public void deactivate() {
   this.active = false;
+ }
+
+ public boolean isSelfService() {
+  return selfService;
  }
 
  public boolean supportsAdditionalProperties(int currentProperties) {

@@ -3,7 +3,11 @@ package com.rentmanager.modules.tenant.domain.enums;
 public enum SubscriptionStatus {
     TRIAL,
     ACTIVE,
-    EXPIRED,
+    LAPSED,
     CANCELLED,
-    PAST_DUE
+    PAST_DUE,
+
+    /** Premium monthly: renewal payment failed; features still work until
+     * the grace window ends, then the scheduler reverts to COMMISSION. */
+    GRACE_PERIOD
 }

@@ -62,7 +62,7 @@ public enum ErrorCode {
 
 
 
-    // Lease module — add these two
+    // Lease module â€” add these two
     LEASE_AWAITING_DEPOSIT_ONLY_PENDING_ALLOWED,
 
     LEASE_ACTIVATION_ONLY_AWAITING_DEPOSIT_ALLOWED,
@@ -70,7 +70,7 @@ public enum ErrorCode {
 
 
 
-    // Deposit module — new section
+    // Deposit module â€” new section
     DEPOSIT_AMOUNT_REQUIRED,
     DEPOSIT_TENANT_PROFILE_NULL,
     DEPOSIT_LEASE_NULL,
@@ -90,7 +90,7 @@ public enum ErrorCode {
     LEASE_PROFILE_NOT_FOUND,
     LEASE_UNIT_ALREADY_LEASED,
 
-    // Rent ledger module — new section
+    // Rent ledger module â€” new section
     RENT_TRANSACTION_TENANT_NULL,
     RENT_TRANSACTION_LEDGER_ENTRY_NULL,
     RENT_TRANSACTION_LEASE_NULL,
@@ -120,4 +120,16 @@ public enum ErrorCode {
 
 
     RENT_LEDGER_ENTRY_NOT_FOUND,
+
+    // Subscription billing module (Phase 1 dual revenue model)
+    SUBSCRIPTION_ALREADY_PREMIUM,
+    SUBSCRIPTION_NOT_PREMIUM,
+    SUBSCRIPTION_PLAN_NOT_FOUND,
+    SUBSCRIPTION_PLAN_NOT_ACTIVE,
+    SUBSCRIPTION_PLAN_NOT_SELF_SERVICE,
+    SUBSCRIPTION_PLAN_PRICE_REQUIRED,
+    SUBSCRIPTION_UNIT_LIMIT_EXCEEDED,
+    SUBSCRIPTION_PAYMENT_ALREADY_PENDING,
+    SUBSCRIPTION_RATIBA_UNAVAILABLE,
+    SUBSCRIPTION_PAYMENT_REQUEST_NOT_FOUND,
 }

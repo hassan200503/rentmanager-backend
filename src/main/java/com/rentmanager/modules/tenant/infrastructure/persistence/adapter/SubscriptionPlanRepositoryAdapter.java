@@ -11,6 +11,7 @@ import com.rentmanager.modules.tenant.infrastructure.persistence.entity.Subscrip
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Component
@@ -35,17 +36,13 @@ public class SubscriptionPlanRepositoryAdapter implements SubscriptionPlanReposi
     }
 
     @Override
-    public SubscriptionPlan findById(UUID id) {
-        return jpaRepository.findById(id)
-                .map(mapper::toDomain)
-                .orElseThrow(() -> new IllegalArgumentException("Subscription plan not found"));
+    public Optional<SubscriptionPlan> findById(UUID id) {
+        return jpaRepository.findById(id).map(mapper::toDomain);
     }
 
     @Override
-    public SubscriptionPlan findByCode(String code) {
-        return jpaRepository.findByPlanCode(code)
-                .map(mapper::toDomain)
-                .orElseThrow(() -> new IllegalArgumentException("Subscription plan not found"));
+    public Optional<SubscriptionPlan> findByCode(String code) {
+        return jpaRepository.findByCode(code).map(mapper::toDomain);
     }
 
     @Override
@@ -63,7 +60,7 @@ public class SubscriptionPlanRepositoryAdapter implements SubscriptionPlanReposi
 
     @Override
     public boolean existsByCode(String code) {
-        return jpaRepository.existsByPlanCode(code);
+        return jpaRepository.existsByCode(code);
     }
 
     @Override

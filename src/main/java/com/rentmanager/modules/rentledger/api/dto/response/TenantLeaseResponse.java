@@ -19,5 +19,10 @@ public record TenantLeaseResponse(
         String landlordName,
         String landlordPhone,
         String landlordEmail,
+        String landlordCode,
+        String landlordAddress,
+        String landlordLogoUrl,
+        String landlordSince,
+        boolean landlordVerified,
         String terms
 ) {}

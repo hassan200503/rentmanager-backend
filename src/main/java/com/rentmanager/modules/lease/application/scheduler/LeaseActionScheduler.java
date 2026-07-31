@@ -79,17 +79,10 @@ public class LeaseActionScheduler {
     }
 
     /**
-     * Runs daily — activates leases whose move-in date has arrived.
-     *
-     * ============================================================
-     * TEMPORARY TEST OVERRIDE (revert before merging/deploying):
-     * Original: @Scheduled(cron = "0 0 1 * * *") // 1:00 AM daily
-     * Swapped to fixedRate so activation fires every 5 minutes
-     * instead of waiting for the daily 1:00 AM window, purely to
-     * make manual/local testing faster.
-     * ============================================================
+     * Runs daily at 1:00 AM - activates leases whose move-in date has
+     * arrived.
      */
-    @Scheduled(fixedRate = 5 * 60 * 1000, initialDelay = 5 * 60 * 1000) // TEMP-TEST: every 5 min
+    @Scheduled(cron = "0 0 1 * * *")
     public void runDaily() {
 
         List<Lease> leases =
@@ -166,16 +159,8 @@ public class LeaseActionScheduler {
      *
      * Eligible source statuses are ACTIVE and RENEWED, per this session's
      * decision to treat RENEWED as equivalent to ACTIVE going forward.
-     *
-     * ============================================================
-     * TEMPORARY TEST OVERRIDE (revert before merging/deploying):
-     * Original: @Scheduled(cron = "0 30 1 * * *") // 1:30 AM daily
-     * Swapped to fixedRate so expiry fires every 10 minutes instead
-     * of waiting for the daily 1:30 AM window, purely to make
-     * manual/local testing faster.
-     * ============================================================
      */
-    @Scheduled(fixedRate = 10 * 60 * 1000, initialDelay = 10 * 60 * 1000) // TEMP-TEST: every 10 min
+    @Scheduled(cron = "0 30 1 * * *")
     public void runDailyExpiry() {
 
         List<Lease> leases =

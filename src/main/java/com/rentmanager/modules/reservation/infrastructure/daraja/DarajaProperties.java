@@ -30,8 +30,23 @@ public class DarajaProperties {
     // receipt by ReservationController#mpesaCallback. Daraja does not sign
     // callback payloads, so this is the only thing gating that endpoint from
     // the open internet. Generate with e.g. `openssl rand -hex 32` and set
-    // via DARAJA_CALLBACK_SECRET — never commit a real value to application.yml.
+    // via DARAJA_CALLBACK_SECRET �?" never commit a real value to application.yml.
     private String callbackSecret;
+
+    // Distinct callback URL for the subscription-billing flow (initial
+    // activation + monthly renewal), same pattern and rationale as
+    // rentPaymentCallbackUrl: separate path, same shared callbackSecret.
+    private String subscriptionBillingCallbackUrl;
+
+    // M-Pesa Ratiba (standing orders) autobilling. Commercial Daraja API -
+    // Go Live requires Safaricom contract sign-off (apisupport@safaricom.co.ke),
+    // so the integration is feature-flagged off by default; sandbox works
+    // today. ratibaCallbackUrl receives the async createStandingOrderExternal
+    // result callback (registered per creation request, no secret path).
+    private boolean ratibaEnabled = false;
+    private String ratibaCallbackUrl;
+    private String ratibaCreateStandingOrderUrl =
+            "https://sandbox.safaricom.co.ke/standingorder/v1/createStandingOrderExternal";
 
     // Production base URL
     private String baseUrl = "https://api.safaricom.co.ke";

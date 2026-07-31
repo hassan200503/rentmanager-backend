@@ -10,44 +10,49 @@ import org.mapstruct.Mapper;
 public interface SubscriptionPlanPersistenceMapper {
 
     // =========================
-    // ENTITY → DOMAIN
+    // ENTITY -> DOMAIN
     // =========================
     default SubscriptionPlan toDomain(SubscriptionPlanEntity entity) {
         if (entity == null) return null;
 
-        return SubscriptionPlan.reconstruct(
-                entity.getPlanCode(),
+        return SubscriptionPlan.rehydrate(
+                entity.getId(),
+                entity.getVersion(),
+                entity.getCode(),
                 entity.getName(),
                 entity.getDescription(),
-                com.rentmanager.modules.tenant.domain.enums.BillingCycle.valueOf(entity.getBillingInterval()),
-                entity.getMaxProperties(),
+                entity.getBillingCycle(),
+                null, // maxProperties NOT persisted (unit-band tiers only)
                 entity.getMaxUnits(),
-                entity.getMaxUsers(),
-                null, // maxStorageGb NOT IN ENTITY
-                null, // monthlyPrice (not stored in entity model)
-                null, // yearlyPrice (not stored in entity model)
-                entity.isActive()
+                null, // maxUsers NOT persisted
+                null, // maxStorageGb NOT persisted
+                entity.getMonthlyPrice(),
+                entity.getYearlyPrice(),
+                entity.isActive(),
+                entity.isSelfService()
         );
     }
 
     // =========================
-    // DOMAIN → ENTITY
+    // DOMAIN -> ENTITY
     // =========================
     default SubscriptionPlanEntity toJpaEntity(SubscriptionPlan domain) {
         if (domain == null) return null;
 
         SubscriptionPlanEntity entity = new SubscriptionPlanEntity();
 
-        entity.setPlanCode(domain.getCode());
+        entity.setId(domain.getId());
+        entity.setVersion(domain.getVersion());
+        entity.setCode(domain.getCode());
         entity.setName(domain.getName());
         entity.setDescription(domain.getDescription());
-        entity.setBillingInterval(domain.getBillingCycle().name());
-        entity.setMaxProperties(domain.getMaxProperties());
+        entity.setBillingCycle(domain.getBillingCycle());
         entity.setMaxUnits(domain.getMaxUnits());
-        entity.setMaxUsers(domain.getMaxUsers());
+        entity.setMonthlyPrice(domain.getMonthlyPrice());
+        entity.setYearlyPrice(domain.getYearlyPrice());
         entity.setActive(domain.isActive());
+        entity.setSelfService(domain.isSelfService());
 
-        // NOTE: pricing not mapped because entity model uses single price field
         return entity;
     }
 }

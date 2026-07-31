@@ -31,7 +31,10 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          jwk-set-uri: https://social-monitor-54.clerk.accounts.dev/.well-known/jwks.json
+          jwk-set-uri: ${CLERK_JWKS_URL:https://social-monitor-54.clerk.accounts.dev/.well-known/jwks.json}
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
 
 
 
@@ -74,9 +77,22 @@ daraja:
   passkey: ${DARAJA_PASSKEY:YOUR_DARAJA_PASSKEY}
   callback-url: ${DARAJA_CALLBACK_URL}
   rent-payment-callback-url: ${DARAJA_RENT_PAYMENT_CALLBACK_URL}
+  subscription-billing-callback-url: ${DARAJA_SUBSCRIPTION_BILLING_CALLBACK_URL}
+  ratiba-enabled: ${DARAJA_RATIBA_ENABLED:false}
+  ratiba-callback-url: ${DARAJA_RATIBA_CALLBACK_URL}
+  ratiba-create-standing-order-url: ${DARAJA_RATIBA_CREATE_STANDING_ORDER_URL:https://sandbox.safaricom.co.ke/standingorder/v1/createStandingOrderExternal}
   base-url: ${DARAJA_BASE_URL:https://sandbox.safaricom.co.ke}
   callback-secret: ${DARAJA_CALLBACK_SECRET}
   credentials-encryption-key: ${DARAJA_CREDENTIALS_ENCRYPTION_KEY}
+
+# Subscription billing lifecycle (Phase 1 dual revenue model):
+# grace-days - premium benefits continue this long after a failed renewal
+# before the scheduler auto-reverts the landlord to COMMISSION.
+# payment-request-expiry-minutes - stale STK pushes without a Daraja
+# callback are swept as EXPIRED after this window.
+subscription-billing:
+  grace-days: ${SUBSCRIPTION_GRACE_DAYS:7}
+  payment-request-expiry-minutes: ${SUBSCRIPTION_PAYMENT_EXPIRY_MINUTES:30}
 
 
 

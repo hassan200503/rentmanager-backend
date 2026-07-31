@@ -10,9 +10,9 @@ public interface SubscriptionPlanRepository {
 
     SubscriptionPlan save(SubscriptionPlan plan);
 
-    SubscriptionPlan findById(UUID id);
+    Optional<SubscriptionPlan> findById(UUID id);
 
-    SubscriptionPlan findByCode(String code);
+    Optional<SubscriptionPlan> findByCode(String code);
 
     List<SubscriptionPlan> findAll();
 

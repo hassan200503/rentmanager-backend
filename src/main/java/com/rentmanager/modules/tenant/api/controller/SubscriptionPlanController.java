@@ -1,5 +1,6 @@
 package com.rentmanager.modules.tenant.api.controller;
 
+import com.rentmanager.contract.common.ApiResponse;
 import com.rentmanager.modules.tenant.api.routes.TenantRoutes;
 import com.rentmanager.modules.tenant.application.command.service.SubscriptionPlanCommandService;
 import com.rentmanager.modules.tenant.application.query.service.SubscriptionPlanQueryService;
@@ -27,28 +28,28 @@ public class SubscriptionPlanController {
     }
 
     @PostMapping
-    public ResponseEntity<SubscriptionPlanResponse> create(@RequestBody SubscriptionPlanRequest request) {
-        return ResponseEntity.ok(commandService.create(request));
+    public ResponseEntity<ApiResponse<SubscriptionPlanResponse>> create(@RequestBody SubscriptionPlanRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(commandService.create(request)));
     }
 
     @GetMapping
-    public ResponseEntity<List<SubscriptionPlanResponse>> getAll() {
-        return ResponseEntity.ok(queryService.getAll());
+    public ResponseEntity<ApiResponse<List<SubscriptionPlanResponse>>> getAll() {
+        return ResponseEntity.ok(ApiResponse.ok(queryService.getAll()));
     }
 
     @GetMapping(TenantRoutes.BY_ID)
-    public ResponseEntity<SubscriptionPlanResponse> getById(@PathVariable UUID id) {
-        return ResponseEntity.ok(queryService.getById(id));
+    public ResponseEntity<ApiResponse<SubscriptionPlanResponse>> getById(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.ok(queryService.getById(id)));
     }
 
     @GetMapping(TenantRoutes.BY_CODE)
-    public ResponseEntity<SubscriptionPlanResponse> getByCode(@PathVariable String code) {
-        return ResponseEntity.ok(queryService.getByCode(code));
+    public ResponseEntity<ApiResponse<SubscriptionPlanResponse>> getByCode(@PathVariable String code) {
+        return ResponseEntity.ok(ApiResponse.ok(queryService.getByCode(code)));
     }
 
     @PutMapping(TenantRoutes.DEACTIVATE)
-    public ResponseEntity<Void> deactivate(@PathVariable UUID id) {
+    public ResponseEntity<ApiResponse<Void>> deactivate(@PathVariable UUID id) {
         commandService.deactivate(id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(ApiResponse.ok("Plan deactivated", null));
     }
 }

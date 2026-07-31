@@ -1,68 +1,65 @@
 package com.rentmanager.modules.tenant.infrastructure.persistence.entity;
 
-import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
+import com.rentmanager.domain.base.BaseEntity;
+import com.rentmanager.modules.tenant.domain.enums.BillingCycle;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Index;
+import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
-import java.util.UUID;
 
+/**
+ * Platform-global subscription tier catalog. Deliberately matches the
+ * domain {@code SubscriptionPlan} one-for-one (previously this entity
+ * carried a tenant_id + plan_code + single-price schema that contradicted
+ * the global-catalog domain model and dropped monthly/yearly prices on
+ * every round-trip; the V50 migration created the corrected table from
+ * scratch since no migration had ever created this table).
+ */
 @Getter
 @Setter
 @Entity
 @Table(
         name = "subscription_plans",
         indexes = {
-                @Index(name = "idx_plan_tenant_id", columnList = "tenant_id"),
-                @Index(name = "idx_plan_code", columnList = "plan_code")
+                @Index(name = "idx_subscription_plans_active", columnList = "active"),
+                @Index(name = "idx_subscription_plans_self_service", columnList = "self_service")
         }
 )
 @NoArgsConstructor
-@AllArgsConstructor
-public class SubscriptionPlanEntity {
+public class SubscriptionPlanEntity extends BaseEntity {
 
-    @Id
-    @Column(nullable = false, updatable = false)
-    private UUID id;
+    @Column(name = "code", nullable = false, unique = true, length = 50)
+    private String code;
 
-    @Column(name = "tenant_id", nullable = false)
-    private UUID tenantId;
-
-    @Column(name = "plan_code", nullable = false, length = 50)
-    private String planCode;
-
-    @Column(name = "name", nullable = false, length = 150)
+    @Column(name = "name", nullable = false, length = 100)
     private String name;
 
-    @Column(name = "description", length = 255)
+    @Column(name = "description", length = 500)
     private String description;
 
-    @Column(name = "price", nullable = false)
-    private BigDecimal price;
-
-    @Column(name = "currency", nullable = false, length = 10)
-    private String currency;
-
-    @Column(name = "billing_interval", nullable = false, length = 30)
-    private String billingInterval;
-
-    @Column(name = "max_properties")
-    private Integer maxProperties;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "billing_cycle", nullable = false, length = 50)
+    private BillingCycle billingCycle;
 
     @Column(name = "max_units")
     private Integer maxUnits;
 
-    @Column(name = "max_users")
-    private Integer maxUsers;
+    @Column(name = "monthly_price", precision = 19, scale = 2)
+    private BigDecimal monthlyPrice;
 
-    @Column(name = "is_active", nullable = false)
+    @Column(name = "yearly_price", precision = 19, scale = 2)
+    private BigDecimal yearlyPrice;
+
+    @Column(name = "active", nullable = false)
     private boolean active;
 
-    @Column(name = "is_default", nullable = false)
-    private boolean defaultPlan;
-
-    @Column(name = "created_by")
-    private UUID createdBy;
+    @Column(name = "self_service", nullable = false)
+    private boolean selfService;
 }

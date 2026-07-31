@@ -9,11 +9,16 @@ import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -25,6 +30,31 @@ public class DarajaService {
 
     private static final DateTimeFormatter TIMESTAMP_FORMAT =
             DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+
+    /**
+     * Daraja OAuth tokens live ~59 minutes. We cache per credential-set
+     * (consumer key) and refresh 4 minutes before expiry, halving the
+     * HTTP round-trips per API call (every API call previously cost 2
+     * requests: token fetch + call). Safaricom spike-arrest throttles at
+     * 30 messages/minute with a 3-message burst, so every request counts.
+     */
+    private static final Duration TOKEN_SKEW = Duration.ofMinutes(4);
+    private final Map<String, CachedToken> tokenCache = new ConcurrentHashMap<>();
+
+    /**
+     * Global token-bucket mirroring Safaricom's spike-arrest profile
+     * (maxBurstMessageCount=3, 30 messages/60s = one token per 2s).
+     * Shared across ALL Daraja flows (STK push, status query, Ratiba) —
+     * Safaricom throttles per API key, not per flow, so the limiter must
+     * be global too. Tuning constants:
+     * - burst 3: allows one burst (e.g. retry reconcile: 1 push + 1 query)
+     * - refill 1 token/2s: 30 messages/minute steady state
+     */
+    private static final int RATE_LIMIT_MAX_BURST = 3;
+    private static final Duration RATE_LIMIT_REFILL = Duration.ofSeconds(2);
+    private static final long RATE_LIMIT_WAIT_MILLIS = 10_000;
+    private final DarajaRateLimiter rateLimiter =
+            new DarajaRateLimiter(RATE_LIMIT_MAX_BURST, RATE_LIMIT_REFILL);
 
     // -------------------------------------------------------
     // PUBLIC API
@@ -124,6 +154,7 @@ public class DarajaService {
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
+        acquireRateSlotOrWait();
         ResponseEntity<Map> response;
         try {
             response = restTemplate.exchange(
@@ -134,7 +165,7 @@ public class DarajaService {
             );
         } catch (Exception ex) {
             log.error("STK Push request to Daraja failed", ex);
-            throw new DarajaException("STK Push request failed", ex);
+            throw new DarajaException("STK Push request failed" + extractDarajaErrorMessage(ex), ex);
         }
 
         Map<?, ?> responseBody = response.getBody();
@@ -148,11 +179,240 @@ public class DarajaService {
         return checkoutRequestId;
     }
 
+    /**
+     * Surfaces Safaricom's own errorMessage (e.g. "Invalid CallBackURL")
+     * in the DarajaException so the frontend can show the actionable
+     * reason instead of a generic failure. Falls back to an empty string
+     * when the response isn't a Daraja HTTP error or has no message.
+     */
+    private static String extractDarajaErrorMessage(Exception ex) {
+        if (ex instanceof org.springframework.web.client.HttpClientErrorException httpEx) {
+            String body = httpEx.getResponseBodyAsString();
+            if (body != null) {
+                java.util.regex.Matcher matcher = java.util.regex.Pattern
+                        .compile("\"errorMessage\"\\s*:\\s*\"([^\"]*)\"")
+                        .matcher(body);
+                if (matcher.find()) {
+                    String message = matcher.group(1);
+                    if (message != null && !message.isBlank()) {
+                        return ": " + message;
+                    }
+                }
+            }
+        }
+        return "";
+    }
+
+    // -------------------------------------------------------
+    // M-PESA RATIBA (STANDING ORDERS)
+    // -------------------------------------------------------
+
+    /**
+     * Initiates a M-Pesa Ratiba standing-order creation for the customer
+     * (Daraja {@code createStandingOrderExternal}). Safaricom sends the
+     * customer an NI push (PIN prompt) which is the consent + MSISDN
+     * ownership check; the final result (order ACTIVE or FAILED) arrives
+     * asynchronously on {@code callbackUrl} - {@code ratibaResponseRefId}
+     * is what ties that callback back to the local order record.
+     *
+     * <p>Uses the platform's own Daraja credentials (like rent payments),
+     * not a landlord's credentials - these are platform-level billing
+     * collections into our Paybill.</p>
+     *
+     * @param phone           customer MSISDN in 2547XXXXXXXX format
+     * @param amount          whole KES amount (Ratiba does not support decimals)
+     * @param accountReference max 12 chars; appears on the customer's M-Pesa
+     *                         statement and is the C2B BillRefNumber later
+     * @param startDate       first execution date (yyyyMMdd)
+     * @param endDate         last execution date (yyyyMMdd)
+     * @return the Ratiba responseRefID used to match the creation callback
+     */
+    public String createStandingOrder(
+            String phone,
+            BigDecimal amount,
+            String accountReference,
+            LocalDate startDate,
+            LocalDate endDate,
+            String callbackUrl
+    ) {
+        if (callbackUrl == null || callbackUrl.isBlank()) {
+            throw new DarajaException("Cannot create standing order: callbackUrl is required");
+        }
+        if (amount == null || amount.stripTrailingZeros().scale() > 0) {
+            throw new DarajaException("Cannot create standing order: amount must be a whole number");
+        }
+        if (accountReference == null || accountReference.isBlank() || accountReference.length() > 12) {
+            throw new DarajaException("Cannot create standing order: account reference must be 1-12 chars");
+        }
+
+        DarajaCredentials credentials = DarajaCredentials.of(
+                properties.getConsumerKey(),
+                properties.getConsumerSecret(),
+                properties.getBusinessShortCode(),
+                properties.getPasskey()
+        );
+        String token = fetchAccessToken(credentials);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("StandingOrderName", "RentManager Premium");
+        body.put("StartDate", startDate.format(DateTimeFormatter.ofPattern("yyyyMMdd")));
+        body.put("EndDate", endDate.format(DateTimeFormatter.ofPattern("yyyyMMdd")));
+        body.put("BusinessShortCode", properties.getBusinessShortCode());
+        body.put("TransactionType", "Standing Order Customer Pay Bill");
+        body.put("ReceiverPartyIdentifierType", "4");
+        body.put("Amount", amount.toBigInteger());
+        body.put("PartyA", normalizePhone(phone));
+        body.put("CallBackURL", callbackUrl);
+        body.put("AccountReference", accountReference);
+        body.put("TransactionDesc", "Premium plan");
+        body.put("Frequency", "4");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+
+        acquireRateSlotOrWait();
+        ResponseEntity<Map> response;
+        try {
+            response = restTemplate.exchange(
+                    properties.getRatibaCreateStandingOrderUrl(),
+                    HttpMethod.POST,
+                    request,
+                    Map.class
+            );
+        } catch (Exception ex) {
+            log.error("Ratiba createStandingOrderExternal request to Daraja failed", ex);
+            throw new DarajaException("Ratiba standing order creation request failed"
+                    + extractDarajaErrorMessage(ex), ex);
+        }
+
+        Map<?, ?> responseBody = response.getBody();
+        if (responseBody == null || !responseBody.containsKey("ResponseHeader")) {
+            log.error("Ratiba response missing ResponseHeader. Response={}", responseBody);
+            throw new DarajaException("Ratiba standing order creation failed - no ResponseHeader in response");
+        }
+
+        Map<?, ?> responseHeader = (Map<?, ?>) responseBody.get("ResponseHeader");
+        String responseRefId = (String) responseHeader.get("responseRefID");
+        if (responseRefId == null || responseRefId.isBlank()) {
+            log.error("Ratiba response missing responseRefID. Response={}", responseBody);
+            throw new DarajaException("Ratiba standing order creation failed - no responseRefID in response");
+        }
+
+        log.info("Ratiba standing order creation initiated. accountReference={} amount={} responseRefID={}",
+                accountReference, amount, responseRefId);
+        return responseRefId;
+    }
+
+    // -------------------------------------------------------
+    // STK STATUS QUERY (POLLING FALLBACK)
+    // -------------------------------------------------------
+
+    /**
+     * Outcome of an {@code /mpesa/stkpushquery/v1/query} call. ResultCode
+     * semantics: "0" = paid (MpesaReceiptNumber present), "1032" =
+     * cancelled by user, "1031"/"1" = insufficient funds, "1037" = still
+     * processing (not terminal). Anything other than "0" / "1037" is a
+     * terminal failure.
+     */
+    public record StkQueryResult(
+            String resultCode,
+            String resultDesc,
+            String mpesaReceiptNumber
+    ) {
+        public boolean isSuccess() {
+            return "0".equals(resultCode);
+        }
+
+        public boolean isPending() {
+            return resultCode == null || "1037".equals(resultCode);
+        }
+
+        public boolean isTerminal() {
+            return !isPending();
+        }
+    }
+
+    /**
+     * Queries the status of a previously initiated STK push. Used as a
+     * polling fallback so flows (e.g. subscription billing) resolve to a
+     * terminal state even when Safaricom never delivers the callback.
+     *
+     * @param checkoutRequestId from {@link #initiateSTKPush}
+     * @param credentials       the credentials the push was initiated with
+     */
+    public StkQueryResult querySTKStatus(String checkoutRequestId, DarajaCredentials credentials) {
+        if (credentials == null || !credentials.isConfigured()) {
+            throw new DarajaException("Cannot query STK status: Daraja credentials are not configured");
+        }
+        if (checkoutRequestId == null || checkoutRequestId.isBlank()) {
+            throw new DarajaException("Cannot query STK status: CheckoutRequestID is required");
+        }
+
+        String token = fetchAccessToken(credentials);
+        String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMAT);
+        String password = generatePassword(timestamp, credentials);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("BusinessShortCode", credentials.getBusinessShortCode());
+        body.put("Password", password);
+        body.put("Timestamp", timestamp);
+        body.put("CheckoutRequestID", checkoutRequestId);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+
+        acquireRateSlotOrSkip();
+        ResponseEntity<Map> response;
+        try {
+            response = restTemplate.exchange(
+                    properties.getBaseUrl() + "/mpesa/stkpushquery/v1/query",
+                    HttpMethod.POST,
+                    request,
+                    Map.class
+            );
+        } catch (Exception ex) {
+            log.error("STK status query to Daraja failed", ex);
+            throw new DarajaException("STK status query failed" + extractDarajaErrorMessage(ex), ex);
+        }
+
+        Map<?, ?> responseBody = response.getBody();
+        if (responseBody == null) {
+            log.error("STK status query returned an empty response. CheckoutRequestID={}", checkoutRequestId);
+            throw new DarajaException("STK status query failed — empty response");
+        }
+
+        String resultCode = responseBody.get("ResultCode") != null
+                ? String.valueOf(responseBody.get("ResultCode"))
+                : null;
+        String resultDesc = responseBody.get("ResultDesc") != null
+                ? String.valueOf(responseBody.get("ResultDesc"))
+                : null;
+        String receipt = responseBody.get("MpesaReceiptNumber") != null
+                ? String.valueOf(responseBody.get("MpesaReceiptNumber"))
+                : null;
+
+        log.info("STK status queried. CheckoutRequestID={} ResultCode={} ResultDesc={}",
+                checkoutRequestId, resultCode, resultDesc);
+        return new StkQueryResult(resultCode, resultDesc, receipt);
+    }
+
     // -------------------------------------------------------
     // PRIVATE HELPERS
     // -------------------------------------------------------
 
     private String fetchAccessToken(DarajaCredentials credentials) {
+        String cacheKey = credentials.getConsumerKey();
+        CachedToken cached = tokenCache.get(cacheKey);
+        if (cached != null && Instant.now().isBefore(cached.expiresAt())) {
+            return cached.token();
+        }
+
         String rawCredentials = credentials.getConsumerKey() + ":" + credentials.getConsumerSecret();
         String encoded = Base64.getEncoder()
                 .encodeToString(rawCredentials.getBytes(StandardCharsets.UTF_8));
@@ -180,7 +440,115 @@ public class DarajaService {
             throw new DarajaException("Failed to fetch Daraja access token — no access_token in response");
         }
 
-        return (String) body.get("access_token");
+        String token = (String) body.get("access_token");
+        long expiresInSeconds = body.get("expires_in") instanceof Number number
+                ? number.longValue()
+                : 3599;
+        tokenCache.put(cacheKey, new CachedToken(
+                token,
+                Instant.now().plus(Duration.ofSeconds(expiresInSeconds)).minus(TOKEN_SKEW)
+        ));
+        return token;
+    }
+
+    /**
+     * Blocking slot for user-facing flows (STK push, Ratiba): waits up to
+     * {@link #RATE_LIMIT_WAIT_MILLIS} for the bucket to refill before
+     * giving up, so a momentarily saturated bucket does not fail a
+     * customer's payment outright.
+     */
+    private void acquireRateSlotOrWait() {
+        if (!rateLimiter.acquire(RATE_LIMIT_WAIT_MILLIS)) {
+            log.warn("Daraja rate limit reached — giving up after {}ms of waiting",
+                    RATE_LIMIT_WAIT_MILLIS);
+            throw new DarajaException(
+                    "Daraja rate limit reached — please try again in a moment");
+        }
+    }
+
+    /**
+     * Non-blocking slot for polling (STK status query): when the bucket is
+     * exhausted the query is skipped rather than queued, because a poll
+     * that just returns PENDING again is harmless — but a poll queue
+     * holding the bucket would starve real payments. The caller treats
+     * the resulting DarajaException as "still pending, try later".
+     */
+    private void acquireRateSlotOrSkip() {
+        if (!rateLimiter.tryAcquire()) {
+            log.info("Daraja rate limit reached — skipping STK status query");
+            throw new DarajaException(
+                    "Daraja rate limit reached — skipping status query");
+        }
+    }
+
+    private record CachedToken(String token, Instant expiresAt) {
+    }
+
+    /**
+     * Simple synchronized token bucket matching Safaricom's spike-arrest
+     * profile (3-message burst, 1 message per 2s steady state). Singleton
+     * per DarajaService instance (which is a singleton bean), so every
+     * flow competes for the same bucket — exactly how Safaricom throttles.
+     */
+    private static final class DarajaRateLimiter {
+
+        private final int maxBurst;
+        private final long refillNanos;
+        private final Object lock = new Object();
+        private double tokens;
+        private long lastRefillNanos = System.nanoTime();
+
+        private DarajaRateLimiter(int maxBurst, Duration refillPerToken) {
+            this.maxBurst = maxBurst;
+            this.refillNanos = refillPerToken.toNanos();
+            this.tokens = maxBurst;
+        }
+
+        private boolean tryAcquire() {
+            synchronized (lock) {
+                refill();
+                if (tokens >= 1.0) {
+                    tokens -= 1.0;
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        private boolean acquire(long timeoutMillis) {
+            long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+            synchronized (lock) {
+                while (true) {
+                    refill();
+                    if (tokens >= 1.0) {
+                        tokens -= 1.0;
+                        return true;
+                    }
+                    long now = System.nanoTime();
+                    if (now >= deadline) {
+                        return false;
+                    }
+                    long remainingNanos = deadline - now;
+                    long waitMillis = Math.min(200,
+                            TimeUnit.NANOSECONDS.toMillis(remainingNanos) + 1);
+                    try {
+                        TimeUnit.MILLISECONDS.timedWait(lock, waitMillis);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return false;
+                    }
+                }
+            }
+        }
+
+        private void refill() {
+            long now = System.nanoTime();
+            long elapsed = now - lastRefillNanos;
+            if (elapsed > 0) {
+                tokens = Math.min(maxBurst, tokens + (double) elapsed / refillNanos);
+                lastRefillNanos = now;
+            }
+        }
     }
 
     private String generatePassword(String timestamp, DarajaCredentials credentials) {

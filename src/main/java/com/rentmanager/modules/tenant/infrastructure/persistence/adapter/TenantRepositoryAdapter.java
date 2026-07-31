@@ -6,10 +6,13 @@ import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import com.rentmanager.modules.tenant.infrastructure.persistence.mapper.TenantPersistenceMapper;
 
 import com.rentmanager.modules.tenant.infrastructure.persistence.repository.TenantJpaRepository;
+import com.rentmanager.modules.tenant.domain.enums.BillingMode;
+import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;
 import com.rentmanager.modules.tenant.domain.model.Tenant;
 import com.rentmanager.modules.tenant.infrastructure.persistence.entity.TenantEntity;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -111,5 +114,41 @@ public class TenantRepositoryAdapter implements TenantRepository {
     public Optional<Tenant> findByClerkOrgId(String clerkOrgId) {
         return jpaRepository.findByClerkOrgId(clerkOrgId)
                 .map(mapper::toDomain);
+    }
+
+    // ------------------------------------------------
+    // PREMIUM BILLING SWEEPS (PHASE 1 DUAL REVENUE MODEL)
+    // ------------------------------------------------
+    @Override
+    public List<Tenant> findPremiumRenewalsDue(LocalDate today) {
+        return jpaRepository
+                .findByBillingModeAndSubscriptionStatusAndPlanAutoRenewTrueAndPlanEndDateLessThanEqual(
+                        BillingMode.PREMIUM_MONTHLY, SubscriptionStatus.ACTIVE, today
+                )
+                .stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Tenant> findPremiumNonRenewalsDue(LocalDate today) {
+        return jpaRepository
+                .findByBillingModeAndSubscriptionStatusAndPlanAutoRenewFalseAndPlanEndDateLessThanEqual(
+                        BillingMode.PREMIUM_MONTHLY, SubscriptionStatus.ACTIVE, today
+                )
+                .stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Tenant> findPremiumGraceOverdue(LocalDate today) {
+        return jpaRepository
+                .findByBillingModeAndSubscriptionStatusAndPlanGraceEndsAtLessThanEqual(
+                        BillingMode.PREMIUM_MONTHLY, SubscriptionStatus.GRACE_PERIOD, today
+                )
+                .stream()
+                .map(mapper::toDomain)
+                .toList();
     }
 }

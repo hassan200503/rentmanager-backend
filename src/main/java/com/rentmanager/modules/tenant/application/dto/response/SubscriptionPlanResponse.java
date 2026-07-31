@@ -19,6 +19,7 @@ public class SubscriptionPlanResponse {
     private BigDecimal monthlyPrice;
     private BigDecimal yearlyPrice;
     private boolean active;
+    private boolean selfService;
 
     public SubscriptionPlanResponse(
             UUID id,
@@ -32,7 +33,8 @@ public class SubscriptionPlanResponse {
             Integer maxStorageGb,
             BigDecimal monthlyPrice,
             BigDecimal yearlyPrice,
-            boolean active
+            boolean active,
+            boolean selfService
     ) {
         this.id = id;
         this.code = code;
@@ -46,6 +48,7 @@ public class SubscriptionPlanResponse {
         this.monthlyPrice = monthlyPrice;
         this.yearlyPrice = yearlyPrice;
         this.active = active;
+        this.selfService = selfService;
     }
 
     public UUID getId() { return id; }
@@ -60,4 +63,5 @@ public class SubscriptionPlanResponse {
     public BigDecimal getMonthlyPrice() { return monthlyPrice; }
     public BigDecimal getYearlyPrice() { return yearlyPrice; }
     public boolean isActive() { return active; }
+    public boolean isSelfService() { return selfService; }
 }

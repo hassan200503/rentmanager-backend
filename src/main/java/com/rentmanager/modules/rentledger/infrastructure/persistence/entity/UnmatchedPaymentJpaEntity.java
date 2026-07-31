@@ -1,6 +1,7 @@
 package com.rentmanager.modules.rentledger.infrastructure.persistence.entity;
 
 import com.rentmanager.domain.base.BaseTenantEntity;
+import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -19,6 +20,10 @@ import java.util.UUID;
 @AllArgsConstructor
 @Entity
 @Table(name = "unmatched_payments")
+@AttributeOverride(
+        name = "tenantId",
+        column = @Column(name = "tenant_id", nullable = true)
+)
 public class UnmatchedPaymentJpaEntity extends BaseTenantEntity {
 
     @Column(name = "transaction_id", nullable = false, length = 100)

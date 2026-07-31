@@ -12,6 +12,8 @@ import com.rentmanager.modules.rentledger.domain.model.RentTransaction;
 import com.rentmanager.modules.rentledger.domain.repository.DisbursementRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentPaymentRequestRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentTransactionRepository;
+import com.rentmanager.modules.tenant.domain.enums.BillingMode;
+import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +36,7 @@ public class RentPaymentCallbackTransactionService {
     private final CommissionPolicyService commissionPolicyService;
     private final DisbursementRepository disbursementRepository;
     private final EntityManager entityManager;
+    private final TenantRepository tenantRepository;
 
     @Transactional
     public SuccessfulPaymentResult processSuccessfulCallback(
@@ -90,23 +93,45 @@ public class RentPaymentCallbackTransactionService {
                         com.rentmanager.shared.exception.ErrorCode.RESOURCE_NOT_FOUND
                 ));
 
-        BigDecimal ratePercent = commissionPolicyService.getActiveRate(request.getTenantId());
+        boolean premiumBilling = isPremiumMonthly(request.getTenantId());
+        BigDecimal ratePercent = null;
         BigDecimal commissionAmount = null;
         BigDecimal netAmount = null;
 
-        if (ratePercent != null) {
+        if (premiumBilling) {
+            // Phase 1: PREMIUM_MONTHLY - zero commission line, 100% of the
+            // payment disbursed to the landlord (netAmount = gross), in
+            // exchange for the flat monthly fee. Applies during the grace
+            // window too (features keep working until the revert).
+            netAmount = request.getAmount();
+        } else if ((ratePercent = commissionPolicyService.getActiveRate(request.getTenantId())) != null) {
             commissionAmount = CommissionPolicyService.computeCommission(request.getAmount(), ratePercent);
             netAmount = CommissionPolicyService.computeNetAmount(request.getAmount(), commissionAmount);
             transaction.applyCommission(ratePercent, commissionAmount, netAmount);
             rentTransactionRepository.save(transaction);
         }
 
-        log.info("Rent payment applied. requestId={} receipt={} rate={}% commission={} net={}",
-                request.getId(), mpesaReceiptNumber, ratePercent, commissionAmount, netAmount);
+        log.info("Rent payment applied. requestId={} receipt={} premium={} rate={}% commission={} net={}",
+                request.getId(), mpesaReceiptNumber, premiumBilling, ratePercent, commissionAmount, netAmount);
 
         return new SuccessfulPaymentResult(
                 request, transaction, ratePercent, commissionAmount, netAmount
         );
+    }
+
+    /**
+     * Phase 1 dual revenue model: PREMIUM_MONTHLY landlords (including
+     * during the grace window after a failed renewal) get zero commission
+     * and 100% net disbursement. Fail-closed: any tenant we cannot resolve
+     * is treated as COMMISSION (existing behavior). For COMMISSION
+     * landlords the rate is whatever the active commission_policies row
+     * holds (landlord override -&gt; platform default -&gt; null = no
+     * commission) - never hardcoded here.
+     */
+    private boolean isPremiumMonthly(UUID tenantId) {
+        return tenantRepository.findById(tenantId)
+                .map(tenant -> tenant.getBillingMode() == BillingMode.PREMIUM_MONTHLY)
+                .orElse(false);
     }
 
     @Transactional

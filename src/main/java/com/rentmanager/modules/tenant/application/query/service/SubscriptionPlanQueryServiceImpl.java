@@ -24,12 +24,20 @@ public class SubscriptionPlanQueryServiceImpl implements SubscriptionPlanQuerySe
 
     @Override
     public SubscriptionPlanResponse getById(UUID id) {
-        return map(repository.findById(id));
+        return map(repository.findById(id).orElseThrow(() ->
+                new com.rentmanager.shared.exception.ResourceNotFoundException(
+                        "Subscription plan not found: " + id,
+                        com.rentmanager.shared.exception.ErrorCode.RESOURCE_NOT_FOUND
+                )));
     }
 
     @Override
     public SubscriptionPlanResponse getByCode(String code) {
-        return map(repository.findByCode(code));
+        return map(repository.findByCode(code).orElseThrow(() ->
+                new com.rentmanager.shared.exception.ResourceNotFoundException(
+                        "Subscription plan not found: " + code,
+                        com.rentmanager.shared.exception.ErrorCode.RESOURCE_NOT_FOUND
+                )));
     }
 
     private SubscriptionPlanResponse map(com.rentmanager.modules.tenant.domain.model.SubscriptionPlan plan) {
@@ -45,7 +53,8 @@ public class SubscriptionPlanQueryServiceImpl implements SubscriptionPlanQuerySe
                 plan.getMaxStorageGb(),
                 plan.getMonthlyPrice(),
                 plan.getYearlyPrice(),
-                plan.isActive()
+                plan.isActive(),
+                plan.isSelfService()
         );
     }
 }

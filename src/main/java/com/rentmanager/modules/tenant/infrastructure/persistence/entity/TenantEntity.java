@@ -1,6 +1,7 @@
 package com.rentmanager.modules.tenant.infrastructure.persistence.entity;
 
 import com.rentmanager.domain.base.BaseEntity;
+import com.rentmanager.modules.tenant.domain.enums.BillingMode;
 import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;
 import com.rentmanager.modules.tenant.domain.enums.TenantStatus;
 import com.rentmanager.modules.tenant.domain.enums.TenantType;
@@ -12,6 +13,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Getter
@@ -121,5 +123,34 @@ public class TenantEntity extends BaseEntity {
     @Setter
     @Column(name = "commission_rate", nullable = false, precision = 5, scale = 4)
     private BigDecimal commissionRate;
+
+    // ----------------------------------------------------------------
+    // BILLING MODE (PHASE 1 DUAL REVENUE MODEL)
+    // ----------------------------------------------------------------
+
+    @Setter
+    @Enumerated(EnumType.STRING)
+    @Column(name = "billing_mode", nullable = false, length = 50)
+    private BillingMode billingMode;
+
+    @Setter
+    @Column(name = "subscription_plan_id")
+    private UUID subscriptionPlanId;
+
+    @Setter
+    @Column(name = "plan_start_date")
+    private LocalDate planStartDate;
+
+    @Setter
+    @Column(name = "plan_end_date")
+    private LocalDate planEndDate;
+
+    @Setter
+    @Column(name = "plan_grace_ends_at")
+    private LocalDate planGraceEndsAt;
+
+    @Setter
+    @Column(name = "plan_auto_renew", nullable = false)
+    private boolean planAutoRenew;
 
 }
