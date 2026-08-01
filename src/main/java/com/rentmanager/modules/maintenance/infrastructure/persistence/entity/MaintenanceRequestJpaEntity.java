@@ -57,6 +57,9 @@ public class MaintenanceRequestJpaEntity extends BaseTenantEntity {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Column(name = "first_landlord_response_at")
+    private LocalDateTime firstLandlordResponseAt;
+
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 

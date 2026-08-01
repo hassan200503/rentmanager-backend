@@ -5,6 +5,11 @@ import com.rentmanager.modules.lease.domain.enums.LeaseStatus;
 import com.rentmanager.modules.lease.domain.enums.LeaseType;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
+import com.rentmanager.modules.maintenance.application.service.MaintenanceRequestCommandService;
+import com.rentmanager.modules.maintenance.domain.enums.MaintenanceCategory;
+import com.rentmanager.modules.maintenance.domain.enums.MaintenancePriority;
+import com.rentmanager.modules.maintenance.domain.model.MaintenanceRequest;
+import com.rentmanager.modules.maintenance.domain.repository.MaintenanceRequestRepository;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.modules.rentledger.application.autopay.AutoPayService;
 import com.rentmanager.modules.rentledger.domain.exception.RentLedgerStateException;
@@ -14,9 +19,13 @@ import com.rentmanager.modules.rentledger.domain.repository.RentLedgerEntryRepos
 import com.rentmanager.modules.rentledger.domain.repository.RentPaymentRequestRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentTransactionRepository;
 import com.rentmanager.modules.rentledger.infrastructure.daraja.RentPaymentInitiationService;
+import com.rentmanager.modules.review.application.ReviewCommandService;
+import com.rentmanager.modules.review.application.ReviewQueryService;
+import com.rentmanager.modules.review.application.dto.response.LandlordReviewResponse;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
 import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
+import com.rentmanager.modules.unit.domain.model.Unit;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
 import com.rentmanager.modules.user.domain.model.User;
 import com.rentmanager.modules.user.domain.model.UserRole;
@@ -70,6 +79,10 @@ class TenantPortalServiceTest {
     private RentPaymentInitiationService rentPaymentInitiationService;
     private RentPaymentRequestRepository rentPaymentRequestRepository;
     private AutoPayService autoPayService;
+    private ReviewCommandService reviewCommandService;
+    private ReviewQueryService reviewQueryService;
+    private MaintenanceRequestCommandService maintenanceRequestCommandService;
+    private MaintenanceRequestRepository maintenanceRequestRepository;
 
     private TenantPortalService service;
 
@@ -95,6 +108,10 @@ class TenantPortalServiceTest {
         rentPaymentInitiationService = mock(RentPaymentInitiationService.class);
         rentPaymentRequestRepository = mock(RentPaymentRequestRepository.class);
         autoPayService = mock(AutoPayService.class);
+        reviewCommandService = mock(ReviewCommandService.class);
+        reviewQueryService = mock(ReviewQueryService.class);
+        maintenanceRequestCommandService = mock(MaintenanceRequestCommandService.class);
+        maintenanceRequestRepository = mock(MaintenanceRequestRepository.class);
 
         service = new TenantPortalService(
                 userRepository,
@@ -107,7 +124,11 @@ class TenantPortalServiceTest {
                 rentTransactionRepository,
                 rentPaymentInitiationService,
                 rentPaymentRequestRepository,
-                autoPayService
+                autoPayService,
+                reviewCommandService,
+                reviewQueryService,
+                maintenanceRequestCommandService,
+                maintenanceRequestRepository
         );
 
         renterUser = buildUser(USER_ID, CLERK_USER_ID, LANDLORD_TENANT_ID);
@@ -317,6 +338,164 @@ class TenantPortalServiceTest {
 
             verifyNoInteractions(rentPaymentInitiationService);
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Review submission (Phase 4b)
+    // ─────────────────────────────────────────────────────────────────────
+
+    @Nested
+    class ReviewSubmission {
+
+        @Test
+        void submitReview_resolvesLandlordTenantAndActiveLease_callsCommandService() {
+            LandlordReviewResponse response = new LandlordReviewResponse(
+                    UUID.randomUUID(), "Test Renter", 5, "Great landlord", java.time.Instant.now());
+            when(reviewQueryService.getRenterReview(LANDLORD_TENANT_ID, tenantProfile.getId()))
+                    .thenReturn(response);
+
+            LandlordReviewResponse result = service.submitReview(USER_ID, 5, "Great landlord");
+
+            verify(reviewCommandService).submit(
+                    eq(LANDLORD_TENANT_ID), eq(tenantProfile.getId()),
+                    eq(activeLease.getId()), eq(5), eq("Great landlord"));
+            assertSame(response, result);
+        }
+
+        @Test
+        void submitReview_renterWithOnlyExpiredLease_canStillReview() {
+            Lease expiredLease = buildActiveLease(LANDLORD_TENANT_ID, tenantProfile.getId());
+            expiredLease.expire();
+            when(leaseRepository.findAllByTenant(LANDLORD_TENANT_ID))
+                    .thenReturn(List.of(expiredLease));
+            when(reviewQueryService.getRenterReview(LANDLORD_TENANT_ID, tenantProfile.getId()))
+                    .thenReturn(null);
+
+            service.submitReview(USER_ID, 4, "Fair");
+
+            verify(reviewCommandService).submit(
+                    eq(LANDLORD_TENANT_ID), eq(tenantProfile.getId()),
+                    eq(expiredLease.getId()), eq(4), eq("Fair"));
+        }
+
+        @Test
+        void submitReview_renterWithNoVerifiableLease_throws() {
+            when(leaseRepository.findAllByTenant(LANDLORD_TENANT_ID))
+                    .thenReturn(List.of());
+
+            assertThrows(RentLedgerStateException.class,
+                    () -> service.submitReview(USER_ID, 5, "nope"));
+            verifyNoInteractions(reviewCommandService);
+        }
+
+        @Test
+        void getMyReview_returnsNull_whenRenterHasNotReviewed() {
+            when(reviewQueryService.getRenterReview(LANDLORD_TENANT_ID, tenantProfile.getId()))
+                    .thenReturn(null);
+
+            assertNull(service.getMyReview(USER_ID));
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Maintenance submission (Phase 5) — context resolved server-side
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * The renter portal NEVER sends unit/property/tenant-profile ids:
+     * they are resolved from the authenticated renter's active lease.
+     * Verify the command service receives those resolved ids.
+     */
+    @Test
+    void submitMaintenanceRequest_resolvesContextFromActiveLease_delegatesWithResolvedIds() {
+        UUID propertyId = UUID.randomUUID();
+        Unit unit = mock(Unit.class);
+        when(unit.getPropertyId()).thenReturn(propertyId);
+        when(unitRepository.findByIdAndTenantId(activeLease.getUnitId(), LANDLORD_TENANT_ID))
+                .thenReturn(Optional.of(unit));
+
+        MaintenanceRequest created = MaintenanceRequest.submit(
+                LANDLORD_TENANT_ID,
+                activeLease.getUnitId(),
+                propertyId,
+                tenantProfile.getId(),
+                activeLease.getId(),
+                "Leaking taps",
+                "Please repair the taps",
+                MaintenanceCategory.PLUMBING,
+                MaintenancePriority.HIGH,
+                "renter@test.com",
+                "corr-test");
+        when(maintenanceRequestCommandService.submit(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(created);
+
+        var response = service.submitMaintenanceRequest(
+                USER_ID, "Leaking taps", "Please repair the taps",
+                MaintenanceCategory.PLUMBING, MaintenancePriority.HIGH);
+
+        verify(maintenanceRequestCommandService).submit(
+                eq(LANDLORD_TENANT_ID),
+                eq(activeLease.getUnitId()),
+                eq(propertyId),
+                eq(tenantProfile.getId()),
+                eq(activeLease.getId()),
+                eq("Leaking taps"),
+                eq("Please repair the taps"),
+                eq(MaintenanceCategory.PLUMBING),
+                eq(MaintenancePriority.HIGH),
+                eq("renter@test.com"),
+                any());
+        assertEquals(activeLease.getUnitId(), response.unitId());
+        assertEquals(propertyId, response.propertyId());
+        assertEquals(tenantProfile.getId(), response.tenantProfileId());
+    }
+
+    @Test
+    void submitMaintenanceRequest_renterWithNoActiveLease_throws() {
+        when(leaseRepository.findAllByTenant(LANDLORD_TENANT_ID))
+                .thenReturn(List.of());
+
+        assertThrows(RentLedgerStateException.class,
+                () -> service.submitMaintenanceRequest(
+                        USER_ID, "Leaking taps", null,
+                        MaintenanceCategory.PLUMBING, MaintenancePriority.HIGH));
+        verifyNoInteractions(maintenanceRequestCommandService);
+    }
+
+    @Test
+    void submitMaintenanceRequest_unitNotFound_throws() {
+        when(unitRepository.findByIdAndTenantId(activeLease.getUnitId(), LANDLORD_TENANT_ID))
+                .thenReturn(Optional.empty());
+
+        assertThrows(RentLedgerStateException.class,
+                () -> service.submitMaintenanceRequest(
+                        USER_ID, "Leaking taps", null,
+                        MaintenanceCategory.PLUMBING, MaintenancePriority.HIGH));
+        verifyNoInteractions(maintenanceRequestCommandService);
+    }
+
+    /**
+     * The renter's request list is scoped to their own profile — never
+     * the whole tenant (other renters' requests are invisible).
+     */
+    @Test
+    void getMaintenanceRequests_returnsOnlyRentersOwnRequests() {
+        MaintenanceRequest mine = MaintenanceRequest.submit(
+                LANDLORD_TENANT_ID, activeLease.getUnitId(), UUID.randomUUID(),
+                tenantProfile.getId(), activeLease.getId(), "My issue", null,
+                MaintenanceCategory.GENERAL, MaintenancePriority.MEDIUM,
+                "renter@test.com", "corr-1");
+        when(maintenanceRequestRepository.findByTenantIdAndTenantProfileId(
+                LANDLORD_TENANT_ID, tenantProfile.getId()))
+                .thenReturn(List.of(mine));
+
+        var responses = service.getMaintenanceRequests(USER_ID);
+
+        verify(maintenanceRequestRepository).findByTenantIdAndTenantProfileId(
+                eq(LANDLORD_TENANT_ID), eq(tenantProfile.getId()));
+        assertEquals(1, responses.size());
+        assertEquals("My issue", responses.get(0).title());
     }
 
     // ─────────────────────────────────────────────────────────────────────

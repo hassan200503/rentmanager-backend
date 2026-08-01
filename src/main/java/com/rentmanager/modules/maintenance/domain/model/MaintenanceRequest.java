@@ -34,6 +34,15 @@ public class MaintenanceRequest extends AggregateRoot {
     private MaintenanceRequestStatus status;
     private LocalDate scheduledDate;
     private LocalDateTime completedAt;
+
+    /**
+     * Phase 4a/5: timestamp of the FIRST landlord response (any status
+     * mutation by the landlord side: updateStatus/schedule/assign). Set
+     * once, never overwritten - it is exactly what the response-time SLA
+     * badge measures (firstLandlordResponseAt - createdAt).
+     */
+    private LocalDateTime firstLandlordResponseAt;
+
     private String notes;
     private String createdBy;
     private String assignedTo;
@@ -77,7 +86,18 @@ public class MaintenanceRequest extends AggregateRoot {
 
     public void changeStatus(MaintenanceRequestStatus newStatus, String correlationId) {
         MaintenanceRequestStatus oldStatus = this.status;
+        if (oldStatus == newStatus) {
+            return;
+        }
         this.status = newStatus;
+
+        // Phase 4a: capture the first landlord response timestamp exactly
+        // once. Status mutations on this aggregate only come from
+        // landlord-gated endpoints (status/schedule/assign), so the first
+        // transition out of SUBMITTED is the landlord's first response.
+        if (this.firstLandlordResponseAt == null) {
+            this.firstLandlordResponseAt = LocalDateTime.now();
+        }
 
         if (newStatus == MaintenanceRequestStatus.COMPLETED) {
             this.completedAt = LocalDateTime.now();
@@ -115,6 +135,7 @@ public class MaintenanceRequest extends AggregateRoot {
             MaintenanceRequestStatus status,
             LocalDate scheduledDate,
             LocalDateTime completedAt,
+            LocalDateTime firstLandlordResponseAt,
             String notes,
             String createdBy,
             String assignedTo,
@@ -134,6 +155,7 @@ public class MaintenanceRequest extends AggregateRoot {
                 .status(status)
                 .scheduledDate(scheduledDate)
                 .completedAt(completedAt)
+                .firstLandlordResponseAt(firstLandlordResponseAt)
                 .notes(notes)
                 .createdBy(createdBy)
                 .assignedTo(assignedTo)

@@ -1,9 +1,11 @@
 package com.rentmanager.modules.rentledger.api.controller;
 
 import com.rentmanager.contract.common.ApiResponse;
+import com.rentmanager.modules.maintenance.api.dto.MaintenanceRequestResponse;
 import com.rentmanager.modules.rentledger.api.autopay.dto.AutoPaySettingsResponse;
 import com.rentmanager.modules.rentledger.api.dto.request.InitiatePortalPaymentRequest;
 import com.rentmanager.modules.rentledger.api.dto.request.InitiateRentPaymentRequest;
+import com.rentmanager.modules.rentledger.api.dto.request.SubmitMaintenanceRequest;
 import com.rentmanager.modules.rentledger.api.dto.request.ToggleAutoPayRequest;
 import com.rentmanager.modules.rentledger.api.dto.request.UpdateAutoPayPhoneRequest;
 import com.rentmanager.modules.rentledger.api.dto.response.RentPaymentRequestResponse;
@@ -13,6 +15,8 @@ import com.rentmanager.modules.rentledger.api.dto.response.TenantPaymentHistoryR
 import com.rentmanager.modules.rentledger.api.dto.response.TenantPaymentReceiptResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantPaymentSummaryResponse;
 import com.rentmanager.modules.rentledger.application.service.TenantPortalService;
+import com.rentmanager.modules.review.api.dto.SubmitReviewRequest;
+import com.rentmanager.modules.review.application.dto.response.LandlordReviewResponse;
 import com.rentmanager.shared.security.principal.AuthenticatedUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +24,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -132,5 +137,49 @@ public class TenantPortalController {
         AutoPaySettingsResponse response = tenantPortalService.updateAutoPayPhone(
                 user.getUserId(), request.mpesaPhone());
         return ResponseEntity.ok(ApiResponse.ok("Auto-pay phone updated", response));
+    }
+
+    // -------------------------------------------------------
+    // MAINTENANCE (Phase 5) — renter-scoped
+    // -------------------------------------------------------
+
+    @PostMapping("/maintenance")
+    public ResponseEntity<ApiResponse<MaintenanceRequestResponse>> submitMaintenance(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @Valid @RequestBody SubmitMaintenanceRequest request
+    ) {
+        MaintenanceRequestResponse response = tenantPortalService.submitMaintenanceRequest(
+                user.getUserId(), request.title(), request.description(), request.category(), request.priority());
+        return ResponseEntity.ok(ApiResponse.ok("Maintenance request submitted", response));
+    }
+
+    @GetMapping("/maintenance")
+    public ResponseEntity<ApiResponse<List<MaintenanceRequestResponse>>> getMaintenanceRequests(
+            @AuthenticationPrincipal AuthenticatedUser user
+    ) {
+        List<MaintenanceRequestResponse> responses = tenantPortalService.getMaintenanceRequests(user.getUserId());
+        return ResponseEntity.ok(ApiResponse.ok("Maintenance requests retrieved", responses));
+    }
+
+    // -------------------------------------------------------
+    // REVIEWS (Phase 4b) — verified renter -> landlord
+    // -------------------------------------------------------
+
+    @GetMapping("/reviews/me")
+    public ResponseEntity<ApiResponse<LandlordReviewResponse>> getMyReview(
+            @AuthenticationPrincipal AuthenticatedUser user
+    ) {
+        LandlordReviewResponse response = tenantPortalService.getMyReview(user.getUserId());
+        return ResponseEntity.ok(ApiResponse.ok(
+                response != null ? "Review retrieved" : "No review yet", response));
+    }
+
+    @PostMapping("/reviews")
+    public ResponseEntity<ApiResponse<LandlordReviewResponse>> submitReview(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @Valid @RequestBody SubmitReviewRequest request
+    ) {
+        LandlordReviewResponse response = tenantPortalService.submitReview(
+                user.getUserId(), request.rating(), request.comment());        return ResponseEntity.ok(ApiResponse.ok("Review submitted", response));
     }
 }

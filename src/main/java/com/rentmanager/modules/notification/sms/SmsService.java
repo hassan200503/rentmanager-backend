@@ -3,7 +3,6 @@ package com.rentmanager.modules.notification.sms;
 public interface SmsService {
 
     void sendCredentials(String phone, String password);
-
     void sendReservationConfirmed(String phone);
 
     void sendSignInLink(String phone, String linkUrl);
@@ -27,5 +26,13 @@ public interface SmsService {
     void sendAutoPayConfirmation(String phone, String amount, String mpesaPhone);
 
     void sendAutoPayFailed(String phone, String reason);
+
+    /**
+     * Raw send used by the notification outbox (Phase 5). Returns true
+     * only when the provider confirmed delivery; false when it did not.
+     * Implementations must NOT swallow provider failures here - the
+     * outbox relies on the result to schedule retries.
+     */
+    boolean sendRaw(String phone, String message);
 
 }

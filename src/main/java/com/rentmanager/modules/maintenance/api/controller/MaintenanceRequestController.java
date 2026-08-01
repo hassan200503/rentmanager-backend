@@ -6,8 +6,11 @@ import com.rentmanager.modules.maintenance.api.dto.CreateMaintenanceRequest;
 import com.rentmanager.modules.maintenance.api.dto.MaintenanceRequestResponse;
 import com.rentmanager.modules.maintenance.api.dto.ScheduleMaintenanceRequest;
 import com.rentmanager.modules.maintenance.api.dto.UpdateMaintenanceStatusRequest;
+import com.rentmanager.modules.maintenance.application.dto.MaintenanceSlaSummaryResponse;
 import com.rentmanager.modules.maintenance.application.service.MaintenanceRequestCommandService;
 import com.rentmanager.modules.maintenance.application.service.MaintenanceRequestQueryService;
+import com.rentmanager.modules.maintenance.domain.enums.MaintenancePriority;
+import com.rentmanager.modules.maintenance.domain.enums.MaintenanceRequestStatus;
 import com.rentmanager.modules.maintenance.domain.model.MaintenanceRequest;
 import com.rentmanager.shared.security.principal.AuthenticatedUser;
 import jakarta.validation.Valid;
@@ -51,11 +54,24 @@ public class MaintenanceRequestController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<MaintenanceRequestResponse>>> list(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @RequestParam(required = false) MaintenanceRequestStatus status,
+            @RequestParam(required = false) MaintenancePriority priority,
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) String direction
+    ) {
+        List<MaintenanceRequestResponse> responses = queryService.getRequests(
+                requireTenantId(user), status, priority, sort, direction);
+        return ResponseEntity.ok(ApiResponse.ok("Maintenance requests retrieved", responses));
+    }
+
+    @GetMapping("/sla")
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
+    public ResponseEntity<ApiResponse<MaintenanceSlaSummaryResponse>> sla(
             @AuthenticationPrincipal AuthenticatedUser user
     ) {
-        List<MaintenanceRequestResponse> responses = queryService.findAllByTenantId(requireTenantId(user))
-                .stream().map(MaintenanceRequestResponse::from).toList();
-        return ResponseEntity.ok(ApiResponse.ok("Maintenance requests retrieved", responses));
+        MaintenanceSlaSummaryResponse summary = queryService.getSlaSummary(requireTenantId(user));
+        return ResponseEntity.ok(ApiResponse.ok("Maintenance SLA summary retrieved", summary));
     }
 
     @GetMapping("/{id}")

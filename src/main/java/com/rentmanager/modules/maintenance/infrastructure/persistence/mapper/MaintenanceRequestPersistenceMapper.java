@@ -25,6 +25,7 @@ public class MaintenanceRequestPersistenceMapper {
         jpa.setStatus(request.getStatus());
         jpa.setScheduledDate(request.getScheduledDate());
         jpa.setCompletedAt(request.getCompletedAt());
+        jpa.setFirstLandlordResponseAt(request.getFirstLandlordResponseAt());
         jpa.setNotes(request.getNotes());
         jpa.setCreatedBy(request.getCreatedBy());
         jpa.setAssignedTo(request.getAssignedTo());
@@ -48,6 +49,7 @@ public class MaintenanceRequestPersistenceMapper {
                 jpa.getStatus(),
                 jpa.getScheduledDate(),
                 jpa.getCompletedAt(),
+                jpa.getFirstLandlordResponseAt(),
                 jpa.getNotes(),
                 jpa.getCreatedBy(),
                 jpa.getAssignedTo(),

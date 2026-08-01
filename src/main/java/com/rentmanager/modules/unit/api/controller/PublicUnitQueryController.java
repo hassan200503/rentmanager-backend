@@ -1,6 +1,8 @@
 package com.rentmanager.modules.unit.api.controller;
 
 import com.rentmanager.contract.common.ApiResponse;
+import com.rentmanager.modules.review.application.ReviewPublicQueryService;
+import com.rentmanager.modules.review.application.dto.response.PublicLandlordReviewsResponse;
 import com.rentmanager.modules.unit.application.dto.response.PublicUnitResponse;
 import com.rentmanager.modules.unit.application.dto.response.UnitReservationSummaryResponse;
 import com.rentmanager.modules.unit.application.query.service.PublicUnitQueryService;
@@ -20,6 +22,7 @@ public class PublicUnitQueryController {
 
     private final PublicUnitQueryService publicUnitQueryService;
     private final UnitReservationSummaryQueryService unitReservationSummaryQueryService;
+    private final ReviewPublicQueryService reviewPublicQueryService;
 
     @GetMapping
     public ResponseEntity<ApiResponse<Page<PublicUnitResponse>>> getVacantUnits(
@@ -74,6 +77,22 @@ public class PublicUnitQueryController {
         return ResponseEntity.ok(ApiResponse.ok(
                 "Unit summary retrieved successfully",
                 unitReservationSummaryQueryService.getSummary(unitId)
+        ));
+    }
+
+    /**
+     * Public landlord reviews for this unit's landlord (Phase 4b).
+     * Resolution is server-side from the already-public unit id, and only
+     * for a publicly visible (active, vacant) unit - private listings never
+     * leak review data. Renter names are redacted to first names.
+     */
+    @GetMapping("/{unitId}/reviews")
+    public ResponseEntity<ApiResponse<PublicLandlordReviewsResponse>> getUnitReviews(
+            @PathVariable UUID unitId
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                "Reviews retrieved successfully",
+                reviewPublicQueryService.getForUnit(unitId)
         ));
     }
 }

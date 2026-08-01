@@ -96,7 +96,12 @@ public class AfricasTalkingSmsService implements SmsService {
         send(phone, buildAutoPayFailedMessage(reason));
     }
 
-    private void send(String phone, String message) {
+    @Override
+    public boolean sendRaw(String phone, String message) {
+        return send(phone, message);
+    }
+
+    private boolean send(String phone, String message) {
         String normalized = normalizePhoneNumber(phone);
 
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
@@ -128,10 +133,11 @@ public class AfricasTalkingSmsService implements SmsService {
                 log.warn("SMS provider did not confirm delivery. phone={}, response={}",
                         PhoneMasker.mask(normalized), response);
             }
+            return success;
 
         } catch (Exception ex) {
-            // Intentionally swallowed: SMS delivery must never fail reservation fulfillment.
             log.error("SMS send failed. phone={}, error={}", PhoneMasker.mask(normalized), ex.getMessage());
+            return false;
         }
     }
 

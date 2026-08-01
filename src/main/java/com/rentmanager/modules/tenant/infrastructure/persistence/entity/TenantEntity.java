@@ -65,6 +65,14 @@ public class TenantEntity extends BaseEntity {
     private String payoutPhoneNumber;
 
     @Setter
+    @Column(name = "emergency_contact_phone", length = 20)
+    private String emergencyContactPhone;
+
+    @Setter
+    @Column(name = "emergency_contact_24h", nullable = false)
+    private boolean emergencyContact24h;
+
+    @Setter
     @Column(name = "address", length = 255)
     private String address;
 

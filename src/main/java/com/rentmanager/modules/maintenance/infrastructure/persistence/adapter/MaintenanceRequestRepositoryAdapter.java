@@ -1,5 +1,7 @@
 package com.rentmanager.modules.maintenance.infrastructure.persistence.adapter;
 
+import com.rentmanager.modules.maintenance.domain.enums.MaintenancePriority;
+import com.rentmanager.modules.maintenance.domain.enums.MaintenanceRequestStatus;
 import com.rentmanager.modules.maintenance.domain.model.MaintenanceRequest;
 import com.rentmanager.modules.maintenance.domain.repository.MaintenanceRequestRepository;
 import com.rentmanager.modules.maintenance.infrastructure.persistence.entity.MaintenanceRequestJpaEntity;
@@ -43,6 +45,23 @@ public class MaintenanceRequestRepositoryAdapter implements MaintenanceRequestRe
     @Override
     public List<MaintenanceRequest> findByTenantIdAndTenantProfileId(UUID tenantId, UUID tenantProfileId) {
         return jpaRepository.findByTenantIdAndTenantProfileId(tenantId, tenantProfileId).stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    public List<MaintenanceRequest> findByTenantIdAndStatus(UUID tenantId, MaintenanceRequestStatus status) {
+        return jpaRepository.findByTenantIdAndStatus(tenantId, status).stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    public List<MaintenanceRequest> findByTenantIdAndPriority(UUID tenantId, MaintenancePriority priority) {
+        return jpaRepository.findByTenantIdAndPriority(tenantId, priority).stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    public List<MaintenanceRequest> findByTenantIdAndPriorityAndStatus(
+            UUID tenantId, MaintenancePriority priority, MaintenanceRequestStatus status) {
+        return jpaRepository.findByTenantIdAndPriorityAndStatus(tenantId, priority, status)
+                .stream().map(mapper::toDomain).toList();
     }
 
     @Override

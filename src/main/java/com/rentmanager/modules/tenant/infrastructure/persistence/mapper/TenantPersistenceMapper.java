@@ -67,6 +67,8 @@ public interface TenantPersistenceMapper {
                 darajaCredentials,
                 entity.getAddress(),
                 entity.getPayoutPhoneNumber(),
+                entity.getEmergencyContactPhone(),
+                entity.isEmergencyContact24h(),
                 entity.getBillingMode(),
                 entity.getSubscriptionPlanId(),
                 entity.getPlanStartDate(),

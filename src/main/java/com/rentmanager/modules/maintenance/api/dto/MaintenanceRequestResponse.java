@@ -23,14 +23,31 @@ public record MaintenanceRequestResponse(
         MaintenanceRequestStatus status,
         LocalDate scheduledDate,
         LocalDateTime completedAt,
+        LocalDateTime firstLandlordResponseAt,
         String notes,
         String createdBy,
         String assignedTo,
+        String propertyName,
+        String unitNumber,
+        String renterName,
         Long version,
         Instant createdAt,
         Instant updatedAt
 ) {
+    /**
+     * Raw mapping (enrichment fields null). Used by the query service,
+     * which enriches before returning to the controller.
+     */
     public static MaintenanceRequestResponse from(MaintenanceRequest request) {
+        return from(request, null, null, null);
+    }
+
+    public static MaintenanceRequestResponse from(
+            MaintenanceRequest request,
+            String propertyName,
+            String unitNumber,
+            String renterName
+    ) {
         return new MaintenanceRequestResponse(
                 request.getId(),
                 request.getUnitId(),
@@ -44,9 +61,13 @@ public record MaintenanceRequestResponse(
                 request.getStatus(),
                 request.getScheduledDate(),
                 request.getCompletedAt(),
+                request.getFirstLandlordResponseAt(),
                 request.getNotes(),
                 request.getCreatedBy(),
                 request.getAssignedTo(),
+                propertyName,
+                unitNumber,
+                renterName,
                 request.getVersion(),
                 request.getCreatedAt(),
                 request.getUpdatedAt()

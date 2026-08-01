@@ -47,6 +47,20 @@ public class Tenant extends BaseEntity {
     @Column(name = "payout_phone_number", length = 20)
     private String payoutPhoneNumber;
 
+    // ----------------------------------------------------------------
+    // EMERGENCY CONTACT (PHASE 2B - FREE TIER)
+    // ----------------------------------------------------------------
+    // Optional landlord-set contact rendered on the renter portal only
+    // when actually configured - never a hardcoded or placeholder
+    // fallback. Emergency hotline is a free-tier trust feature, NOT a
+    // premium gate.
+
+    @Column(name = "emergency_contact_phone", length = 20)
+    private String emergencyContactPhone;
+
+    @Column(name = "emergency_contact_24h", nullable = false)
+    private boolean emergencyContact24h;
+
     @Column(name = "address", length = 255)
     private String address;
 
@@ -367,9 +381,11 @@ public class Tenant extends BaseEntity {
          String clerkOrgId,
          BigDecimal commissionRate,
          DarajaCredentials darajaCredentials,
-          String address,
-          String payoutPhoneNumber,
-          BillingMode billingMode,
+           String address,
+           String payoutPhoneNumber,
+           String emergencyContactPhone,
+           boolean emergencyContact24h,
+           BillingMode billingMode,
           UUID subscriptionPlanId,
           LocalDate planStartDate,
           LocalDate planEndDate,
@@ -404,6 +420,8 @@ public class Tenant extends BaseEntity {
     tenant.darajaCredentials = darajaCredentials != null ? darajaCredentials : DarajaCredentials.unconfigured();
     tenant.address = address;
     tenant.payoutPhoneNumber = payoutPhoneNumber;
+    tenant.emergencyContactPhone = emergencyContactPhone;
+    tenant.emergencyContact24h = emergencyContact24h;
     tenant.billingMode = billingMode != null ? billingMode : BillingMode.COMMISSION;
     tenant.subscriptionPlanId = subscriptionPlanId;
     tenant.planStartDate = planStartDate;
@@ -651,6 +669,18 @@ public class Tenant extends BaseEntity {
 
   public void updatePayoutPhoneNumber(String payoutPhoneNumber) {
    this.payoutPhoneNumber = payoutPhoneNumber;
+  }
+
+  /**
+   * Sets or clears the landlord's emergency contact phone and 24h flag.
+   * A blank/cleared phone disables the feature; the renter portal renders
+   * the emergency contact card only when a phone is actually configured.
+   */
+  public void updateEmergencyContact(String emergencyContactPhone, boolean emergencyContact24h) {
+   this.emergencyContactPhone = emergencyContactPhone != null && emergencyContactPhone.isBlank()
+           ? null
+           : emergencyContactPhone;
+   this.emergencyContact24h = this.emergencyContactPhone != null && emergencyContact24h;
   }
 
   public String getPayoutPhoneNumber() { return payoutPhoneNumber; }

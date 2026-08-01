@@ -3,6 +3,12 @@ package com.rentmanager.modules.rentledger.application.service;
 import com.rentmanager.modules.lease.domain.enums.LeaseStatus;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
+import com.rentmanager.modules.maintenance.api.dto.MaintenanceRequestResponse;
+import com.rentmanager.modules.maintenance.application.service.MaintenanceRequestCommandService;
+import com.rentmanager.modules.maintenance.domain.enums.MaintenanceCategory;
+import com.rentmanager.modules.maintenance.domain.enums.MaintenancePriority;
+import com.rentmanager.modules.maintenance.domain.model.MaintenanceRequest;
+import com.rentmanager.modules.maintenance.domain.repository.MaintenanceRequestRepository;
 import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.modules.rentledger.api.autopay.dto.AutoPaySettingsResponse;
@@ -27,6 +33,10 @@ import com.rentmanager.modules.rentledger.domain.repository.RentPaymentRequestRe
 import com.rentmanager.modules.rentledger.domain.repository.RentTransactionRepository;
 import com.rentmanager.modules.rentledger.domain.exception.RentLedgerStateException;
 import com.rentmanager.modules.rentledger.infrastructure.daraja.RentPaymentInitiationService;
+import com.rentmanager.modules.review.application.ReviewCommandService;
+import com.rentmanager.modules.review.application.ReviewQueryService;
+import com.rentmanager.modules.review.application.dto.response.LandlordReviewResponse;
+import com.rentmanager.modules.tenant.domain.enums.BillingMode;
 import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;
 import com.rentmanager.modules.tenant.domain.model.Tenant;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
@@ -35,6 +45,7 @@ import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepo
 import com.rentmanager.modules.unit.domain.model.Unit;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
 import com.rentmanager.modules.user.domain.model.User;
+import com.rentmanager.modules.user.domain.model.UserRole;
 import com.rentmanager.modules.user.domain.repository.UserRepository;
 import com.rentmanager.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -47,6 +58,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -55,6 +67,15 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class TenantPortalService {
+
+    /**
+     * Lease statuses that prove a tenancy was actually active at some
+     * point - the review eligibility bar (kept in sync with the command
+     * service's verification rule).
+     */
+    private static final EnumSet<LeaseStatus> VERIFIED_LEASE_STATUSES =
+            EnumSet.of(LeaseStatus.ACTIVE, LeaseStatus.RENEWED,
+                    LeaseStatus.EXPIRED, LeaseStatus.TERMINATED, LeaseStatus.SUSPENDED);
 
     private final UserRepository userRepository;
     private final TenantProfileRepository tenantProfileRepository;
@@ -67,6 +88,10 @@ public class TenantPortalService {
     private final RentPaymentInitiationService rentPaymentInitiationService;
     private final RentPaymentRequestRepository rentPaymentRequestRepository;
     private final AutoPayService autoPayService;
+    private final ReviewCommandService reviewCommandService;
+    private final ReviewQueryService reviewQueryService;
+    private final MaintenanceRequestCommandService maintenanceRequestCommandService;
+    private final MaintenanceRequestRepository maintenanceRequestRepository;
 
     @Transactional(readOnly = true)
     public TenantDashboardResponse getDashboard(UUID userId) {
@@ -159,6 +184,46 @@ public class TenantPortalService {
                     || landlord.getSubscriptionStatus() == SubscriptionStatus.TRIAL
                     || landlord.getSubscriptionStatus() == SubscriptionStatus.GRACE_PERIOD);
 
+        // Phase 2a (free tier): the org-level manager (UserRole.MANAGER) is
+        // the renter's real-world point of contact. Exposed only when one
+        // actually exists - never a placeholder.
+        User manager = userRepository.findByTenantIdAndRole(landlordTenantId, UserRole.MANAGER)
+                .stream()
+                .filter(u -> u.isActive())
+                .findFirst()
+                .orElse(null);
+
+        String managerName = null;
+        String managerPhone = null;
+        String managerEmail = null;
+        if (manager != null) {
+            managerName = (manager.getFirstName() + " " + manager.getLastName()).trim();
+            managerPhone = null; // User has no phone field - contact via email
+            managerEmail = manager.getEmail();
+        }
+
+        // Phase 2b (free tier): landlord-set emergency contact, rendered on
+        // the portal only when actually configured.
+        String emergencyContactPhone = landlord.getEmergencyContactPhone();
+        boolean emergencyContact24h = landlord.isEmergencyContact24h();
+
+        // Phase 3a/3b (PREMIUM gate): branded theme colors and the premium
+        // badge are only delivered to a premium, paying landlord. Colors
+        // stay null otherwise and the portal falls back to defaults. The
+        // existing landlordLogoUrl behavior is deliberately unchanged.
+        boolean premiumActive = landlord.getBillingMode() == BillingMode.PREMIUM_MONTHLY
+                && landlord.getSubscriptionStatus() != null
+                && (landlord.getSubscriptionStatus() == SubscriptionStatus.ACTIVE
+                    || landlord.getSubscriptionStatus() == SubscriptionStatus.TRIAL
+                    || landlord.getSubscriptionStatus() == SubscriptionStatus.GRACE_PERIOD);
+
+        String primaryColor = null;
+        String secondaryColor = null;
+        if (premiumActive && landlord.getBrandingSettings() != null) {
+            primaryColor = landlord.getBrandingSettings().getPrimaryColor();
+            secondaryColor = landlord.getBrandingSettings().getSecondaryColor();
+        }
+
         return new TenantLeaseResponse(
                 activeLease.getId(),
                 activeLease.getLeaseNumber(),
@@ -179,8 +244,65 @@ public class TenantPortalService {
                 landlordLogoUrl,
                 landlord.getCreatedAt() != null ? landlord.getCreatedAt().toString() : null,
                 landlordVerified,
-                ""
+                "",
+                managerName,
+                managerPhone,
+                managerEmail,
+                emergencyContactPhone,
+                emergencyContact24h,
+                primaryColor,
+                secondaryColor,
+                landlord.getBillingMode() != null ? landlord.getBillingMode().name() : null,
+                landlord.getSubscriptionStatus() != null ? landlord.getSubscriptionStatus().name() : null
         );
+    }
+
+    /**
+     * Phase 4b: submits a landlord review on behalf of the authenticated
+     * renter. The landlord tenant id is the renter profile's tenant
+     * (never client-supplied), and the lease is resolved from the renter's
+     * own tenancy history - the command service then re-verifies both
+     * against the landlord's leases before persisting.
+     */
+    @Transactional
+    public LandlordReviewResponse submitReview(UUID userId, int rating, String comment) {
+        TenantProfile profile = resolveTenantProfile(userId);
+        UUID landlordTenantId = profile.getTenantId();
+        UUID leaseId = findVerifiableLeaseId(landlordTenantId, profile.getId());
+
+        reviewCommandService.submit(landlordTenantId, profile.getId(), leaseId, rating, comment);
+
+        return reviewQueryService.getRenterReview(landlordTenantId, profile.getId());
+    }
+
+    @Transactional(readOnly = true)
+    public LandlordReviewResponse getMyReview(UUID userId) {
+        TenantProfile profile = resolveTenantProfile(userId);
+        return reviewQueryService.getRenterReview(profile.getTenantId(), profile.getId());
+    }
+
+    /**
+     * Any lease that proves a real tenancy (active, renewed, expired,
+     * terminated or suspended) qualifies a renter to review - preferring
+     * the currently active lease when one exists.
+     */
+    private UUID findVerifiableLeaseId(UUID landlordTenantId, UUID tenantProfileId) {
+        List<Lease> leases = leaseRepository.findAllByTenant(landlordTenantId).stream()
+                .filter(l -> l.getTenantProfileId() != null
+                        && l.getTenantProfileId().equals(tenantProfileId))
+                .toList();
+
+        return leases.stream()
+                .filter(l -> l.getStatus() == LeaseStatus.ACTIVE)
+                .findFirst()
+                .map(Lease::getId)
+                .or(() -> leases.stream()
+                        .filter(l -> VERIFIED_LEASE_STATUSES.contains(l.getStatus()))
+                        .findFirst()
+                        .map(Lease::getId))
+                .orElseThrow(() -> new RentLedgerStateException(
+                        "Only verified renters with an active or past lease can review a landlord",
+                        ErrorCode.RESOURCE_NOT_FOUND));
     }
 
     @Transactional(readOnly = true)
@@ -322,6 +444,57 @@ public class TenantPortalService {
         String clerkUserId = user.getClerkUserId();
         return tenantProfileRepository.findByClerkUserId(clerkUserId)
                 .orElseThrow(() -> new RentLedgerStateException("Tenant profile not found", ErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    // -------------------------------------------------------
+    // MAINTENANCE (Phase 5) — renter-scoped
+    //
+    // Unit/property/tenant-profile ids are NEVER taken from the
+    // client: they are resolved from the authenticated renter's
+    // active lease, so a renter can only ever raise requests for
+    // their own unit (and the notification listener can fan out
+    // to the right landlord).
+    // -------------------------------------------------------
+
+    @Transactional
+    public MaintenanceRequestResponse submitMaintenanceRequest(
+            UUID userId,
+            String title,
+            String description,
+            MaintenanceCategory category,
+            MaintenancePriority priority
+    ) {
+        TenantProfile profile = resolveTenantProfile(userId);
+        UUID landlordTenantId = profile.getTenantId();
+        Lease activeLease = findActiveLease(landlordTenantId, profile.getId());
+        Unit unit = unitRepository.findByIdAndTenantId(activeLease.getUnitId(), landlordTenantId)
+                .orElseThrow(() -> new RentLedgerStateException("Unit not found", ErrorCode.RESOURCE_NOT_FOUND));
+
+        MaintenanceRequest request = maintenanceRequestCommandService.submit(
+                landlordTenantId,
+                activeLease.getUnitId(),
+                unit.getPropertyId(),
+                profile.getId(),
+                activeLease.getId(),
+                title,
+                description,
+                category,
+                priority,
+                profile.getEmail() != null ? profile.getEmail() : profile.getFullName(),
+                UUID.randomUUID().toString()
+        );
+
+        return MaintenanceRequestResponse.from(request);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MaintenanceRequestResponse> getMaintenanceRequests(UUID userId) {
+        TenantProfile profile = resolveTenantProfile(userId);
+        return maintenanceRequestRepository
+                .findByTenantIdAndTenantProfileId(profile.getTenantId(), profile.getId())
+                .stream()
+                .map(MaintenanceRequestResponse::from)
+                .toList();
     }
 
     private Lease findActiveLease(UUID landlordTenantId, UUID tenantProfileId) {

@@ -50,6 +50,10 @@ public class TenantSettingsRepositoryAdapter {
                 settings.getCurrency(),
                 settings.getLocale()
         );
+        tenant.updateEmergencyContact(
+                settings.getEmergencyContactPhone(),
+                settings.isEmergencyContact24h()
+        );
 
         jpaRepository.save(mapper.toJpaEntity(tenant));
     }
@@ -69,6 +73,8 @@ public class TenantSettingsRepositoryAdapter {
                 .timezone(tenant.getTimezone())
                 .currency(tenant.getCurrency())
                 .locale(tenant.getLocale())
+                .emergencyContactPhone(tenant.getEmergencyContactPhone())
+                .emergencyContact24h(tenant.isEmergencyContact24h())
                 .build();
     }
 }

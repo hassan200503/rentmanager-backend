@@ -24,5 +24,14 @@ public record TenantLeaseResponse(
         String landlordLogoUrl,
         String landlordSince,
         boolean landlordVerified,
-        String terms
+        String terms,
+        String managerName,
+        String managerPhone,
+        String managerEmail,
+        String emergencyContactPhone,
+        boolean emergencyContact24h,
+        String landlordPrimaryColor,
+        String landlordSecondaryColor,
+        String billingMode,
+        String subscriptionStatus
 ) {}

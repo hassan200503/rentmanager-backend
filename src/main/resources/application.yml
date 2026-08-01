@@ -109,3 +109,14 @@ africastalking:
   username: ${AT_USERNAME:sandbox}
   sender-id: ${AT_SENDER_ID:}
   base-url: ${AT_BASE_URL:https://api.sandbox.africastalking.com/version1/messaging}
+
+# Phase 5 notification outbox. SMS goes through africastalking above;
+# email requires SMTP settings AND app.notification.email.enabled=true
+# (JavaMailEmailService is not created otherwise - LoggingEmailService
+# takes over). WhatsApp has no provider yet: LoggingWhatsAppService logs
+# and skips until one is selected and configured.
+app:
+  notification:
+    email:
+      enabled: ${NOTIFICATION_EMAIL_ENABLED:false}
+    retry-fixed-rate-ms: ${NOTIFICATION_RETRY_FIXED_RATE_MS:300000}

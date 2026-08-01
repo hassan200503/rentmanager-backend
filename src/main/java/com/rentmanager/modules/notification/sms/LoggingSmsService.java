@@ -91,4 +91,11 @@ public class LoggingSmsService implements SmsService {
         log.warn("[SMS STUB] Would send auto-pay failure to {}: {} (SmsService not wired to a real provider)",
                 PhoneMasker.mask(phone), reason);
     }
+
+    @Override
+    public boolean sendRaw(String phone, String message) {
+        log.warn("[SMS STUB] Would send to {}: {} (SmsService not wired to a real provider)",
+                PhoneMasker.mask(phone), message);
+        return true;
+    }
 }

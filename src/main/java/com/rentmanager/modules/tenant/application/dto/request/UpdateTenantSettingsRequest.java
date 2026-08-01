@@ -20,4 +20,16 @@ public class UpdateTenantSettingsRequest {
 
     private Boolean allowCustomBranding;
     private Boolean allowApiAccess;
+
+    // Branding (Phase 3a) - applied to the renter portal theme, server-gated
+    // on PREMIUM_MONTHLY. Editable by the landlord at any time; the gate
+    // lives on the read path (TenantPortalService.getLease), not here.
+    private String primaryColor;
+    private String secondaryColor;
+    private String logoUrl;
+    private String faviconUrl;
+
+    // Emergency contact (Phase 2b, free tier)
+    private String emergencyContactPhone;
+    private Boolean emergencyContact24h;
 }

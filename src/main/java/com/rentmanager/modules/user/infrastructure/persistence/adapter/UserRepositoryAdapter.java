@@ -1,6 +1,7 @@
 package com.rentmanager.modules.user.infrastructure.persistence.adapter;
 
 import com.rentmanager.modules.user.domain.model.User;
+import com.rentmanager.modules.user.domain.model.UserRole;
 import com.rentmanager.modules.user.domain.repository.UserRepository;
 import com.rentmanager.modules.user.infrastructure.persistence.entity.UserEntity;
 import com.rentmanager.modules.user.infrastructure.persistence.mapper.UserPersistenceMapper;
@@ -9,6 +10,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -53,6 +55,15 @@ public class UserRepositoryAdapter implements UserRepository {
             return Page.empty(pageable);
         }
         return jpaRepository.findByTenantId(tenantId, pageable).map(mapper::toDomain);
+    }
+
+    @Override
+    public List<User> findByTenantIdAndRole(UUID tenantId, UserRole role) {
+        if (tenantId == null || role == null) {
+            return List.of();
+        }
+        return jpaRepository.findByTenantIdAndRole(tenantId, role)
+                .stream().map(mapper::toDomain).toList();
     }
 
     @Override
