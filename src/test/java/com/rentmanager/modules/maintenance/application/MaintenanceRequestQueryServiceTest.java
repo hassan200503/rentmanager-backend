@@ -186,6 +186,16 @@ class MaintenanceRequestQueryServiceTest {
         assertNull(summary.responseRatePct());
     }
 
+    @Test
+    void countUnviewedDelegatesToRepository() {
+        when(requestRepository.countUnviewedByTenantId(tenantId)).thenReturn(3L);
+
+        long count = service.countUnviewed(tenantId);
+
+        assertEquals(3L, count);
+        verify(requestRepository).countUnviewedByTenantId(tenantId);
+    }
+
     private MaintenanceRequest request(String title, MaintenancePriority priority, MaintenanceRequestStatus status) {
         return request(title, priority, status, null);
     }
@@ -200,7 +210,7 @@ class MaintenanceRequestQueryServiceTest {
                 MaintenancePriority.MEDIUM, status,
                 null, null,
                 LocalDateTime.ofInstant(now, java.time.ZoneOffset.UTC),
-                null, "renter", null, 0L, createdAt, createdAt);
+                null, null, "renter", null, 0L, createdAt, createdAt);
     }
 
     private MaintenanceRequest request(
@@ -211,6 +221,6 @@ class MaintenanceRequestQueryServiceTest {
         return MaintenanceRequest.rehydrate(
                 UUID.randomUUID(), tenantId, unitId, propertyId, tenantProfileId,
                 UUID.randomUUID(), title, "desc", MaintenanceCategory.PLUMBING, priority, status,
-                null, null, firstResponse, null, "renter", null, 0L, createdAt, createdAt);
+                null, null, firstResponse, null, null, "renter", null, 0L, createdAt, createdAt);
     }
 }

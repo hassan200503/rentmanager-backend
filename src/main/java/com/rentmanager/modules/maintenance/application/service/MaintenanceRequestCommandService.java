@@ -1,5 +1,6 @@
 package com.rentmanager.modules.maintenance.application.service;
 
+import com.rentmanager.domain.base.DomainEvent;
 import com.rentmanager.modules.maintenance.domain.enums.MaintenanceCategory;
 import com.rentmanager.modules.maintenance.domain.enums.MaintenancePriority;
 import com.rentmanager.modules.maintenance.domain.enums.MaintenanceRequestStatus;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -41,8 +43,9 @@ public class MaintenanceRequestCommandService {
                 title, description, category, priority, createdBy, correlationId
         );
 
+        List<DomainEvent> events = request.pullDomainEvents();
         request = maintenanceRequestRepository.save(request);
-        publish(request);
+        eventPublisher.publishAll(events);
 
         log.info("Maintenance request submitted: id={} tenantId={} unitId={} category={} priority={}",
                 request.getId(), tenantId, unitId, category, priority);
@@ -61,8 +64,9 @@ public class MaintenanceRequestCommandService {
                 .orElseThrow(() -> new IllegalArgumentException("Maintenance request not found: " + requestId));
 
         request.changeStatus(newStatus, correlationId);
+        List<DomainEvent> events = request.pullDomainEvents();
         request = maintenanceRequestRepository.save(request);
-        publish(request);
+        eventPublisher.publishAll(events);
 
         log.info("Maintenance request status updated: id={} newStatus={}", requestId, newStatus);
         return request;
@@ -79,8 +83,9 @@ public class MaintenanceRequestCommandService {
                 .orElseThrow(() -> new IllegalArgumentException("Maintenance request not found: " + requestId));
 
         request.schedule(scheduledDate, correlationId);
+        List<DomainEvent> events = request.pullDomainEvents();
         request = maintenanceRequestRepository.save(request);
-        publish(request);
+        eventPublisher.publishAll(events);
 
         log.info("Maintenance request scheduled: id={} date={}", requestId, scheduledDate);
         return request;
@@ -97,17 +102,24 @@ public class MaintenanceRequestCommandService {
                 .orElseThrow(() -> new IllegalArgumentException("Maintenance request not found: " + requestId));
 
         request.assignTo(assignee, correlationId);
+        List<DomainEvent> events = request.pullDomainEvents();
         request = maintenanceRequestRepository.save(request);
-        publish(request);
+        eventPublisher.publishAll(events);
 
         log.info("Maintenance request assigned: id={} assignee={}", requestId, assignee);
         return request;
     }
 
-    private void publish(MaintenanceRequest request) {
-        var events = request.pullDomainEvents();
-        if (!events.isEmpty()) {
-            eventPublisher.publishAll(events);
+    /**
+     * V54: marks every unviewed request for the tenant as viewed - fired when
+     * the landlord opens the Requests hub. Returns how many were updated.
+     */
+    @Transactional
+    public int markAllViewed(UUID tenantId) {
+        int updated = maintenanceRequestRepository.markAllViewedByTenantId(tenantId);
+        if (updated > 0) {
+            log.info("Maintenance requests marked viewed: tenantId={} count={}", tenantId, updated);
         }
+        return updated;
     }
 }

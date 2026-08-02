@@ -27,5 +27,17 @@ public interface MaintenanceRequestRepository {
     List<MaintenanceRequest> findByTenantIdAndPriorityAndStatus(
             UUID tenantId, MaintenancePriority priority, MaintenanceRequestStatus status);
 
+    /**
+     * V54: number of requests the landlord has not seen yet (landlord_viewed_at
+     * still NULL). Powers the sidebar "Requests" badge.
+     */
+    long countUnviewedByTenantId(UUID tenantId);
+
+    /**
+     * V54: marks every currently-unviewed request for the tenant as viewed.
+     * Returns how many were updated.
+     */
+    int markAllViewedByTenantId(UUID tenantId);
+
     void delete(UUID id);
 }

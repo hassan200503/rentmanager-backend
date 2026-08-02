@@ -18,6 +18,7 @@ import com.rentmanager.modules.rentledger.domain.model.RentLedgerEntry;
 import com.rentmanager.modules.rentledger.domain.repository.RentLedgerEntryRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentPaymentRequestRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentTransactionRepository;
+import com.rentmanager.modules.announcement.application.AnnouncementQueryService;
 import com.rentmanager.modules.rentledger.infrastructure.daraja.RentPaymentInitiationService;
 import com.rentmanager.modules.review.application.ReviewCommandService;
 import com.rentmanager.modules.review.application.ReviewQueryService;
@@ -128,7 +129,8 @@ class TenantPortalServiceTest {
                 reviewCommandService,
                 reviewQueryService,
                 maintenanceRequestCommandService,
-                maintenanceRequestRepository
+                maintenanceRequestRepository,
+                mock(AnnouncementQueryService.class)
         );
 
         renterUser = buildUser(USER_ID, CLERK_USER_ID, LANDLORD_TENANT_ID);

@@ -86,6 +86,15 @@ public class MaintenanceRequestQueryService {
     }
 
     /**
+     * V54: how many requests the landlord has not seen yet. Powers the
+     * sidebar badge; the hub marks them viewed via markAllViewed.
+     */
+    @Transactional(readOnly = true)
+    public long countUnviewed(UUID tenantId) {
+        return maintenanceRequestRepository.countUnviewedByTenantId(tenantId);
+    }
+
+    /**
      * Phase 4a/5: SLA summary for the landlord Requests hub.
      */
     @Transactional(readOnly = true)

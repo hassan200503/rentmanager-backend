@@ -61,7 +61,8 @@ public class TenantProfileRepositoryImpl implements TenantProfileRepository {
                 p.getFullName(),
                 p.getEmail(),
                 p.getPhone(),
-                p.getNationalId()
+                p.getNationalId(),
+                p.isWhatsAppOptIn()
         );
     }
 
@@ -73,7 +74,8 @@ public class TenantProfileRepositoryImpl implements TenantProfileRepository {
                 e.getFullName(),
                 e.getEmail(),
                 e.getPhone(),
-                e.getNationalId()
+                e.getNationalId(),
+                e.isWhatsAppOptIn()
         );
     }
 

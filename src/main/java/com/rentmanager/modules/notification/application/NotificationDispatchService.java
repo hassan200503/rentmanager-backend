@@ -31,22 +31,49 @@ public class NotificationDispatchService {
      *         (caller records the retry too, then gives up on exhaustion).
      */
     public boolean dispatch(NotificationDelivery delivery) {
-        switch (delivery.getChannel()) {
+        return dispatch(
+                delivery.getChannel(),
+                delivery.getRecipient(),
+                delivery.getSubject(),
+                delivery.getMessage(),
+                delivery.getMetadata()
+        );
+    }
+
+    /**
+     * Channel routing shared with the announcement broadcast sweep: one
+     * router for every external channel, whatever the originating feature.
+     * The WhatsApp leg is template-formatted BEFORE this call (the message
+     * argument is the final templated body); the template name rides in
+     * {@code metadata} for the provider implementation to use.
+     */
+    public boolean dispatch(
+            NotificationChannel channel,
+            String recipient,
+            String subject,
+            String message,
+            String metadata
+    ) {
+        switch (channel) {
             case SMS -> {
-                return smsService.sendRaw(delivery.getRecipient(), delivery.getMessage());
+                return smsService.sendRaw(recipient, message);
             }
             case EMAIL -> {
                 emailService.send(
-                        delivery.getRecipient(),
-                        delivery.getSubject() == null ? "RentManager" : delivery.getSubject(),
-                        delivery.getMessage());
+                        recipient,
+                        subject == null ? "RentManager" : subject,
+                        message);
                 return true;
             }
             case WHATSAPP -> {
-                whatsAppService.send(delivery.getRecipient(), delivery.getMessage());
+                if (metadata == null || metadata.isBlank()) {
+                    whatsAppService.send(recipient, message);
+                } else {
+                    whatsAppService.sendTemplate(recipient, metadata, message);
+                }
                 return true;
             }
-            default -> throw new IllegalStateException("Unknown channel: " + delivery.getChannel());
+            default -> throw new IllegalStateException("Unknown channel: " + channel);
         }
     }
 }

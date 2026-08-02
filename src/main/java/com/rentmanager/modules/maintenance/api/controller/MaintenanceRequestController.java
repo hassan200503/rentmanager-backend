@@ -7,6 +7,7 @@ import com.rentmanager.modules.maintenance.api.dto.MaintenanceRequestResponse;
 import com.rentmanager.modules.maintenance.api.dto.ScheduleMaintenanceRequest;
 import com.rentmanager.modules.maintenance.api.dto.UpdateMaintenanceStatusRequest;
 import com.rentmanager.modules.maintenance.application.dto.MaintenanceSlaSummaryResponse;
+import com.rentmanager.modules.maintenance.application.dto.MaintenanceUnviewedCountResponse;
 import com.rentmanager.modules.maintenance.application.service.MaintenanceRequestCommandService;
 import com.rentmanager.modules.maintenance.application.service.MaintenanceRequestQueryService;
 import com.rentmanager.modules.maintenance.domain.enums.MaintenancePriority;
@@ -72,6 +73,28 @@ public class MaintenanceRequestController {
     ) {
         MaintenanceSlaSummaryResponse summary = queryService.getSlaSummary(requireTenantId(user));
         return ResponseEntity.ok(ApiResponse.ok("Maintenance SLA summary retrieved", summary));
+    }
+
+    @GetMapping("/unviewed-count")
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
+    public ResponseEntity<ApiResponse<MaintenanceUnviewedCountResponse>> unviewedCount(
+            @AuthenticationPrincipal AuthenticatedUser user
+    ) {
+        long count = queryService.countUnviewed(requireTenantId(user));
+        return ResponseEntity.ok(ApiResponse.ok(
+                "Unviewed maintenance requests retrieved",
+                new MaintenanceUnviewedCountResponse(count)));
+    }
+
+    @PostMapping("/read")
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
+    public ResponseEntity<ApiResponse<MaintenanceUnviewedCountResponse>> markAllViewed(
+            @AuthenticationPrincipal AuthenticatedUser user
+    ) {
+        int updated = commandService.markAllViewed(requireTenantId(user));
+        return ResponseEntity.ok(ApiResponse.ok(
+                "Maintenance requests marked as viewed",
+                new MaintenanceUnviewedCountResponse(updated)));
     }
 
     @GetMapping("/{id}")

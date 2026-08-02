@@ -83,4 +83,41 @@ class MaintenanceRequestResponseTimeTest {
         assertNotNull(request.getFirstLandlordResponseAt());
         assertEquals(MaintenanceRequestStatus.IN_REVIEW, request.getStatus());
     }
+
+    @Test
+    void submittedRequestIsUnviewedUntilMarked() {
+        MaintenanceRequest request = submitted();
+
+        assertNull(request.getLandlordViewedAt());
+    }
+
+    @Test
+    void markViewedSetsTimestampExactlyOnce() {
+        MaintenanceRequest request = submitted();
+
+        request.markViewed();
+        java.time.LocalDateTime first = request.getLandlordViewedAt();
+
+        request.markViewed();
+
+        assertEquals(first, request.getLandlordViewedAt());
+    }
+
+    @Test
+    void statusChangeImpliesViewed() {
+        MaintenanceRequest request = submitted();
+
+        request.changeStatus(MaintenanceRequestStatus.IN_REVIEW, "corr-2");
+
+        assertNotNull(request.getLandlordViewedAt());
+    }
+
+    @Test
+    void noOpStatusChangeDoesNotMarkViewed() {
+        MaintenanceRequest request = submitted();
+
+        request.changeStatus(MaintenanceRequestStatus.SUBMITTED, "corr-2");
+
+        assertNull(request.getLandlordViewedAt());
+    }
 }

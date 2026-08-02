@@ -10,6 +10,7 @@ import com.rentmanager.modules.maintenance.infrastructure.persistence.repository
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -62,6 +63,17 @@ public class MaintenanceRequestRepositoryAdapter implements MaintenanceRequestRe
             UUID tenantId, MaintenancePriority priority, MaintenanceRequestStatus status) {
         return jpaRepository.findByTenantIdAndPriorityAndStatus(tenantId, priority, status)
                 .stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    public long countUnviewedByTenantId(UUID tenantId) {
+        return jpaRepository.countByTenantIdAndLandlordViewedAtIsNull(tenantId);
+    }
+
+    @Override
+    public int markAllViewedByTenantId(UUID tenantId) {
+        LocalDateTime now = LocalDateTime.now();
+        return jpaRepository.markAllViewed(tenantId, now, now);
     }
 
     @Override

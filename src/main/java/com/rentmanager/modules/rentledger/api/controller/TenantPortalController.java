@@ -1,6 +1,8 @@
 package com.rentmanager.modules.rentledger.api.controller;
 
 import com.rentmanager.contract.common.ApiResponse;
+import com.rentmanager.modules.announcement.api.dto.AnnouncementUnreadCountResponse;
+import com.rentmanager.modules.announcement.api.dto.RenterAnnouncementResponse;
 import com.rentmanager.modules.maintenance.api.dto.MaintenanceRequestResponse;
 import com.rentmanager.modules.rentledger.api.autopay.dto.AutoPaySettingsResponse;
 import com.rentmanager.modules.rentledger.api.dto.request.InitiatePortalPaymentRequest;
@@ -8,12 +10,14 @@ import com.rentmanager.modules.rentledger.api.dto.request.InitiateRentPaymentReq
 import com.rentmanager.modules.rentledger.api.dto.request.SubmitMaintenanceRequest;
 import com.rentmanager.modules.rentledger.api.dto.request.ToggleAutoPayRequest;
 import com.rentmanager.modules.rentledger.api.dto.request.UpdateAutoPayPhoneRequest;
+import com.rentmanager.modules.rentledger.api.dto.request.UpdateWhatsAppOptInRequest;
 import com.rentmanager.modules.rentledger.api.dto.response.RentPaymentRequestResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantDashboardResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantLeaseResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantPaymentHistoryResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantPaymentReceiptResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantPaymentSummaryResponse;
+import com.rentmanager.modules.rentledger.api.dto.response.WhatsAppOptInResponse;
 import com.rentmanager.modules.rentledger.application.service.TenantPortalService;
 import com.rentmanager.modules.review.api.dto.SubmitReviewRequest;
 import com.rentmanager.modules.review.application.dto.response.LandlordReviewResponse;
@@ -181,5 +185,57 @@ public class TenantPortalController {
     ) {
         LandlordReviewResponse response = tenantPortalService.submitReview(
                 user.getUserId(), request.rating(), request.comment());        return ResponseEntity.ok(ApiResponse.ok("Review submitted", response));
+    }
+
+    // -------------------------------------------------------
+    // ANNOUNCEMENTS (broadcast messaging) — renter-scoped
+    // -------------------------------------------------------
+
+    @GetMapping("/announcements")
+    public ResponseEntity<ApiResponse<List<RenterAnnouncementResponse>>> getAnnouncements(
+            @AuthenticationPrincipal AuthenticatedUser user
+    ) {
+        List<RenterAnnouncementResponse> responses = tenantPortalService.getAnnouncements(user.getUserId());
+        return ResponseEntity.ok(ApiResponse.ok("Announcements retrieved", responses));
+    }
+
+    @GetMapping("/announcements/unread-count")
+    public ResponseEntity<ApiResponse<AnnouncementUnreadCountResponse>> getUnreadAnnouncementsCount(
+            @AuthenticationPrincipal AuthenticatedUser user
+    ) {
+        long count = tenantPortalService.getUnreadAnnouncementsCount(user.getUserId());
+        return ResponseEntity.ok(ApiResponse.ok(
+                "Unread announcements count retrieved",
+                new AnnouncementUnreadCountResponse(count)));
+    }
+
+    @PostMapping("/announcements/{id}/read")
+    public ResponseEntity<ApiResponse<RenterAnnouncementResponse>> markAnnouncementRead(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @PathVariable UUID id
+    ) {
+        RenterAnnouncementResponse response = tenantPortalService.markAnnouncementRead(user.getUserId(), id);
+        return ResponseEntity.ok(ApiResponse.ok("Announcement marked as read", response));
+    }
+
+    // -------------------------------------------------------
+    // WHATSAPP PREFERENCES — explicit renter consent for broadcasts
+    // -------------------------------------------------------
+
+    @GetMapping("/whatsapp-opt-in")
+    public ResponseEntity<ApiResponse<WhatsAppOptInResponse>> getWhatsAppOptIn(
+            @AuthenticationPrincipal AuthenticatedUser user
+    ) {
+        WhatsAppOptInResponse response = tenantPortalService.getWhatsAppOptIn(user.getUserId());
+        return ResponseEntity.ok(ApiResponse.ok("WhatsApp opt-in status retrieved", response));
+    }
+
+    @PostMapping("/whatsapp-opt-in")
+    public ResponseEntity<ApiResponse<WhatsAppOptInResponse>> updateWhatsAppOptIn(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @Valid @RequestBody UpdateWhatsAppOptInRequest request
+    ) {
+        WhatsAppOptInResponse response = tenantPortalService.updateWhatsAppOptIn(user.getUserId(), request.enabled());
+        return ResponseEntity.ok(ApiResponse.ok("WhatsApp opt-in updated", response));
     }
 }

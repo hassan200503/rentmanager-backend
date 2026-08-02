@@ -20,6 +20,16 @@ public class TenantProfile extends AggregateRoot {
     private String phone;
     private String nationalId;
 
+    /**
+     * Explicit consent for WhatsApp broadcasts from the landlord. Meta
+     * Business Policy requires opt-in before any business-initiated
+     * template message; consent is captured via a real checkbox in the
+     * renter portal and is NEVER assumed - defaults to false. Renters
+     * without opt-in still receive SMS/email/in-app deliveries; WhatsApp
+     * is simply skipped for them.
+     */
+    private boolean whatsappOptIn;
+
     protected TenantProfile() {
     }
 
@@ -79,6 +89,11 @@ public class TenantProfile extends AggregateRoot {
         return profile;
     }
 
+    /**
+     * Convenience overload for call sites that have no consent data
+     * (dev setup, tests): opt-in defaults to FALSE - consent is never
+     * assumed.
+     */
     public static TenantProfile rehydrate(
             UUID id,
             UUID landlordTenantId,
@@ -88,6 +103,19 @@ public class TenantProfile extends AggregateRoot {
             String phone,
             String nationalId
     ) {
+        return rehydrate(id, landlordTenantId, clerkUserId, fullName, email, phone, nationalId, false);
+    }
+
+    public static TenantProfile rehydrate(
+            UUID id,
+            UUID landlordTenantId,
+            String clerkUserId,
+            String fullName,
+            String email,
+            String phone,
+            String nationalId,
+            boolean whatsappOptIn
+    ) {
         TenantProfile profile = new TenantProfile();
         profile.setId(id);
         profile.assignTenant(landlordTenantId);
@@ -96,6 +124,7 @@ public class TenantProfile extends AggregateRoot {
         profile.email = email;
         profile.phone = phone;
         profile.nationalId = nationalId;
+        profile.whatsappOptIn = whatsappOptIn;
         return profile;
     }
 
@@ -114,9 +143,20 @@ public class TenantProfile extends AggregateRoot {
         }
     }
 
+    /**
+     * Explicit renter consent for WhatsApp broadcasts. The renter must
+     * actively opt in (checkbox in the portal); opting out clears it.
+     * Broadcast WhatsApp delivery is only attempted for profiles where
+     * this is true.
+     */
+    public void updateWhatsAppOptIn(boolean enabled) {
+        this.whatsappOptIn = enabled;
+    }
+
     public String getClerkUserId() { return clerkUserId; }
     public String getFullName() { return fullName; }
     public String getEmail() { return email; }
     public String getPhone() { return phone; }
     public String getNationalId() { return nationalId; }
+    public boolean isWhatsAppOptIn() { return whatsappOptIn; }
 }

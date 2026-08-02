@@ -13,6 +13,7 @@ import com.rentmanager.modules.rentledger.application.autopay.AutoPayService;
 import com.rentmanager.modules.rentledger.domain.repository.RentLedgerEntryRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentPaymentRequestRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentTransactionRepository;
+import com.rentmanager.modules.announcement.application.AnnouncementQueryService;
 import com.rentmanager.modules.rentledger.infrastructure.daraja.RentPaymentInitiationService;
 import com.rentmanager.modules.review.application.ReviewCommandService;
 import com.rentmanager.modules.review.application.ReviewQueryService;
@@ -94,7 +95,8 @@ class TenantPortalPremiumGateTest {
                 rentTransactionRepository, rentPaymentInitiationService,
                 rentPaymentRequestRepository, autoPayService,
                 mock(ReviewCommandService.class), mock(ReviewQueryService.class),
-                mock(MaintenanceRequestCommandService.class), mock(MaintenanceRequestRepository.class));
+                mock(MaintenanceRequestCommandService.class), mock(MaintenanceRequestRepository.class),
+                mock(AnnouncementQueryService.class));
 
         tenantProfile = buildTenantProfile();
         activeLease = buildActiveLease();

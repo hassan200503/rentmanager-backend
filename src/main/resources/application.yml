@@ -120,3 +120,18 @@ app:
     email:
       enabled: ${NOTIFICATION_EMAIL_ENABLED:false}
     retry-fixed-rate-ms: ${NOTIFICATION_RETRY_FIXED_RATE_MS:300000}
+
+  # Announcement broadcast fan-out. Delivery rows are dispatched in paced
+  # batches on a single dispatch thread (batch-size rows per pass, one pass
+  # every drain-delay-ms when draining right after a send) - the throttle
+  # that keeps SMS/WhatsApp within provider rate limits. The scheduled
+  # sweep below is the retry safety net and also paces the fan-out if the
+  # immediate drain is ever down. WhatsApp messages go through the
+  # registered Utility template; the landlord's text is truncated to
+  # whatsapp-max-chars before injection into {{1}}.
+  announcement:
+    dispatch-fixed-rate-ms: ${ANNOUNCEMENT_DISPATCH_FIXED_RATE_MS:10000}
+    batch-size: ${ANNOUNCEMENT_DISPATCH_BATCH_SIZE:10}
+    drain-delay-ms: ${ANNOUNCEMENT_DRAIN_DELAY_MS:2000}
+    whatsapp-template-name: ${ANNOUNCEMENT_WHATSAPP_TEMPLATE_NAME:announcement_utility_v1}
+    whatsapp-max-chars: ${ANNOUNCEMENT_WHATSAPP_MAX_CHARS:500}

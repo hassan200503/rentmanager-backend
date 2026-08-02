@@ -43,6 +43,14 @@ public class MaintenanceRequest extends AggregateRoot {
      */
     private LocalDateTime firstLandlordResponseAt;
 
+    /**
+     * V54: timestamp of when the landlord first saw this request (opened the
+     * Requests hub, or acted on it via any status mutation). NULL while the
+     * request is still unviewed - that drives the sidebar badge count. Set
+     * once, never overwritten.
+     */
+    private LocalDateTime landlordViewedAt;
+
     private String notes;
     private String createdBy;
     private String assignedTo;
@@ -99,6 +107,10 @@ public class MaintenanceRequest extends AggregateRoot {
             this.firstLandlordResponseAt = LocalDateTime.now();
         }
 
+        // V54: any landlord status mutation means the landlord has seen the
+        // request - clear the "unviewed" flag as a side effect.
+        markViewed();
+
         if (newStatus == MaintenanceRequestStatus.COMPLETED) {
             this.completedAt = LocalDateTime.now();
         }
@@ -107,6 +119,16 @@ public class MaintenanceRequest extends AggregateRoot {
                 getTenantId(), getId(), correlationId,
                 tenantProfileId, oldStatus, newStatus
         ));
+    }
+
+    /**
+     * V54: records that the landlord has seen this request. Set once, never
+     * overwritten.
+     */
+    public void markViewed() {
+        if (this.landlordViewedAt == null) {
+            this.landlordViewedAt = LocalDateTime.now();
+        }
     }
 
     public void schedule(LocalDate date, String correlationId) {
@@ -136,6 +158,7 @@ public class MaintenanceRequest extends AggregateRoot {
             LocalDate scheduledDate,
             LocalDateTime completedAt,
             LocalDateTime firstLandlordResponseAt,
+            LocalDateTime landlordViewedAt,
             String notes,
             String createdBy,
             String assignedTo,
@@ -156,6 +179,7 @@ public class MaintenanceRequest extends AggregateRoot {
                 .scheduledDate(scheduledDate)
                 .completedAt(completedAt)
                 .firstLandlordResponseAt(firstLandlordResponseAt)
+                .landlordViewedAt(landlordViewedAt)
                 .notes(notes)
                 .createdBy(createdBy)
                 .assignedTo(assignedTo)

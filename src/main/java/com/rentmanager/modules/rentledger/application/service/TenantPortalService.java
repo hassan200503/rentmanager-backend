@@ -21,6 +21,9 @@ import com.rentmanager.modules.rentledger.api.dto.response.TenantLeaseResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantPaymentHistoryResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantPaymentReceiptResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantPaymentSummaryResponse;
+import com.rentmanager.modules.rentledger.api.dto.response.WhatsAppOptInResponse;
+import com.rentmanager.modules.announcement.api.dto.RenterAnnouncementResponse;
+import com.rentmanager.modules.announcement.application.AnnouncementQueryService;
 import com.rentmanager.modules.rentledger.domain.enums.RentLedgerStatus;
 import com.rentmanager.modules.rentledger.domain.enums.RentPaymentRequestStatus;
 import com.rentmanager.modules.rentledger.domain.enums.RentTransactionSource;
@@ -92,6 +95,7 @@ public class TenantPortalService {
     private final ReviewQueryService reviewQueryService;
     private final MaintenanceRequestCommandService maintenanceRequestCommandService;
     private final MaintenanceRequestRepository maintenanceRequestRepository;
+    private final AnnouncementQueryService announcementQueryService;
 
     @Transactional(readOnly = true)
     public TenantDashboardResponse getDashboard(UUID userId) {
@@ -495,6 +499,49 @@ public class TenantPortalService {
                 .stream()
                 .map(MaintenanceRequestResponse::from)
                 .toList();
+    }
+
+    // -------------------------------------------------------
+    // ANNOUNCEMENTS (broadcast messaging) — renter-scoped
+    //
+    // The renter is resolved from the authenticated user; the query
+    // service tenant-scopes everything to the renter's own landlord.
+    // -------------------------------------------------------
+
+    @Transactional(readOnly = true)
+    public List<RenterAnnouncementResponse> getAnnouncements(UUID userId) {
+        TenantProfile profile = resolveTenantProfile(userId);
+        return announcementQueryService.renterAnnouncements(profile.getTenantId(), profile.getId());
+    }
+
+    @Transactional
+    public RenterAnnouncementResponse markAnnouncementRead(UUID userId, UUID announcementId) {
+        TenantProfile profile = resolveTenantProfile(userId);
+        return announcementQueryService.markRead(profile.getTenantId(), profile.getId(), announcementId);
+    }
+
+    @Transactional(readOnly = true)
+    public long getUnreadAnnouncementsCount(UUID userId) {
+        TenantProfile profile = resolveTenantProfile(userId);
+        return announcementQueryService.unreadCount(profile.getTenantId(), profile.getId());
+    }
+
+    // -------------------------------------------------------
+    // WHATSAPP PREFERENCES — explicit renter consent
+    // -------------------------------------------------------
+
+    @Transactional(readOnly = true)
+    public WhatsAppOptInResponse getWhatsAppOptIn(UUID userId) {
+        TenantProfile profile = resolveTenantProfile(userId);
+        return new WhatsAppOptInResponse(profile.isWhatsAppOptIn());
+    }
+
+    @Transactional
+    public WhatsAppOptInResponse updateWhatsAppOptIn(UUID userId, boolean enabled) {
+        TenantProfile profile = resolveTenantProfile(userId);
+        profile.updateWhatsAppOptIn(enabled);
+        tenantProfileRepository.save(profile);
+        return new WhatsAppOptInResponse(profile.isWhatsAppOptIn());
     }
 
     private Lease findActiveLease(UUID landlordTenantId, UUID tenantProfileId) {

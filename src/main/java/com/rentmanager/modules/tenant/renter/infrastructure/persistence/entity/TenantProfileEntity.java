@@ -38,6 +38,9 @@ public class TenantProfileEntity {
     @Column(name = "national_id")
     private String nationalId;
 
+    @Column(name = "whatsapp_opt_in", nullable = false)
+    private boolean whatsappOptIn;
+
     protected TenantProfileEntity() {
         // JPA requirement
     }
@@ -49,7 +52,8 @@ public class TenantProfileEntity {
             String fullName,
             String email,
             String phone,
-            String nationalId
+            String nationalId,
+            boolean whatsappOptIn
     ) {
         this.id = id;
         this.tenantId = tenantId;
@@ -58,6 +62,7 @@ public class TenantProfileEntity {
         this.email = email;
         this.phone = phone;
         this.nationalId = nationalId;
+        this.whatsappOptIn = whatsappOptIn;
     }
 
     public UUID getId() { return id; }
@@ -67,4 +72,5 @@ public class TenantProfileEntity {
     public String getEmail() { return email; }
     public String getPhone() { return phone; }
     public String getNationalId() { return nationalId; }
+    public boolean isWhatsAppOptIn() { return whatsappOptIn; }
 }
