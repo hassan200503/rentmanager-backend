@@ -140,8 +140,24 @@ public class Tenant extends BaseEntity {
  @Column(name = "currency", length = 20)
  private String currency;
 
- @Column(name = "locale", length = 20)
- private String locale;
+    // ----------------------------------------------------------------
+    // KRA TAX PROFILE (eTIMS / eRITS) — PHASE 1
+    // ----------------------------------------------------------------
+    // The landlord's KRA PIN and VAT-registration status. kra_pin is the
+    // identifier destined for eTIMS invoices and eRITS property
+    // registrations; vat_registered drives whether commercial rent attracts
+    // the 16% VAT branch (residential rent is always VAT-exempt). Both
+    // promote the tax pipeline forward but are never a hard onboarding
+    // prerequisite (see the tax module for the fail-closed treatment).
+
+    @Column(name = "kra_pin", length = 30)
+    private String kraPin;
+
+    @Column(name = "vat_registered", nullable = false)
+    private boolean vatRegistered;
+
+    @Column(name = "locale", length = 20)
+    private String locale;
 
  @Column(name = "active", nullable = false)
  private boolean active;
@@ -386,11 +402,13 @@ public class Tenant extends BaseEntity {
            String emergencyContactPhone,
            boolean emergencyContact24h,
            BillingMode billingMode,
-          UUID subscriptionPlanId,
-          LocalDate planStartDate,
-          LocalDate planEndDate,
-          LocalDate planGraceEndsAt,
-          boolean planAutoRenew
+UUID subscriptionPlanId,
+           LocalDate planStartDate,
+           LocalDate planEndDate,
+           LocalDate planGraceEndsAt,
+           boolean planAutoRenew,
+           String kraPin,
+           boolean vatRegistered
    ) {
     Tenant tenant = new Tenant();
 
@@ -428,6 +446,8 @@ public class Tenant extends BaseEntity {
     tenant.planEndDate = planEndDate;
     tenant.planGraceEndsAt = planGraceEndsAt;
     tenant.planAutoRenew = planAutoRenew;
+    tenant.kraPin = kraPin;
+    tenant.vatRegistered = vatRegistered;
     return tenant;
    }
 
@@ -670,6 +690,17 @@ public class Tenant extends BaseEntity {
   public void updatePayoutPhoneNumber(String payoutPhoneNumber) {
    this.payoutPhoneNumber = payoutPhoneNumber;
   }
+
+    /**
+     * Sets or clears the landlord's KRA tax profile. A blank PIN is treated
+     * as "not provided yet" (the eTIMS/eRITS pipeline degrades gracefully
+     * rather than hard-failing). vat_registered is fail-closed: false until
+     * a tax advisor confirms the landlord's VAT registration.
+     */
+    public void updateKraTaxProfile(String kraPin, boolean vatRegistered) {
+        this.kraPin = kraPin != null && kraPin.isBlank() ? null : kraPin;
+        this.vatRegistered = vatRegistered;
+    }
 
   /**
    * Sets or clears the landlord's emergency contact phone and 24h flag.

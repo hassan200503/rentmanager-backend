@@ -77,6 +77,14 @@ public class TenantSettingsController {
                         request.getEmergencyContact24h() != null
                                 ? request.getEmergencyContact24h()
                                 : current.isEmergencyContact24h())
+                .kraPin(
+                        request.getKraPin() != null
+                                ? request.getKraPin()
+                                : current.getKraPin())
+                .vatRegistered(
+                        request.getVatRegistered() != null
+                                ? request.getVatRegistered()
+                                : current.isVatRegistered())
                 .build();
 
         settingsAdapter.updateSettings(currentTenant, updated);

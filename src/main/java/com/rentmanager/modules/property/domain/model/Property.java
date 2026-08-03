@@ -2,6 +2,7 @@ package com.rentmanager.modules.property.domain.model;
 
 import com.rentmanager.domain.base.AggregateRoot;
 import com.rentmanager.modules.property.domain.enums.OccupancyStatus;
+import com.rentmanager.modules.property.domain.enums.PremisesType;
 import com.rentmanager.modules.property.domain.enums.PropertyStatus;
 import com.rentmanager.modules.property.domain.enums.PropertyType;
 import com.rentmanager.modules.property.domain.event.PropertyActivatedEvent;
@@ -38,6 +39,10 @@ public class Property extends AggregateRoot {
     private PropertyType propertyType;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "premises_type")
+    private PremisesType premisesType;
+
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private PropertyStatus status;
 
@@ -58,12 +63,52 @@ public class Property extends AggregateRoot {
     private String description;
 
     // -----------------------------
+    // CLASSIFICATION
+    // -----------------------------
+
+    /**
+     * Returns the persisted premises classification, deriving it from the
+     * property type only when no explicit classification is stored. Newly
+     * created properties always carry the derived value; rehydrated rows may
+     * (before V57 backfill) be null up to the getter.
+     */
+    public PremisesType getPremisesType() {
+        return premisesType != null
+                ? premisesType
+                : PremisesType.fromPropertyType(propertyType);
+    }
+
+    // -----------------------------
     // FACTORY METHOD (CREATION)
     // -----------------------------
     public static Property create(
             UUID tenantId,
             String name,
             PropertyType propertyType,
+            Address address,
+            GeoLocation geoLocation,
+            PropertyDimensions dimensions,
+            String description,
+            String correlationId
+    ) {
+        return create(
+                tenantId,
+                name,
+                propertyType,
+                PremisesType.fromPropertyType(propertyType),
+                address,
+                geoLocation,
+                dimensions,
+                description,
+                correlationId
+        );
+    }
+
+    public static Property create(
+            UUID tenantId,
+            String name,
+            PropertyType propertyType,
+            PremisesType premisesType,
             Address address,
             GeoLocation geoLocation,
             PropertyDimensions dimensions,
@@ -96,6 +141,9 @@ public class Property extends AggregateRoot {
                 .name(name)
                 .referenceCode("PROP-" + propertyId.toString())
                 .propertyType(propertyType)
+                .premisesType(premisesType != null
+                        ? premisesType
+                        : PremisesType.fromPropertyType(propertyType))
                 .status(PropertyStatus.DRAFT) // safer than INACTIVE for lifecycle tests
                 .occupancyStatus(OccupancyStatus.VACANT)
                 .address(address)
@@ -222,11 +270,33 @@ public class Property extends AggregateRoot {
             PropertyDimensions dimensions,
             String description
     ) {
+        return rehydrate(
+                id, tenantId, name, referenceCode, propertyType,
+                null, status, occupancyStatus, address, geoLocation,
+                dimensions, description
+        );
+    }
+
+    public static Property rehydrate(
+            UUID id,
+            UUID tenantId,
+            String name,
+            String referenceCode,
+            PropertyType propertyType,
+            PremisesType premisesType,
+            PropertyStatus status,
+            OccupancyStatus occupancyStatus,
+            Address address,
+            GeoLocation geoLocation,
+            PropertyDimensions dimensions,
+            String description
+    ) {
         Property property = Property.builder()
                 .tenantId(tenantId)
                 .name(name)
                 .referenceCode(referenceCode)
                 .propertyType(propertyType)
+                .premisesType(premisesType)
                 .status(status)
                 .occupancyStatus(occupancyStatus)
                 .address(address)

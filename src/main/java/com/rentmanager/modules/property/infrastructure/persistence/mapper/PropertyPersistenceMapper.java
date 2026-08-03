@@ -57,6 +57,7 @@ public class PropertyPersistenceMapper {
         );
 
         entity.setPropertyType(property.getPropertyType());
+        entity.setPremisesType(property.getPremisesType());
 
         entity.setReferenceCode(
                 property.getReferenceCode() != null
@@ -86,6 +87,7 @@ public class PropertyPersistenceMapper {
                 .name(entity.getName())
                 .status(entity.getStatus())
                 .propertyType(entity.getPropertyType())
+                .premisesType(entity.getPremisesType())
                 .occupancyStatus(entity.getOccupancyStatus())
                 .address(toDomainAddress(entity.getAddress()))
                 .description(entity.getDescription());
@@ -154,6 +156,7 @@ public class PropertyPersistenceMapper {
 
         // SAFE UPDATES ONLY
         entity.setPropertyType(property.getPropertyType());
+        entity.setPremisesType(property.getPremisesType());
         entity.setOccupancyStatus(property.getOccupancyStatus());
 
         if (property.getAddress() != null) {

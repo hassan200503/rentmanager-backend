@@ -21,6 +21,15 @@ public class TenantProfile extends AggregateRoot {
     private String nationalId;
 
     /**
+     * Renter's KRA PIN (currently optional/conditional). Captured only when
+     * the renter supplies it — needed at eTIMS invoice level only when the
+     * renter claims the rental expense / input VAT, and required for
+     * certain eRITS flows to be confirmed by a tax advisor (brief item A1).
+     * Never a hard requirement for the rental-receipt path.
+     */
+    private String kraPin;
+
+    /**
      * Explicit consent for WhatsApp broadcasts from the landlord. Meta
      * Business Policy requires opt-in before any business-initiated
      * template message; consent is captured via a real checkbox in the
@@ -103,7 +112,7 @@ public class TenantProfile extends AggregateRoot {
             String phone,
             String nationalId
     ) {
-        return rehydrate(id, landlordTenantId, clerkUserId, fullName, email, phone, nationalId, false);
+        return rehydrate(id, landlordTenantId, clerkUserId, fullName, email, phone, nationalId, false, null);
     }
 
     public static TenantProfile rehydrate(
@@ -116,6 +125,20 @@ public class TenantProfile extends AggregateRoot {
             String nationalId,
             boolean whatsappOptIn
     ) {
+        return rehydrate(id, landlordTenantId, clerkUserId, fullName, email, phone, nationalId, whatsappOptIn, null);
+    }
+
+    public static TenantProfile rehydrate(
+            UUID id,
+            UUID landlordTenantId,
+            String clerkUserId,
+            String fullName,
+            String email,
+            String phone,
+            String nationalId,
+            boolean whatsappOptIn,
+            String kraPin
+    ) {
         TenantProfile profile = new TenantProfile();
         profile.setId(id);
         profile.assignTenant(landlordTenantId);
@@ -125,7 +148,15 @@ public class TenantProfile extends AggregateRoot {
         profile.phone = phone;
         profile.nationalId = nationalId;
         profile.whatsappOptIn = whatsappOptIn;
+        profile.kraPin = kraPin;
         return profile;
+    }
+
+    /**
+     * Sets or clears the renter's KRA PIN. Blank input clears the pin.
+     */
+    public void updateKraPin(String kraPin) {
+        this.kraPin = kraPin != null && kraPin.isBlank() ? null : kraPin;
     }
 
     public void updateDetails(String fullName, String email, String phone, String nationalId) {
@@ -158,5 +189,6 @@ public class TenantProfile extends AggregateRoot {
     public String getEmail() { return email; }
     public String getPhone() { return phone; }
     public String getNationalId() { return nationalId; }
+    public String getKraPin() { return kraPin; }
     public boolean isWhatsAppOptIn() { return whatsappOptIn; }
 }

@@ -54,6 +54,10 @@ public class TenantSettingsRepositoryAdapter {
                 settings.getEmergencyContactPhone(),
                 settings.isEmergencyContact24h()
         );
+        tenant.updateKraTaxProfile(
+                settings.getKraPin(),
+                settings.isVatRegistered()
+        );
 
         jpaRepository.save(mapper.toJpaEntity(tenant));
     }
@@ -75,6 +79,8 @@ public class TenantSettingsRepositoryAdapter {
                 .locale(tenant.getLocale())
                 .emergencyContactPhone(tenant.getEmergencyContactPhone())
                 .emergencyContact24h(tenant.isEmergencyContact24h())
+                .kraPin(tenant.getKraPin())
+                .vatRegistered(tenant.isVatRegistered())
                 .build();
     }
 }

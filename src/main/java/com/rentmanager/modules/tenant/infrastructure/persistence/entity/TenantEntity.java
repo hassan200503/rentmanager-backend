@@ -118,6 +118,14 @@ public class TenantEntity extends BaseEntity {
     private String locale;
 
     @Setter
+    @Column(name = "kra_pin", length = 30)
+    private String kraPin;
+
+    @Setter
+    @Column(name = "vat_registered", nullable = false)
+    private boolean vatRegistered;
+
+    @Setter
     @Column(name = "active", nullable = false)
     private boolean active;
 

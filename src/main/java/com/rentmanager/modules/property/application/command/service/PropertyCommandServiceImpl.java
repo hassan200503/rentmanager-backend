@@ -44,6 +44,7 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
                 tenantId,
                 request.getName(),
                 request.getPropertyType(),
+                request.getPremisesType(),
                 request.getAddress(),
                 request.getGeoLocation(),
                 request.getDimensions(),

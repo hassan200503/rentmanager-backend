@@ -28,6 +28,7 @@ public class PropertyMapper {
                 .tenantId(property.getTenantId())
                 .name(property.getName())
                 .propertyType(property.getPropertyType())
+                .premisesType(property.getPremisesType())
                 .status(property.getStatus())
                 .occupancyStatus(property.getOccupancyStatus())
                 .address(property.getAddress())

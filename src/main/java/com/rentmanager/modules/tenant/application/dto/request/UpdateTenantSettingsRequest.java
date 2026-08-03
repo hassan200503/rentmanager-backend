@@ -32,4 +32,10 @@ public class UpdateTenantSettingsRequest {
     // Emergency contact (Phase 2b, free tier)
     private String emergencyContactPhone;
     private Boolean emergencyContact24h;
+
+    // KRA tax profile (Phase 1b, free tier) — landlord KRA PIN and the
+    // fail-closed VAT-registration flag. `vatRegistered` reaching the tenant
+    // aggregate is what unlocks the 16% VAT branch for COMMERCIAL premises.
+    private String kraPin;
+    private Boolean vatRegistered;
 }

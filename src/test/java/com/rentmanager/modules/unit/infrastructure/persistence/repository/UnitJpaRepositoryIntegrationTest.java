@@ -1,6 +1,7 @@
 package com.rentmanager.modules.unit.infrastructure.persistence.repository;
 
 import com.rentmanager.modules.property.domain.enums.OccupancyStatus;
+import com.rentmanager.modules.property.domain.enums.PremisesType;
 import com.rentmanager.modules.property.domain.enums.PropertyStatus;
 import com.rentmanager.modules.property.domain.enums.PropertyType;
 import com.rentmanager.modules.property.infrastructure.persistence.entity.PropertyAddressJpaEntity;
@@ -53,6 +54,7 @@ class UnitJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
         property.setName("Test Property");
         property.setStatus(status);
         property.setPropertyType(PropertyType.APARTMENT);
+        property.setPremisesType(PremisesType.RESIDENTIAL);
         property.setOccupancyStatus(OccupancyStatus.VACANT);
         property.setAddress(PropertyAddressJpaEntity.of(
                 "123 Test Street", null, "Nairobi", null, "00100", "Kenya"

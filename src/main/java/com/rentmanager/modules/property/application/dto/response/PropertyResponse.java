@@ -1,6 +1,7 @@
 package com.rentmanager.modules.property.application.dto.response;
 
 import com.rentmanager.modules.property.domain.enums.OccupancyStatus;
+import com.rentmanager.modules.property.domain.enums.PremisesType;
 import com.rentmanager.modules.property.domain.enums.PropertyStatus;
 import com.rentmanager.modules.property.domain.enums.PropertyType;
 import com.rentmanager.modules.property.domain.valueobject.Address;
@@ -22,6 +23,13 @@ public class PropertyResponse {
     private String name;
 
     private PropertyType propertyType;
+
+    /**
+     * RESIDENTIAL/COMMERCIAL classification used by the tax module
+     * (MRI vs 16% VAT). Always present - derived from {@link PropertyType}
+     * when the property was created without an explicit override.
+     */
+    private PremisesType premisesType;
 
     private PropertyStatus status;
 

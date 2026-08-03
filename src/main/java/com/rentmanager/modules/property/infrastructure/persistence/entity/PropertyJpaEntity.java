@@ -2,6 +2,7 @@ package com.rentmanager.modules.property.infrastructure.persistence.entity;
 
 import com.rentmanager.domain.base.BaseTenantEntity;
 import com.rentmanager.modules.property.domain.enums.OccupancyStatus;
+import com.rentmanager.modules.property.domain.enums.PremisesType;
 import com.rentmanager.modules.property.domain.enums.PropertyStatus;
 import com.rentmanager.modules.property.domain.enums.PropertyType;
 import jakarta.persistence.*;
@@ -40,6 +41,10 @@ public class PropertyJpaEntity extends BaseTenantEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "property_type", nullable = false)
     private PropertyType propertyType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "premises_type")
+    private PremisesType premisesType;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "occupancy_status", nullable = false)

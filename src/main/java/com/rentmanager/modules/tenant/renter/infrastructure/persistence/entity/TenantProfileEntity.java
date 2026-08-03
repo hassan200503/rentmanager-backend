@@ -38,6 +38,9 @@ public class TenantProfileEntity {
     @Column(name = "national_id")
     private String nationalId;
 
+    @Column(name = "kra_pin")
+    private String kraPin;
+
     @Column(name = "whatsapp_opt_in", nullable = false)
     private boolean whatsappOptIn;
 
@@ -55,6 +58,20 @@ public class TenantProfileEntity {
             String nationalId,
             boolean whatsappOptIn
     ) {
+        this(id, tenantId, clerkUserId, fullName, email, phone, nationalId, whatsappOptIn, null);
+    }
+
+    public TenantProfileEntity(
+            UUID id,
+            UUID tenantId,
+            String clerkUserId,
+            String fullName,
+            String email,
+            String phone,
+            String nationalId,
+            boolean whatsappOptIn,
+            String kraPin
+    ) {
         this.id = id;
         this.tenantId = tenantId;
         this.clerkUserId = clerkUserId;
@@ -63,6 +80,7 @@ public class TenantProfileEntity {
         this.phone = phone;
         this.nationalId = nationalId;
         this.whatsappOptIn = whatsappOptIn;
+        this.kraPin = kraPin;
     }
 
     public UUID getId() { return id; }
@@ -72,5 +90,6 @@ public class TenantProfileEntity {
     public String getEmail() { return email; }
     public String getPhone() { return phone; }
     public String getNationalId() { return nationalId; }
+    public String getKraPin() { return kraPin; }
     public boolean isWhatsAppOptIn() { return whatsappOptIn; }
 }

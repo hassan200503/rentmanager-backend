@@ -21,13 +21,23 @@ public class TenantSettings {
 
     private final boolean emergencyContact24h;
 
+    // Phase 1b (KRA compliance): the landlord's tax identity. `kraPin` is the
+    // KRA PIN of the tenant (landlord organisation); `vatRegistered` is the
+    // fail-closed VAT flag that (together with COMMERCIAL premises) decides
+    // whether rent is standard-rated 16% VAT. Persisted on the Tenant aggregate.
+    private final String kraPin;
+
+    private final boolean vatRegistered;
+
     public TenantSettings(
             BrandingSettings brandingSettings,
             String timezone,
             String currency,
             String locale,
             String emergencyContactPhone,
-            boolean emergencyContact24h
+            boolean emergencyContact24h,
+            String kraPin,
+            boolean vatRegistered
     ) {
         if (brandingSettings == null) {
             throw new IllegalArgumentException("Branding settings cannot be null");
@@ -39,5 +49,7 @@ public class TenantSettings {
         this.locale = locale;
         this.emergencyContactPhone = emergencyContactPhone;
         this.emergencyContact24h = emergencyContact24h;
+        this.kraPin = kraPin;
+        this.vatRegistered = vatRegistered;
     }
 }

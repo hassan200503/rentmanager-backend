@@ -35,6 +35,10 @@ public class TenantSettingsResponse {
     private String emergencyContactPhone;
     private boolean emergencyContact24h;
 
+    // KRA tax profile (Phase 1b, free tier)
+    private String kraPin;
+    private boolean vatRegistered;
+
     public static TenantSettingsResponse from(TenantSettings settings) {
         return TenantSettingsResponse.builder()
                 .timezone(settings.getTimezone())
@@ -50,6 +54,8 @@ public class TenantSettingsResponse {
                         ? settings.getBrandingSettings().getFaviconUrl() : null)
                 .emergencyContactPhone(settings.getEmergencyContactPhone())
                 .emergencyContact24h(settings.isEmergencyContact24h())
+                .kraPin(settings.getKraPin())
+                .vatRegistered(settings.isVatRegistered())
                 .build();
     }
 }
