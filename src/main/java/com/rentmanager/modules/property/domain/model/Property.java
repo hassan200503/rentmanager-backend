@@ -16,6 +16,7 @@ import com.rentmanager.modules.property.domain.valueobject.PropertyDimensions;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.Instant;
 import java.util.UUID;
 
 
@@ -41,6 +42,25 @@ public class Property extends AggregateRoot {
     @Enumerated(EnumType.STRING)
     @Column(name = "premises_type")
     private PremisesType premisesType;
+
+    /**
+     * Mandatory free-text justification when the premises classification is
+     * explicitly set (an override of the auto-derivation, including
+     * MIXED_USE). NULL for auto-classified rows. This is a legal/tax
+     * attribute driving the MRI/VAT pipeline, so ungoverned silent overrides
+     * are forbidden.
+     */
+    @Column(length = 500)
+    private String premisesTypeOverrideReason;
+
+    /**
+     * Authenticated user id that set the premises classification.
+     * Together with {@link #premisesTypeChangedAt} this forms the audit
+     * trail for the classification, mirroring the persisted columns.
+     */
+    private UUID premisesTypeChangedBy;
+
+    private Instant premisesTypeChangedAt;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -81,6 +101,10 @@ public class Property extends AggregateRoot {
     // -----------------------------
     // FACTORY METHOD (CREATION)
     // -----------------------------
+    /**
+     * Auto-classified creation: premises type is derived from {@code
+     * propertyType} (never MIXED_USE); no audit fields are recorded.
+     */
     public static Property create(
             UUID tenantId,
             String name,
@@ -95,7 +119,9 @@ public class Property extends AggregateRoot {
                 tenantId,
                 name,
                 propertyType,
-                PremisesType.fromPropertyType(propertyType),
+                null,
+                null,
+                null,
                 address,
                 geoLocation,
                 dimensions,
@@ -104,11 +130,24 @@ public class Property extends AggregateRoot {
         );
     }
 
+    /**
+     * Creation with an explicitly supplied premises classification.
+     *
+     * <p>When {@code premisesType} is non-null (an override of the
+     * auto-derivation — including the only route to MIXED_USE) a non-blank
+     * {@code premisesTypeOverrideReason} and a non-null {@code changedBy} are
+     * mandatory, and {@code premisesTypeChangedAt} is stamped here. When it is
+     * null the classification is derived from {@code propertyType}; the audit
+     * fields are not recorded, and {@code changedBy} (the caller's user id) is
+     * simply not persisted.
+     */
     public static Property create(
             UUID tenantId,
             String name,
             PropertyType propertyType,
             PremisesType premisesType,
+            String premisesTypeOverrideReason,
+            UUID changedBy,
             Address address,
             GeoLocation geoLocation,
             PropertyDimensions dimensions,
@@ -134,6 +173,33 @@ public class Property extends AggregateRoot {
             throw new IllegalArgumentException("propertyType is required");
         }
 
+        boolean isOverride = premisesType != null;
+
+        if (isOverride) {
+            if (premisesTypeOverrideReason == null || premisesTypeOverrideReason.isBlank()) {
+                throw new IllegalArgumentException(
+                        "premisesTypeOverrideReason is required when premisesType is provided"
+                );
+            }
+            if (premisesTypeOverrideReason.length() > 500) {
+                throw new IllegalArgumentException(
+                        "premisesTypeOverrideReason must not exceed 500 characters"
+                );
+            }
+            if (changedBy == null) {
+                throw new IllegalArgumentException(
+                        "changedBy is required when premisesType is provided"
+                );
+            }
+        } else {
+            if (premisesTypeOverrideReason != null && !premisesTypeOverrideReason.isBlank()) {
+                throw new IllegalArgumentException(
+                        "premisesTypeOverrideReason cannot be provided without an explicit premisesType"
+                );
+            }
+            premisesType = PremisesType.fromPropertyType(propertyType);
+        }
+
         UUID propertyId = UUID.randomUUID();
 
         Property property = Property.builder()
@@ -141,9 +207,10 @@ public class Property extends AggregateRoot {
                 .name(name)
                 .referenceCode("PROP-" + propertyId.toString())
                 .propertyType(propertyType)
-                .premisesType(premisesType != null
-                        ? premisesType
-                        : PremisesType.fromPropertyType(propertyType))
+                .premisesType(premisesType)
+                .premisesTypeOverrideReason(isOverride ? premisesTypeOverrideReason : null)
+                .premisesTypeChangedBy(isOverride ? changedBy : null)
+                .premisesTypeChangedAt(isOverride ? Instant.now() : null)
                 .status(PropertyStatus.DRAFT) // safer than INACTIVE for lifecycle tests
                 .occupancyStatus(OccupancyStatus.VACANT)
                 .address(address)
@@ -244,6 +311,43 @@ public class Property extends AggregateRoot {
         ));
     }
 
+    /**
+     * Changes the physical property type, keeping the premises classification
+     * consistent with the classification invariant:
+     *
+     * <ul>
+     *   <li>no audited override exists (override reason null) — the premises
+     *       classification is re-derived from the new type (never MIXED_USE),
+     *       and any stale audit fields are cleared;</li>
+     *   <li>an audited override exists — the classification is sticky and
+     *       survives the type change (the override reason/audit trail stays,
+     *       since classification is a deliberate legal/tax decision).</li>
+     * </ul>
+     */
+    public void changeType(PropertyType newType, String correlationId) {
+        if (newType == null) {
+            throw new IllegalArgumentException("propertyType is required");
+        }
+        if (this.propertyType == newType) {
+            return;
+        }
+
+        this.propertyType = newType;
+
+        if (this.premisesTypeOverrideReason == null) {
+            this.premisesType = PremisesType.fromPropertyType(newType);
+            this.premisesTypeChangedBy = null;
+            this.premisesTypeChangedAt = null;
+        }
+
+        registerEvent(new PropertyUpdatedEvent(
+                tenantId,
+                correlationId != null ? correlationId : "PROP-UPDATE-" + getId(),
+                getId(),
+                getId()
+        ));
+    }
+
     public void archive() {
         archive("SYSTEM");
     }
@@ -291,12 +395,40 @@ public class Property extends AggregateRoot {
             PropertyDimensions dimensions,
             String description
     ) {
+        return rehydrate(
+                id, tenantId, name, referenceCode, propertyType,
+                premisesType, null, null, null,
+                status, occupancyStatus, address, geoLocation,
+                dimensions, description
+        );
+    }
+
+    public static Property rehydrate(
+            UUID id,
+            UUID tenantId,
+            String name,
+            String referenceCode,
+            PropertyType propertyType,
+            PremisesType premisesType,
+            String premisesTypeOverrideReason,
+            UUID premisesTypeChangedBy,
+            Instant premisesTypeChangedAt,
+            PropertyStatus status,
+            OccupancyStatus occupancyStatus,
+            Address address,
+            GeoLocation geoLocation,
+            PropertyDimensions dimensions,
+            String description
+    ) {
         Property property = Property.builder()
                 .tenantId(tenantId)
                 .name(name)
                 .referenceCode(referenceCode)
                 .propertyType(propertyType)
                 .premisesType(premisesType)
+                .premisesTypeOverrideReason(premisesTypeOverrideReason)
+                .premisesTypeChangedBy(premisesTypeChangedBy)
+                .premisesTypeChangedAt(premisesTypeChangedAt)
                 .status(status)
                 .occupancyStatus(occupancyStatus)
                 .address(address)

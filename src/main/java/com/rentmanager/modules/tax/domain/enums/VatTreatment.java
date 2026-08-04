@@ -26,6 +26,12 @@ public enum VatTreatment {
      * only STANDARD_RATED once the landlord's VAT registration is
      * confirmed — fail-closed to VAT_EXEMPT until then (the 16% branch
      * additionally awaits the A1 advisor sign-off).
+     *
+     * <p>MIXED_USE is fail-closed to VAT_EXEMPT: without unit-level income
+     * apportionment (phase 2) the commercial portion cannot be isolated, so
+     * no VAT is charged on the whole. This mirrors the audit intent of the
+     * source regime — never guess between the two branches for an
+     * unsplit mixed building.
      */
     public static VatTreatment forPremises(
             PremisesType premisesType,

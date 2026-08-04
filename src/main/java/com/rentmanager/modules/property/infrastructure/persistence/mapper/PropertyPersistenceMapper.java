@@ -58,6 +58,9 @@ public class PropertyPersistenceMapper {
 
         entity.setPropertyType(property.getPropertyType());
         entity.setPremisesType(property.getPremisesType());
+        entity.setPremisesTypeOverrideReason(property.getPremisesTypeOverrideReason());
+        entity.setPremisesTypeChangedBy(property.getPremisesTypeChangedBy());
+        entity.setPremisesTypeChangedAt(property.getPremisesTypeChangedAt());
 
         entity.setReferenceCode(
                 property.getReferenceCode() != null
@@ -88,6 +91,9 @@ public class PropertyPersistenceMapper {
                 .status(entity.getStatus())
                 .propertyType(entity.getPropertyType())
                 .premisesType(entity.getPremisesType())
+                .premisesTypeOverrideReason(entity.getPremisesTypeOverrideReason())
+                .premisesTypeChangedBy(entity.getPremisesTypeChangedBy())
+                .premisesTypeChangedAt(entity.getPremisesTypeChangedAt())
                 .occupancyStatus(entity.getOccupancyStatus())
                 .address(toDomainAddress(entity.getAddress()))
                 .description(entity.getDescription());
@@ -157,6 +163,9 @@ public class PropertyPersistenceMapper {
         // SAFE UPDATES ONLY
         entity.setPropertyType(property.getPropertyType());
         entity.setPremisesType(property.getPremisesType());
+        entity.setPremisesTypeOverrideReason(property.getPremisesTypeOverrideReason());
+        entity.setPremisesTypeChangedBy(property.getPremisesTypeChangedBy());
+        entity.setPremisesTypeChangedAt(property.getPremisesTypeChangedAt());
         entity.setOccupancyStatus(property.getOccupancyStatus());
 
         if (property.getAddress() != null) {

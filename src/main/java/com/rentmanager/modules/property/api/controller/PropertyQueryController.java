@@ -2,6 +2,7 @@ package com.rentmanager.modules.property.api.controller;
 
 import com.rentmanager.modules.property.api.routes.PropertyRoutes;
 import com.rentmanager.modules.property.application.dto.response.PropertyResponse;
+import com.rentmanager.modules.property.application.dto.response.PropertyTypeMetadataResponse;
 import com.rentmanager.modules.property.application.query.service.PropertyQueryService;
 import com.rentmanager.contract.common.ApiResponse;
 import com.rentmanager.shared.security.principal.AuthenticatedUser;
@@ -85,6 +86,28 @@ public class PropertyQueryController {
 
         return ResponseEntity.ok(
                 ApiResponse.ok("Properties retrieved successfully", response)
+        );
+    }
+
+    /**
+     * Taxonomy metadata for the property creation form: every property type
+     * with its auto-derived premises classification, plus the full premises
+     * override list. Authentication required; deliberately not tenant-scoped
+     * (the taxonomy is global). Must be declared before {@code /{propertyId}}
+     * resolution — an exact literal path wins in Spring routing regardless.
+     */
+    @GetMapping("/types")
+    public ResponseEntity<ApiResponse<PropertyTypeMetadataResponse>> getPropertyTypes(
+            @AuthenticationPrincipal AuthenticatedUser user
+    ) {
+        if (user == null) {
+            throw new IllegalStateException("Authentication required");
+        }
+        return ResponseEntity.ok(
+                ApiResponse.ok(
+                        "Property taxonomy retrieved successfully",
+                        propertyQueryService.getPropertyTypes()
+                )
         );
     }
 

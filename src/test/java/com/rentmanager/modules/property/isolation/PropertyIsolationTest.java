@@ -56,6 +56,7 @@ class PropertyIsolationTest {
 
     private final UUID TENANT_A = UUID.randomUUID();
     private final UUID TENANT_B = UUID.randomUUID();
+    private final UUID USER_ID = UUID.randomUUID();
     private final UUID PROPERTY_ID = UUID.randomUUID();
 
     @BeforeEach
@@ -142,7 +143,7 @@ class PropertyIsolationTest {
         when(mapper.toResponse(saved))
                 .thenReturn(response);
 
-        service.createProperty(TENANT_A, request);
+        service.createProperty(TENANT_A, USER_ID, request);
 
         verify(repository).save(any(Property.class));
     }

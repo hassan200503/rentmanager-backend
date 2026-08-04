@@ -31,11 +31,13 @@ class PropertyIntegrationTest extends AbstractPostgresIntegrationTest {
 
     private UUID tenantA;
     private UUID tenantB;
+    private UUID userId;
 
     @BeforeEach
     void setup() {
         tenantA = UUID.randomUUID();
         tenantB = UUID.randomUUID();
+        userId = UUID.randomUUID();
 
         entityManager.flush();
         entityManager.clear();
@@ -47,7 +49,7 @@ class PropertyIntegrationTest extends AbstractPostgresIntegrationTest {
 
         var request = baseRequest("Green Villa");
 
-        var response = service.createProperty(tenantA, request);
+        var response = service.createProperty(tenantA, userId, request);
 
         assertNotNull(response.getPropertyId());
         assertEquals("Green Villa", response.getName());
@@ -70,6 +72,7 @@ class PropertyIntegrationTest extends AbstractPostgresIntegrationTest {
 
         var response = service.createProperty(
                 tenantA,
+                userId,
                 baseRequest("Isolation Property")
         );
 
@@ -88,6 +91,7 @@ class PropertyIntegrationTest extends AbstractPostgresIntegrationTest {
 
         var created = service.createProperty(
                 tenantA,
+                userId,
                 baseRequest("Old Name")
         );
 
@@ -121,6 +125,7 @@ class PropertyIntegrationTest extends AbstractPostgresIntegrationTest {
 
         var created = service.createProperty(
                 tenantA,
+                userId,
                 baseRequest("Lifecycle Property")
         );
 

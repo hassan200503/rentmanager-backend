@@ -211,7 +211,7 @@ class PropertyCommandControllerSecurityTest {
     @ValueSource(strings = {"ROLE_LANDLORD_OWNER", "ROLE_LANDLORD_MANAGER"})
     void ownerAndManager_succeed_onCreateProperty(String authority) throws Exception {
         PropertyResponse response = samplePropertyResponse();
-        when(propertyCommandService.createProperty(any(), any())).thenReturn(response);
+        when(propertyCommandService.createProperty(any(), any(), any())).thenReturn(response);
 
         mockMvc.perform(post(PROPERTIES_BASE)
                         .with(authentication(tokenWithAuthority(authority)))

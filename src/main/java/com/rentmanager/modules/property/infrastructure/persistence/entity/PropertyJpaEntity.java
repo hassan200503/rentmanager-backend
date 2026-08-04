@@ -9,6 +9,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -45,6 +46,24 @@ public class PropertyJpaEntity extends BaseTenantEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "premises_type")
     private PremisesType premisesType;
+
+    /**
+     * Mandatory free-text justification when the user explicitly overrides the
+     * auto-derived premises classification. NULL for auto-classified rows.
+     */
+    @Column(name = "premises_type_override_reason", length = 500)
+    private String premisesTypeOverrideReason;
+
+    /**
+     * Authenticated user id that set the premises classification (override or,
+     * at creation, a straight-through explicit value). NULL for rows derived
+     * from property_type.
+     */
+    @Column(name = "premises_type_changed_by")
+    private UUID premisesTypeChangedBy;
+
+    @Column(name = "premises_type_changed_at")
+    private Instant premisesTypeChangedAt;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "occupancy_status", nullable = false)

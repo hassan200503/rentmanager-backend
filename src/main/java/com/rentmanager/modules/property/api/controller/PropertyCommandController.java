@@ -43,7 +43,7 @@ public class PropertyCommandController {
     ) {
         try {
             return ApiResponse.ok(
-                    propertyCommandService.createProperty(requireTenantId(user), request)
+                    propertyCommandService.createProperty(requireTenantId(user), requireUserId(user), request)
             );
         } catch (DataIntegrityViolationException ex) {
             return ApiResponse.fail("Property constraint violation", "CONFLICT");
@@ -116,5 +116,13 @@ public class PropertyCommandController {
             throw new IllegalStateException("No tenant associated with this user. Please complete onboarding.");
         }
         return tenantId;
+    }
+
+    private UUID requireUserId(AuthenticatedUser user) {
+        UUID userId = user.getUserId();
+        if (userId == null) {
+            throw new IllegalStateException("No user identity available for audit trail.");
+        }
+        return userId;
     }
 }

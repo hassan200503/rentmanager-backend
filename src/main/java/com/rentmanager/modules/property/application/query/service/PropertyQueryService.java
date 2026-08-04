@@ -1,6 +1,7 @@
 package com.rentmanager.modules.property.application.query.service;
 
 import com.rentmanager.modules.property.application.dto.response.PropertyResponse;
+import com.rentmanager.modules.property.application.dto.response.PropertyTypeMetadataResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -18,4 +19,6 @@ public interface PropertyQueryService {
     List<PropertyResponse> getByOwner(UUID tenantId, UUID ownerId);
 
     List<PropertyResponse> getByStatus(UUID tenantId, String status);
+
+    PropertyTypeMetadataResponse getPropertyTypes();
 }

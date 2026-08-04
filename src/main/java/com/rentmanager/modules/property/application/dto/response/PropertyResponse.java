@@ -10,6 +10,7 @@ import com.rentmanager.modules.property.domain.valueobject.PropertyDimensions;
 import lombok.Builder;
 import lombok.Getter;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Getter
@@ -25,11 +26,21 @@ public class PropertyResponse {
     private PropertyType propertyType;
 
     /**
-     * RESIDENTIAL/COMMERCIAL classification used by the tax module
+     * RESIDENTIAL/COMMERCIAL/MIXED_USE classification used by the tax module
      * (MRI vs 16% VAT). Always present - derived from {@link PropertyType}
      * when the property was created without an explicit override.
      */
     private PremisesType premisesType;
+
+    /**
+     * Free-text justification when the premises classification was explicitly
+     * set. NULL for auto-derived rows.
+     */
+    private String premisesTypeOverrideReason;
+
+    private UUID premisesTypeChangedBy;
+
+    private Instant premisesTypeChangedAt;
 
     private PropertyStatus status;
 

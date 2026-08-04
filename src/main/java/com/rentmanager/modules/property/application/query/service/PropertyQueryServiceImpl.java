@@ -1,7 +1,11 @@
 package com.rentmanager.modules.property.application.query.service;
 
 import com.rentmanager.modules.property.application.dto.response.PropertyResponse;
+import com.rentmanager.modules.property.application.dto.response.PropertyTypeDescriptor;
+import com.rentmanager.modules.property.application.dto.response.PropertyTypeMetadataResponse;
 import com.rentmanager.modules.property.application.mapper.PropertyMapper;
+import com.rentmanager.modules.property.domain.enums.PremisesType;
+import com.rentmanager.modules.property.domain.enums.PropertyType;
 import com.rentmanager.shared.exception.PropertyNotFoundException;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.shared.exception.ErrorCode;
@@ -10,6 +14,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -78,5 +83,28 @@ public class PropertyQueryServiceImpl implements PropertyQueryService {
                 .stream()
                 .map(propertyMapper::toResponse)
                 .toList();
+    }
+
+    // =========================================================
+    // TAXONOMY METADATA (single source of truth for the form)
+    // =========================================================
+    /**
+     * Derives each selectable property type once, on the backend, so client
+     * code never re-implements the rule. derivedPremisesType is never
+     * MIXED_USE. The premises list is supplied in a stable order for the
+     * override selector (MIXED_USE only reachable through an explicit
+     * override).
+     */
+    @Override
+    public PropertyTypeMetadataResponse getPropertyTypes() {
+
+        List<PropertyTypeDescriptor> descriptors = Arrays.stream(PropertyType.values())
+                .map(type -> new PropertyTypeDescriptor(type, PremisesType.fromPropertyType(type)))
+                .toList();
+
+        return PropertyTypeMetadataResponse.builder()
+                .propertyTypes(descriptors)
+                .premisesTypes(List.of(PremisesType.RESIDENTIAL, PremisesType.COMMERCIAL, PremisesType.MIXED_USE))
+                .build();
     }
 }

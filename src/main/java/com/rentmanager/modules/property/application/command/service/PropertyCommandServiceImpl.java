@@ -34,6 +34,7 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
     // ---------------- CREATE ----------------
     @Override
     public PropertyResponse createProperty(UUID tenantId,
+                                           UUID userId,
                                            CreatePropertyRequest request) {
 
         createPropertyValidator.validate(tenantId, request);
@@ -45,6 +46,8 @@ public class PropertyCommandServiceImpl implements PropertyCommandService {
                 request.getName(),
                 request.getPropertyType(),
                 request.getPremisesType(),
+                request.getPremisesTypeOverrideReason(),
+                userId,
                 request.getAddress(),
                 request.getGeoLocation(),
                 request.getDimensions(),

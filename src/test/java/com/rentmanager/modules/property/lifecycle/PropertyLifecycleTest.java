@@ -59,6 +59,7 @@ class PropertyLifecycleTest {
     private PropertyMarkPartiallyOccupiedValidator propertyMarkPartiallyOccupiedValidator;
 
     private final UUID TENANT_ID = UUID.randomUUID();
+    private final UUID USER_ID = UUID.randomUUID();
     private final UUID PROPERTY_ID = UUID.randomUUID();
 
     private Property property;
@@ -108,7 +109,7 @@ class PropertyLifecycleTest {
                 .thenReturn(mock(PropertyResponse.class));
 
         // CREATE
-        PropertyResponse created = service.createProperty(TENANT_ID, request);
+        PropertyResponse created = service.createProperty(TENANT_ID, USER_ID, request);
 
         assertNotNull(created);
 

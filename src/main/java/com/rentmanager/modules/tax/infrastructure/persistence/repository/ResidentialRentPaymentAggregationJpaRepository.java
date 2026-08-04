@@ -18,7 +18,11 @@ import java.util.UUID;
  * units -> properties} and sums PAYMENT-type transactions for RESIDENTIAL
  * premises only. The residential filter lives in the query itself so the
  * MRI regime can never accidentally include COMMERCIAL rent (excluded from
- * MRI by the Finance Act 2023 wording).
+ * MRI by the Finance Act 2023 wording). The strict {@code = RESIDENTIAL}
+ * equality also excludes MIXED_USE premises — their residential income
+ * portion cannot be apportioned until unit-level classification (phase 2),
+ * and a whole-building inclusion would overstate the MRI base, so they are
+ * fail-closed outside the aggregation.
  *
  * <p>The {@code occurred_at} column is used as the grouping key month
  * (document date of the transaction), matching how the rent ledger records

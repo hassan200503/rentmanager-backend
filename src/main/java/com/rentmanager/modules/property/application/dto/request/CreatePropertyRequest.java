@@ -17,11 +17,19 @@ public class CreatePropertyRequest {
     private PropertyType propertyType;
 
     /**
-     * Optional RESIDENTIAL/COMMERCIAL override. When omitted, the property is
-     * classified from {@link PropertyType} (COMMERCIAL/OFFICE/WAREHOUSE ->
-     * COMMERCIAL, everything else -> RESIDENTIAL).
+     * Optional RESIDENTIAL/COMMERCIAL/MIXED_USE override. When omitted, the
+     * property is classified from {@link PropertyType} (COMMERCIAL/OFFICE/
+     * WAREHOUSE -> COMMERCIAL, everything else -> RESIDENTIAL). MIXED_USE is
+     * only reachable through this override.
      */
     private PremisesType premisesType;
+
+    /**
+     * Mandatory (non-blank, max 500 chars) whenever {@code premisesType} is
+     * provided. Recorded in the audit trail along with the authenticated user
+     * id, because the classification drives the MRI/VAT pipeline.
+     */
+    private String premisesTypeOverrideReason;
 
     private String description;
 

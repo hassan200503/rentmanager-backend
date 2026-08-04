@@ -8,7 +8,11 @@ import java.util.UUID;
 
 public interface PropertyCommandService {
 
-    PropertyResponse createProperty(UUID tenantId, CreatePropertyRequest request);
+    /**
+     * @param userId authenticated user id, recorded in the premises
+     *               classification audit trail when an override is supplied
+     */
+    PropertyResponse createProperty(UUID tenantId, UUID userId, CreatePropertyRequest request);
 
     PropertyResponse updateProperty(UUID tenantId, UUID propertyId, UpdatePropertyRequest request);
 

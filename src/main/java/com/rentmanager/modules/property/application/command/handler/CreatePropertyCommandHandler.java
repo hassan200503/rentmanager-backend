@@ -22,6 +22,7 @@ public class CreatePropertyCommandHandler
 
         return propertyCommandService.createProperty(
                 tenantId,
+                null,
                 request
         );
     }

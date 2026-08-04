@@ -58,6 +58,7 @@ class PropertyCommandServiceImplTest {
     private PropertyMarkVacantValidator propertyMarkVacantValidator;
 
     private final UUID TENANT_ID = UUID.randomUUID();
+    private final UUID USER_ID = UUID.randomUUID();
     private final UUID PROPERTY_ID = UUID.randomUUID();
 
     @Test
@@ -86,7 +87,7 @@ class PropertyCommandServiceImplTest {
         when(propertyMapper.toResponse(saved))
                 .thenReturn(response);
 
-        PropertyResponse result = service.createProperty(TENANT_ID, request);
+        PropertyResponse result = service.createProperty(TENANT_ID, USER_ID, request);
 
         assertNotNull(result);
 
