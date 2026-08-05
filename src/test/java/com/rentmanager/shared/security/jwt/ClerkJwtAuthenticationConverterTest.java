@@ -84,6 +84,12 @@ class ClerkJwtAuthenticationConverterTest {
         return jwt;
     }
 
+    private Jwt jwtWithPlatformRole(String platformRole) {
+        Jwt jwt = jwtWithOrg(null);
+        when(jwt.getClaimAsString("platformRole")).thenReturn(platformRole);
+        return jwt;
+    }
+
     private Set<String> authorityStrings(AbstractAuthenticationToken token) {
         return token.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
@@ -224,5 +230,79 @@ class ClerkJwtAuthenticationConverterTest {
         assertThat(principal.getTenantId()).isNull();
         assertThat(authorityStrings(token)).containsExactly("ROLE_PENDING_ONBOARDING");
         verify(userRepository, never()).existsByTenantId(any());
+    }
+
+    // ------------------------------------------------------------------
+    // PLATFORM OWNER / ADMIN (platformRole claim, Phase 1 admin surface)
+    // ------------------------------------------------------------------
+
+    @Test
+    void platformOwnerClaim_grantsOwnerAndAdminAuthorities() {
+        when(userRepository.findByClerkUserId(CLERK_USER_ID)).thenReturn(Optional.empty());
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(tenantProfileRepository.existsByClerkUserId(CLERK_USER_ID)).thenReturn(false);
+
+        AbstractAuthenticationToken token = converter.convert(jwtWithPlatformRole("OWNER"));
+
+        assertThat(authorityStrings(token)).containsExactlyInAnyOrder(
+                "ROLE_PLATFORM_OWNER", "ROLE_PLATFORM_ADMIN", "ROLE_PENDING_ONBOARDING"
+        );
+    }
+
+    @Test
+    void platformAdminClaim_grantsAdminAuthorityOnly() {
+        when(userRepository.findByClerkUserId(CLERK_USER_ID)).thenReturn(Optional.empty());
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(tenantProfileRepository.existsByClerkUserId(CLERK_USER_ID)).thenReturn(false);
+
+        AbstractAuthenticationToken token = converter.convert(jwtWithPlatformRole("ADMIN"));
+
+        assertThat(authorityStrings(token)).containsExactlyInAnyOrder(
+                "ROLE_PLATFORM_ADMIN", "ROLE_PENDING_ONBOARDING"
+        );
+    }
+
+    @Test
+    void platformOwnerClaim_withTenantMembership_keepsLandlordAuthorities() {
+        UUID tenantId = UUID.randomUUID();
+        User invitedUser = User.createInvited(
+                CLERK_USER_ID, EMAIL, "Pat", "Owner", tenantId, UserRole.OWNER
+        );
+
+        when(userRepository.findByClerkUserId(CLERK_USER_ID)).thenReturn(Optional.of(invitedUser));
+        when(tenant.getId()).thenReturn(tenantId);
+        when(tenantRepository.findByClerkOrgId(CLERK_ORG_ID)).thenReturn(Optional.of(tenant));
+
+        Jwt jwt = jwtWithOrg(CLERK_ORG_ID);
+        when(jwt.getClaimAsString("platformRole")).thenReturn("OWNER");
+
+        AbstractAuthenticationToken token = converter.convert(jwt);
+
+        assertThat(authorityStrings(token)).containsExactlyInAnyOrder(
+                "ROLE_LANDLORD", "ROLE_LANDLORD_OWNER",
+                "ROLE_PLATFORM_OWNER", "ROLE_PLATFORM_ADMIN"
+        );
+    }
+
+    @Test
+    void unknownPlatformRole_isIgnored() {
+        when(userRepository.findByClerkUserId(CLERK_USER_ID)).thenReturn(Optional.empty());
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(tenantProfileRepository.existsByClerkUserId(CLERK_USER_ID)).thenReturn(false);
+
+        AbstractAuthenticationToken token = converter.convert(jwtWithPlatformRole("CUSTOMER_SERVICE"));
+
+        assertThat(authorityStrings(token)).containsExactly("ROLE_PENDING_ONBOARDING");
+    }
+
+    @Test
+    void missingPlatformRole_isIgnored() {
+        when(userRepository.findByClerkUserId(CLERK_USER_ID)).thenReturn(Optional.empty());
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(tenantProfileRepository.existsByClerkUserId(CLERK_USER_ID)).thenReturn(false);
+
+        AbstractAuthenticationToken token = converter.convert(jwtWithOrg(null));
+
+        assertThat(authorityStrings(token)).containsExactly("ROLE_PENDING_ONBOARDING");
     }
 }

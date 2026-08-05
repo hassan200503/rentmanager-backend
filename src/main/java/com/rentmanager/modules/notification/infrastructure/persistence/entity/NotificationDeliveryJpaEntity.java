@@ -56,7 +56,7 @@ public class NotificationDeliveryJpaEntity extends BaseEntity {
     @Column(name = "attempt_count", nullable = false)
     private int attemptCount;
 
-    @Column(name = "next_attempt_at", nullable = false)
+    @Column(name = "next_attempt_at")
     private Instant nextAttemptAt;
 
     @Column(name = "last_error", length = 500)

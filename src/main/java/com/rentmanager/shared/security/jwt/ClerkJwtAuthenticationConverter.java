@@ -25,6 +25,12 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
 
     private static final String CLAIM_TENANT_ID = "tenant_id";
     private static final String CLAIM_EMAIL = "email";
+    private static final String CLAIM_PLATFORM_ROLE = "platformRole";
+
+    private static final String ROLE_PLATFORM_OWNER = "ROLE_PLATFORM_OWNER";
+    private static final String ROLE_PLATFORM_ADMIN = "ROLE_PLATFORM_ADMIN";
+    private static final String PLATFORM_ROLE_OWNER = "OWNER";
+    private static final String PLATFORM_ROLE_ADMIN = "ADMIN";
 
     private static final String ROLE_LANDLORD = "ROLE_LANDLORD";
     private static final String ROLE_LANDLORD_OWNER = "ROLE_LANDLORD_OWNER";
@@ -63,6 +69,7 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
         UUID resolvedTenantId = resolveTenantId(clerkOrgId, user);
 
         Set<SimpleGrantedAuthority> authorities = resolveAuthorities(clerkUserId, resolvedTenantId, user);
+        authorities = withPlatformAuthorities(authorities, jwt.getClaimAsString(CLAIM_PLATFORM_ROLE));
 
         AuthenticatedUser authenticatedUser = new AuthenticatedUser(
                 user.getId(),
@@ -119,6 +126,39 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
             case MANAGER -> ROLE_LANDLORD_MANAGER;
             case STAFF -> ROLE_LANDLORD_STAFF;
         };
+    }
+
+    /**
+     * Grants platform-level authorities from the custom {@code platformRole}
+     * claim — a Clerk user public-metadata value surfaced through the
+     * "backend" JWT template. Deliberately independent of landlord org
+     * membership: the platform owner/admin is NOT a member of every
+     * landlord's Clerk organization, so authorization here must not depend
+     * on tenant resolution.
+     *
+     * OWNER is a superset of ADMIN. Only OWNER may manage the most
+     * sensitive platform configuration (credentials rotation, admin team),
+     * enforced at the controller layer via hasAnyAuthority/hasAuthority.
+     *
+     * Existing landlord/renter/onboarding authorities are kept alongside —
+     * a platform owner who also runs their own landlord account is both.
+     */
+    private Set<SimpleGrantedAuthority> withPlatformAuthorities(
+            Set<SimpleGrantedAuthority> authorities,
+            String platformRole
+    ) {
+        if (platformRole == null || platformRole.isBlank()) {
+            return authorities;
+        }
+
+        Set<SimpleGrantedAuthority> combined = new HashSet<>(authorities);
+        if (PLATFORM_ROLE_OWNER.equalsIgnoreCase(platformRole)) {
+            combined.add(new SimpleGrantedAuthority(ROLE_PLATFORM_OWNER));
+            combined.add(new SimpleGrantedAuthority(ROLE_PLATFORM_ADMIN));
+        } else if (PLATFORM_ROLE_ADMIN.equalsIgnoreCase(platformRole)) {
+            combined.add(new SimpleGrantedAuthority(ROLE_PLATFORM_ADMIN));
+        }
+        return Set.copyOf(combined);
     }
 
     /**

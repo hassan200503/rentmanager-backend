@@ -43,7 +43,7 @@ public class CommissionPolicyService {
             return defaultPolicy.getRatePercent();
         }
 
-        log.debug("No active commission policy found for landlordOrgId={} — no commission applied", landlordOrgId);
+        log.debug("No active commission policy found for landlordOrgId={} â€” no commission applied", landlordOrgId);
         return null;
     }
 
@@ -93,5 +93,18 @@ public class CommissionPolicyService {
 
         CommissionPolicy policy = CommissionPolicy.createForLandlord(ratePercent, effectiveFrom, createdBy, landlordOrgId);
         return commissionPolicyRepository.save(policy);
+    }
+
+    /**
+     * Deactivates the landlord-specific override (if any), so the landlord
+     * reverts to the platform-wide default rate. No-op when there is no active
+     * override; follows the same deactivate-don't-mutate rule as the setters.
+     */
+    @Transactional
+    public void clearLandlordRate(UUID landlordOrgId) {
+        commissionPolicyRepository.findActiveByLandlordOrgId(landlordOrgId).ifPresent(existing -> {
+            existing.deactivate();
+            commissionPolicyRepository.save(existing);
+        });
     }
 }

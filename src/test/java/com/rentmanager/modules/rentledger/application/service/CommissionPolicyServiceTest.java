@@ -320,4 +320,51 @@ class CommissionPolicyServiceTest {
                     .isEqualByComparingTo(BigDecimal.ZERO);
         }
     }
+    @Nested
+    class ClearLandlordRate {
+
+        @Test
+        void deactivatesActiveOverrideWhenPresent() {
+            CommissionPolicy override = CommissionPolicy.rehydrate(
+                    UUID.randomUUID(), 1L, landlordOrgId, new BigDecimal("3.50"),
+                    Instant.now(), true, "admin",
+                    Instant.now(), Instant.now()
+            );
+            when(commissionPolicyRepository.findActiveByLandlordOrgId(landlordOrgId))
+                    .thenReturn(Optional.of(override));
+            when(commissionPolicyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            service.clearLandlordRate(landlordOrgId);
+
+            assertThat(override.isActive()).isFalse();
+            verify(commissionPolicyRepository).save(override);
+        }
+
+        @Test
+        void isNoOpWhenNoActiveOverrideExists() {
+            when(commissionPolicyRepository.findActiveByLandlordOrgId(landlordOrgId))
+                    .thenReturn(Optional.empty());
+
+            service.clearLandlordRate(landlordOrgId);
+
+            verify(commissionPolicyRepository, never()).save(any());
+        }
+
+        @Test
+        void keepsOriginalRateOnDeactivatedRow() {
+            CommissionPolicy override = CommissionPolicy.rehydrate(
+                    UUID.randomUUID(), 1L, landlordOrgId, new BigDecimal("7.00"),
+                    Instant.now(), true, "admin",
+                    Instant.now(), Instant.now()
+            );
+            when(commissionPolicyRepository.findActiveByLandlordOrgId(landlordOrgId))
+                    .thenReturn(Optional.of(override));
+            when(commissionPolicyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            service.clearLandlordRate(landlordOrgId);
+
+            assertThat(override.getRatePercent()).isEqualByComparingTo("7.00");
+            assertThat(override.isActive()).isFalse();
+        }
+    }
 }
