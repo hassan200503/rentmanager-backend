@@ -30,6 +30,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -161,6 +162,19 @@ public class ReservationFulfillmentOrchestrator {
             String clerkUserId = clerkResult.clerkUserId();
             saga.clerkUserId = clerkUserId;
             saga.clerkUserCreatedThisRun = clerkResult.newlyCreated();
+
+            // Backend-authoritative persona write for a brand-new renter.
+            // Best-effort and only when the account was actually created by
+            // THIS run — a reused account already has its persona managed
+            // elsewhere, and a failure here must not fail the fulfillment
+            // saga (the existing deleteUser compensation already handles the
+            // failure aftermath if the saga itself fails).
+            if (clerkResult.newlyCreated()) {
+                clerkService.setPublicMetadata(
+                        clerkUserId,
+                        Map.of(ClerkService.USER_TYPE_KEY, "renter")
+                );
+            }
 
             // ---- Step 2: Sign-in token + SMS ----
             SignInTokenResult tokenResult = clerkService.createSignInToken(

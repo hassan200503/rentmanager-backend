@@ -158,6 +158,26 @@ public class ClerkServiceImpl implements ClerkService {
         }
     }
 
+    @Override
+    public void setPublicMetadata(String clerkUserId, Map<String, String> metadata) {
+        HttpHeaders headers = buildAuthHeaders();
+        Map<String, Object> body = Map.of("public_metadata", metadata);
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+
+        try {
+            restTemplate.exchange(
+                    properties.getBaseUrl() + "/users/" + clerkUserId + "/metadata",
+                    HttpMethod.PATCH,
+                    request,
+                    Map.class
+            );
+            log.info("Clerk public_metadata updated. clerkUserId={}, keys={}", clerkUserId, metadata.keySet());
+        } catch (Exception e) {
+            log.error("Failed to update Clerk public_metadata. clerkUserId={}, keys={} — " +
+                    "sync will self-heal on the next transition write", clerkUserId, metadata.keySet(), e);
+        }
+    }
+
     private String findUserIdByEmail(String email) {
         HttpHeaders headers = buildAuthHeaders();
         HttpEntity<Void> request = new HttpEntity<>(headers);

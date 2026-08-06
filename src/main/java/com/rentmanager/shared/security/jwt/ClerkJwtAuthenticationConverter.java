@@ -1,5 +1,6 @@
 package com.rentmanager.shared.security.jwt;
 
+import com.rentmanager.modules.identity.clerk.ClerkService;
 import com.rentmanager.modules.tenant.domain.model.Tenant;
 import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
@@ -8,6 +9,7 @@ import com.rentmanager.modules.user.domain.model.UserRole;
 import com.rentmanager.modules.user.domain.repository.UserRepository;
 import com.rentmanager.shared.security.context.TenantContext;
 import com.rentmanager.shared.security.principal.AuthenticatedUser;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -16,6 +18,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -46,15 +49,18 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
     private final UserRepository userRepository;
     private final TenantRepository tenantRepository;
     private final TenantProfileRepository tenantProfileRepository;
+    private final ObjectProvider<ClerkService> clerkServiceProvider;
 
     public ClerkJwtAuthenticationConverter(
             UserRepository userRepository,
             TenantRepository tenantRepository,
-            TenantProfileRepository tenantProfileRepository
+            TenantProfileRepository tenantProfileRepository,
+            ObjectProvider<ClerkService> clerkServiceProvider
     ) {
         this.userRepository = userRepository;
         this.tenantRepository = tenantRepository;
         this.tenantProfileRepository = tenantProfileRepository;
+        this.clerkServiceProvider = clerkServiceProvider;
     }
 
     @Override
@@ -64,12 +70,13 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
         String clerkUserId = jwt.getSubject();
         String clerkOrgId = jwt.getClaimAsString(CLAIM_TENANT_ID);
         String email = jwt.getClaimAsString(CLAIM_EMAIL);
+        String platformRole = jwt.getClaimAsString(CLAIM_PLATFORM_ROLE);
 
         User user = resolveOrProvisionUser(clerkUserId, email);
-        UUID resolvedTenantId = resolveTenantId(clerkOrgId, user);
+        UUID resolvedTenantId = resolveTenantId(clerkOrgId, user, platformRole);
 
         Set<SimpleGrantedAuthority> authorities = resolveAuthorities(clerkUserId, resolvedTenantId, user);
-        authorities = withPlatformAuthorities(authorities, jwt.getClaimAsString(CLAIM_PLATFORM_ROLE));
+        authorities = withPlatformAuthorities(authorities, platformRole);
 
         AuthenticatedUser authenticatedUser = new AuthenticatedUser(
                 user.getId(),
@@ -201,8 +208,17 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
      * A user whose role is already set (invited via the staff/manager
      * invite flow) never has its role overwritten here, regardless of
      * first-user status.
+     *
+     * METADATA PROMOTION (authoritative writer): the moment a user becomes
+     * bound to a landlord org — the renter/pending → landlord transition —
+     * the backend writes publicMetadata.userType ("landlord", or "admin"
+     * when the JWT also carries a platformRole claim, since admin is a
+     * superset persona). This is the authoritative write the frontend
+     * relies on (see ClerkService.setPublicMetadata javadoc + the frontend
+     * writer contract). Best-effort: a Clerk sync failure must never break
+     * authentication, so failures are logged, not thrown.
      */
-    private UUID resolveTenantId(String clerkOrgId, User user) {
+    private UUID resolveTenantId(String clerkOrgId, User user, String platformRole) {
 
         if (clerkOrgId == null || clerkOrgId.isBlank()) {
             return null;
@@ -233,8 +249,29 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
             }
 
             userRepository.save(user);
+            promoteUserType(user, platformRole);
         }
 
         return tenantId;
+    }
+
+    /**
+     * Backend-authoritative persona write at the tenant-binding transition.
+     * A user who is also a platform admin keeps "admin" (superset persona —
+     * the frontend routes admin+tenant dual holders to both trees). Everyone
+     * else becomes "landlord". Best-effort: ClerkService is optional (missing
+     * in @WebMvcTest slices, where the metadata write has no practical
+     * effect), and even when present, a Clerk sync failure must never break
+     * authentication.
+     */
+    private void promoteUserType(User user, String platformRole) {
+        ClerkService clerkService = clerkServiceProvider.getIfAvailable();
+        if (clerkService == null) {
+            return;
+        }
+        boolean isPlatformAdmin = PLATFORM_ROLE_OWNER.equalsIgnoreCase(platformRole)
+                || PLATFORM_ROLE_ADMIN.equalsIgnoreCase(platformRole);
+        String userType = isPlatformAdmin ? "admin" : "landlord";
+        clerkService.setPublicMetadata(user.getClerkUserId(), Map.of(ClerkService.USER_TYPE_KEY, userType));
     }
 }

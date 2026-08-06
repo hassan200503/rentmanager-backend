@@ -16,7 +16,7 @@ public final class TenantContext {
     public static UUID getTenantId() {
         UUID tenantId = CURRENT_TENANT.get();
         if (tenantId == null) {
-            throw new IllegalStateException("Tenant context not initialized");
+            throw new TenantContextNotBoundException();
         }
         return tenantId;
     }

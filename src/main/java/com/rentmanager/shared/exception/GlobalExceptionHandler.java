@@ -4,6 +4,7 @@ import com.rentmanager.contract.common.ApiResponse;
 import com.rentmanager.modules.rentledger.domain.exception.RentLedgerEntryNotFoundException;
 import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaException;
 import com.rentmanager.shared.error.ErrorTrackingService;
+import com.rentmanager.shared.security.context.TenantContextNotBoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -213,6 +214,35 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
                 .body(ApiResponse.fail(ex.getMessage(), "CONFLICT"));
+    }
+
+    // =========================================================
+    // TENANT CONTEXT NOT BOUND (SECURITY: 403, NOT 409/500)
+    // =========================================================
+    // A tenant-scoped operation ran with no tenant context bound at all —
+    // the caller never resolved to any tenant (pending onboarder, renter
+    // without validator authorisation, or a token shorn of tenant claims).
+    // This is an authorization condition: 403, never a 5xx that reads as a
+    // retryable server fault. Mirrors the frontend TenantMismatchError /403
+    // contract (AUTH_TENANT_MISMATCH) for cross-persona requests.
+    @ExceptionHandler(TenantContextNotBoundException.class)
+    public ResponseEntity<ApiResponse<Object>> handleTenantContextNotBound(
+            TenantContextNotBoundException ex,
+            HttpServletRequest request
+    ) {
+
+        errorTrackingService.capture(
+                ex,
+                "SECURITY",
+                "TENANT_NOT_BOUND",
+                resolveModule(request),
+                request,
+                Map.of("type", "TenantContextNotBoundException")
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.fail("A tenant context is required for this operation", "TENANT_NOT_BOUND"));
     }
 
     // =========================================================

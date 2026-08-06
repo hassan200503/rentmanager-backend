@@ -1,5 +1,6 @@
 package com.rentmanager.shared.security.jwt;
 
+import com.rentmanager.modules.identity.clerk.ClerkService;
 import com.rentmanager.modules.tenant.domain.model.Tenant;
 import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
@@ -14,10 +15,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -60,11 +63,19 @@ class ClerkJwtAuthenticationConverterTest {
     @Mock
     private Tenant tenant;
 
+    @Mock
+    private ClerkService clerkService;
+
+    private ObjectProvider<ClerkService> clerkServiceProvider;
+
     private ClerkJwtAuthenticationConverter converter;
 
     @BeforeEach
     void setUp() {
-        converter = new ClerkJwtAuthenticationConverter(userRepository, tenantRepository, tenantProfileRepository);
+        clerkServiceProvider = mock(ObjectProvider.class);
+        lenient().when(clerkServiceProvider.getIfAvailable()).thenReturn(clerkService);
+        converter = new ClerkJwtAuthenticationConverter(
+                userRepository, tenantRepository, tenantProfileRepository, clerkServiceProvider);
     }
 
     @AfterEach
@@ -212,6 +223,71 @@ class ClerkJwtAuthenticationConverterTest {
 
         assertThat(authorityStrings(token)).containsExactly("ROLE_PENDING_ONBOARDING");
         verifyNoInteractions(tenantRepository);
+    }
+
+    // ------------------------------------------------------------------
+    // METADATA PROMOTION (backend-authoritative userType writer)
+    // ------------------------------------------------------------------
+
+    @Test
+    void tenantBinding_promotesLandlordUserTypeMetadata() {
+        UUID tenantId = UUID.randomUUID();
+        User newUser = User.createFromClerk(CLERK_USER_ID, EMAIL);
+
+        when(userRepository.findByClerkUserId(CLERK_USER_ID)).thenReturn(Optional.of(newUser));
+        when(tenant.getId()).thenReturn(tenantId);
+        when(tenantRepository.findByClerkOrgId(CLERK_ORG_ID)).thenReturn(Optional.of(tenant));
+        when(userRepository.existsByTenantId(tenantId)).thenReturn(false);
+
+        converter.convert(jwtWithOrg(CLERK_ORG_ID));
+
+        verify(clerkService).setPublicMetadata(CLERK_USER_ID, Map.of("userType", "landlord"));
+    }
+
+    @Test
+    void tenantBinding_forPlatformAdmin_promotesAdminUserTypeMetadata() {
+        UUID tenantId = UUID.randomUUID();
+        User newUser = User.createFromClerk(CLERK_USER_ID, EMAIL);
+
+        when(userRepository.findByClerkUserId(CLERK_USER_ID)).thenReturn(Optional.of(newUser));
+        when(tenant.getId()).thenReturn(tenantId);
+        when(tenantRepository.findByClerkOrgId(CLERK_ORG_ID)).thenReturn(Optional.of(tenant));
+        when(userRepository.existsByTenantId(tenantId)).thenReturn(false);
+
+        Jwt jwt = jwtWithOrg(CLERK_ORG_ID);
+        when(jwt.getClaimAsString("platformRole")).thenReturn("OWNER");
+
+        converter.convert(jwt);
+
+        verify(clerkService).setPublicMetadata(CLERK_USER_ID, Map.of("userType", "admin"));
+    }
+
+    @Test
+    void noTenantBinding_noMetadataWrite() {
+        when(userRepository.findByClerkUserId(CLERK_USER_ID)).thenReturn(Optional.empty());
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(tenantRepository.findByClerkOrgId(CLERK_ORG_ID)).thenReturn(Optional.empty());
+        when(tenantProfileRepository.existsByClerkUserId(CLERK_USER_ID)).thenReturn(false);
+
+        converter.convert(jwtWithOrg(CLERK_ORG_ID));
+
+        verifyNoInteractions(clerkService);
+    }
+
+    @Test
+    void alreadyLinkedTenant_noRepeatMetadataWrite() {
+        UUID tenantId = UUID.randomUUID();
+        User invitedUser = User.createInvited(
+                CLERK_USER_ID, EMAIL, "Jane", "Doe", tenantId, UserRole.MANAGER
+        );
+
+        when(userRepository.findByClerkUserId(CLERK_USER_ID)).thenReturn(Optional.of(invitedUser));
+        when(tenant.getId()).thenReturn(tenantId);
+        when(tenantRepository.findByClerkOrgId(CLERK_ORG_ID)).thenReturn(Optional.of(tenant));
+
+        converter.convert(jwtWithOrg(CLERK_ORG_ID));
+
+        verifyNoInteractions(clerkService);
     }
 
     @Test

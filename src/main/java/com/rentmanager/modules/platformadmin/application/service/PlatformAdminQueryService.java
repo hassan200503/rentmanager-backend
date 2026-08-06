@@ -6,6 +6,7 @@ import com.rentmanager.modules.platformadmin.api.dto.response.AdminOverviewRespo
 import com.rentmanager.modules.platformadmin.api.dto.response.LandlordDetailResponse;
 import com.rentmanager.modules.platformadmin.api.dto.response.LandlordSummaryResponse;
 import com.rentmanager.modules.platformadmin.api.dto.response.PropertyDetailResponse;
+import com.rentmanager.modules.platformadmin.api.dto.response.UserTypeSnapshot;
 import com.rentmanager.modules.platformadmin.infrastructure.persistence.projection.PaymentRequestStatusCount;
 import com.rentmanager.modules.platformadmin.infrastructure.persistence.projection.TenantIdCount;
 import com.rentmanager.modules.platformadmin.infrastructure.persistence.projection.TenantIdMoney;
@@ -21,8 +22,11 @@ import com.rentmanager.modules.rentledger.infrastructure.persistence.entity.Rent
 import com.rentmanager.modules.tenant.domain.enums.TenantStatus;
 import com.rentmanager.modules.tenant.infrastructure.persistence.entity.TenantEntity;
 import com.rentmanager.modules.tenant.renter.infrastructure.persistence.entity.TenantProfileEntity;
+import com.rentmanager.modules.tenant.renter.infrastructure.persistence.repository.TenantProfileJpaRepository;
 import com.rentmanager.modules.unit.domain.enums.UnitOccupancyStatus;
 import com.rentmanager.modules.unit.infrastructure.persistence.entity.UnitJpaEntity;
+import com.rentmanager.modules.user.domain.model.UserRole;
+import com.rentmanager.modules.user.infrastructure.persistence.repository.UserJpaRepository;
 import com.rentmanager.shared.exception.ErrorCode;
 import com.rentmanager.shared.exception.ResourceNotFoundException;
 import lombok.extern.slf4j.Slf4j;
@@ -38,13 +42,10 @@ import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-import java.util.stream.Collectors;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -71,6 +72,8 @@ public class PlatformAdminQueryService {
     private final PlatformAdminCommissionService platformAdminCommissionService;
     private final String darajaBaseUrl;
     private final com.rentmanager.modules.rentledger.application.scheduler.DisbursementRetrySweepService disbursementRetryService;
+    private final UserJpaRepository userJpaRepository;
+    private final TenantProfileJpaRepository tenantProfileJpaRepository;
 
     /**
      * Platform admin action: change a landlord's account status (activate/suspend).
@@ -149,7 +152,9 @@ public class PlatformAdminQueryService {
             CommissionPolicyService commissionPolicyService,
             PlatformAdminCommissionService platformAdminCommissionService,
             com.rentmanager.modules.rentledger.application.scheduler.DisbursementRetrySweepService disbursementRetryService,
-            @Value("${daraja.base-url:https://api.safaricom.co.ke}") String darajaBaseUrl) {
+            @Value("${daraja.base-url:https://api.safaricom.co.ke}") String darajaBaseUrl,
+            UserJpaRepository userJpaRepository,
+            TenantProfileJpaRepository tenantProfileJpaRepository) {
         this.adminReadModelRepository = adminReadModelRepository;
         this.adminTenantJpaRepository = adminTenantJpaRepository;
         this.propertyJpaRepository = propertyJpaRepository;
@@ -157,6 +162,59 @@ public class PlatformAdminQueryService {
         this.platformAdminCommissionService = platformAdminCommissionService;
         this.disbursementRetryService = disbursementRetryService;
         this.darajaBaseUrl = darajaBaseUrl;
+        this.userJpaRepository = userJpaRepository;
+        this.tenantProfileJpaRepository = tenantProfileJpaRepository;
+    }
+
+/**
+     * Identity snapshot for the one-time userType backfill (frontend
+     * scripts/migrate-user-types.ts). Classifies every identity from LOCAL
+     * database truth, mirroring the backend's DB-derived authority:
+     *
+     *   - local User row with role/tenant link  → landlord
+     *   - TenantProfile row (renter identity)   → renter
+     *   - neither (authenticated, unbound)      → landlord_pending
+     *
+     * Platform admins have no DB row (platformRole is a claim, not
+     * persisted state) and are therefore NOT present here — the migration
+     * script treats unknown ids as "no truth" and skips them.
+     */
+    @Transactional(readOnly = true)
+    public List<UserTypeSnapshot> getUserTypes() {
+        // Renter profiles are the ONLY renter-side identity rows. Some
+        // renters (fulfillment-created, not yet signed in) have a profile
+        // but no User row — the union below guarantees they are still
+        // classified, so the backfill never leaves a gap.
+        Set<String> renterClerkUserIds =
+                new HashSet<>(tenantProfileJpaRepository.findAllClerkUserIds());
+
+        Set<String> seen = new HashSet<>();
+        List<UserTypeSnapshot> snapshots = userJpaRepository.findAll().stream()
+                .map(user -> {
+                    String clerkUserId = user.getClerkUserId();
+                    seen.add(clerkUserId);
+                    return new UserTypeSnapshot(
+                            clerkUserId,
+                            classifyUser(clerkUserId, user.getRole(), user.getTenantId(), renterClerkUserIds));
+                })
+                .collect(Collectors.toCollection(java.util.ArrayList::new));
+
+        for (String renterClerkUserId : renterClerkUserIds) {
+            if (!seen.contains(renterClerkUserId)) {
+                snapshots.add(new UserTypeSnapshot(renterClerkUserId, "renter"));
+            }
+        }
+
+        log.info("Platform admin fetched identity snapshot. users={} renters={}",
+                snapshots.size(), renterClerkUserIds.size());
+        return snapshots;
+    }
+
+    private String classifyUser(String clerkUserId, UserRole role, UUID tenantId, Set<String> renterClerkUserIds) {
+        if (role != null || tenantId != null) {
+            return "landlord";
+        }
+        return renterClerkUserIds.contains(clerkUserId) ? "renter" : "landlord_pending";
     }
 
     @Transactional(readOnly = true)

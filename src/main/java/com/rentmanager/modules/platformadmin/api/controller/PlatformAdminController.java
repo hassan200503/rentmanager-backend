@@ -8,6 +8,7 @@ import com.rentmanager.modules.platformadmin.api.dto.response.LandlordCommission
 import com.rentmanager.modules.platformadmin.api.dto.response.LandlordDetailResponse;
 import com.rentmanager.modules.platformadmin.api.dto.response.LandlordSummaryResponse;
 import com.rentmanager.modules.platformadmin.api.dto.response.PlatformAdminInfoResponse;
+import com.rentmanager.modules.platformadmin.api.dto.response.UserTypeSnapshot;
 import com.rentmanager.modules.platformadmin.application.service.PlatformAdminCommissionService;
 import com.rentmanager.modules.platformadmin.application.service.PlatformAdminQueryService;
 import com.rentmanager.modules.rentledger.domain.enums.DisbursementStatus;
@@ -33,6 +34,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -127,6 +129,14 @@ public class PlatformAdminController {
     ) {
         Pageable pageable = PageRequest.of(page, Math.min(Math.max(size, 1), 100), Sort.by(Sort.Direction.DESC, "createdAt"));
         return ResponseEntity.ok(ApiResponse.ok("Renters", queryService.getRenters(search, landlordId, pageable)));
+    }
+
+    @GetMapping("/identity/users")
+    @PreAuthorize("hasAnyAuthority('ROLE_PLATFORM_OWNER', 'ROLE_PLATFORM_ADMIN')")
+    public ResponseEntity<ApiResponse<List<UserTypeSnapshot>>> identityUsers() {
+        return ResponseEntity.ok(ApiResponse.ok(
+                "Identity snapshot for userType backfill",
+                queryService.getUserTypes()));
     }
 
     @PatchMapping("/landlords/{landlordId}/status")

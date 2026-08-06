@@ -1,6 +1,17 @@
 package com.rentmanager.modules.identity.clerk;
 
+import java.util.Map;
+
 public interface ClerkService {
+
+    /**
+     * Canonical publicMetadata key for the persona. The authoritative driver
+     * is the Java backend: it writes this value at every state transition
+     * (see the writer contract in the frontend's lib/auth/clerk-metadata.ts).
+     * The frontend webhook only seeds it when ABSENT, so backend writes always
+     * win. Never both string here and allow it to drift.
+     */
+    String USER_TYPE_KEY = "userType";
 
     /**
      * Creates a tenant user in the external identity system, or reuses an
@@ -55,4 +66,22 @@ public interface ClerkService {
      * Never called for accounts that were reused rather than newly created.
      */
     void deleteUser(String clerkUserId);
+
+    /**
+     * Writes public_metadata for the given Clerk user. The caller supplies
+     * a flat map of keys to values — the backend is the AUTHORITATIVE writer
+     * of personas (see {@link #USER_TYPE_KEY}), and this method is how it
+     * persists a persona change (renter ↔ landlord_pending ↔ landlord). The
+     * frontend webhook may also seed a value, but it only ever does so when
+     * the key is absent, so a write here can never be stomped by a replayed
+     * webhook event.
+     *
+     * <p>Implementations must tolerate transient Clerk API failures without
+     * throwing into the caller's business transaction (callers log + move
+     * on, don't roll back a tenant/provisioning change because the metadata
+     * sync hiccuped). PATCH /users/{id}/metadata with {"public_metadata": {...}}
+     * (the dedicated metadata endpoint; public_metadata on PATCH /users/{id}
+     * itself is deprecated by Clerk).
+     */
+    void setPublicMetadata(String clerkUserId, Map<String, String> metadata);
 }

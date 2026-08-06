@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -89,6 +90,16 @@ public class UserCommandServiceImpl implements UserCommandService {
         }
 
         smsService.sendCredentials(request.getPhone(), password);
+
+        // Backend-authoritative persona write: any member of a landlord org
+        // (OWNER/MANAGER/STAFF) is a "landlord" userType. Best-effort — a
+        // Clerk sync failure must not roll back a successful invite; the
+        // next converter-based promotion or the frontend migration will
+        // converge the metadata.
+        clerkService.setPublicMetadata(
+                clerkUserId,
+                Map.of(ClerkService.USER_TYPE_KEY, "landlord")
+        );
 
         log.info("User invited. userId={} tenantId={} role={} invitedBy={}",
                 savedUser.getId(), tenantId, request.getRole(), inviterUserId);

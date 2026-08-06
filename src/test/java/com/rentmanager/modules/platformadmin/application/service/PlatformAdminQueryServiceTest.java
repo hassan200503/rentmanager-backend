@@ -63,6 +63,8 @@ class PlatformAdminQueryServiceTest {
     private CommissionPolicyService commissionPolicyService;
     private PlatformAdminCommissionService commissionService;
     private com.rentmanager.modules.rentledger.application.scheduler.DisbursementRetrySweepService disbursementRetryService;
+    private com.rentmanager.modules.user.infrastructure.persistence.repository.UserJpaRepository userRepo;
+    private com.rentmanager.modules.tenant.renter.infrastructure.persistence.repository.TenantProfileJpaRepository tenantProfileRepo;
     private PlatformAdminQueryService service;
 
     @BeforeEach
@@ -73,9 +75,11 @@ class PlatformAdminQueryServiceTest {
         commissionPolicyService = mock(CommissionPolicyService.class);
         commissionService = mock(PlatformAdminCommissionService.class);
         disbursementRetryService = mock(com.rentmanager.modules.rentledger.application.scheduler.DisbursementRetrySweepService.class);
+        userRepo = mock(com.rentmanager.modules.user.infrastructure.persistence.repository.UserJpaRepository.class);
+        tenantProfileRepo = mock(com.rentmanager.modules.tenant.renter.infrastructure.persistence.repository.TenantProfileJpaRepository.class);
         service = new PlatformAdminQueryService(
-                readModel, tenantRepo, propertyRepo, commissionPolicyService, commissionService, 
-                disbursementRetryService, "https://sandbox.safaricom.co.ke");
+                readModel, tenantRepo, propertyRepo, commissionPolicyService, commissionService,
+                disbursementRetryService, "https://sandbox.safaricom.co.ke", userRepo, tenantProfileRepo);
     }
 
     @Test
@@ -130,7 +134,7 @@ class PlatformAdminQueryServiceTest {
     @Test
     void overview_marksProductionWhenBaseUrlIsNotSandbox() {
         service = new PlatformAdminQueryService(readModel, tenantRepo, propertyRepo, commissionPolicyService, commissionService,
-                disbursementRetryService, "https://api.safaricom.co.ke");
+                disbursementRetryService, "https://api.safaricom.co.ke", userRepo, tenantProfileRepo);
         when(tenantRepo.count()).thenReturn(0L);
 
         AdminOverviewResponse overview = service.getOverview();
@@ -240,6 +244,65 @@ class PlatformAdminQueryServiceTest {
 
         assertThatThrownBy(() -> service.getLandlordDetail(tenantId))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // ------------------------------------------------------------------
+    // Identity snapshot (userType backfill source of truth)
+    // ------------------------------------------------------------------
+
+    private com.rentmanager.modules.user.infrastructure.persistence.entity.UserEntity mockUser(
+            String clerkUserId,
+            com.rentmanager.modules.user.domain.model.UserRole role,
+            UUID tenantId) {
+        com.rentmanager.modules.user.infrastructure.persistence.entity.UserEntity user =
+                mock(com.rentmanager.modules.user.infrastructure.persistence.entity.UserEntity.class);
+        when(user.getClerkUserId()).thenReturn(clerkUserId);
+        when(user.getRole()).thenReturn(role);
+        when(user.getTenantId()).thenReturn(tenantId);
+        return user;
+    }
+
+    @Test
+    void getUserTypes_classifiesByLocalDatabaseTruth() {
+        var owner = mockUser("user_owner", com.rentmanager.modules.user.domain.model.UserRole.OWNER, tenantId);
+        var renter = mockUser("user_renter", null, null);
+        var pending = mockUser("user_pending", null, null);
+        when(userRepo.findAll()).thenReturn(List.of(owner, renter, pending));
+        when(tenantProfileRepo.findAllClerkUserIds())
+                .thenReturn(List.of("user_renter"));
+
+        var snapshots = service.getUserTypes();
+
+        assertThat(snapshots).extracting("clerkUserId")
+                .containsExactlyInAnyOrder("user_owner", "user_renter", "user_pending");
+        assertThat(snapshots).extracting("userType")
+                .containsExactlyInAnyOrder("landlord", "renter", "landlord_pending");
+    }
+
+    @Test
+    void getUserTypes_tenantBoundWithoutRole_isLandlord() {
+        var bound = mockUser("user_bound", null, tenantId);
+        when(userRepo.findAll()).thenReturn(List.of(bound));
+        when(tenantProfileRepo.findAllClerkUserIds()).thenReturn(List.of());
+
+        var snapshots = service.getUserTypes();
+
+        assertThat(snapshots).extracting("userType").containsExactly("landlord");
+    }
+
+    @Test
+    void getUserTypes_renterWithoutUserRow_isStillRenter() {
+        var renter = mockUser("user_renter", null, null);
+        when(userRepo.findAll()).thenReturn(List.of(renter));
+        when(tenantProfileRepo.findAllClerkUserIds())
+                .thenReturn(List.of("user_renter", "user_other_renter_only"));
+
+        var snapshots = service.getUserTypes();
+
+        assertThat(snapshots).extracting("clerkUserId")
+                .containsExactlyInAnyOrder("user_renter", "user_other_renter_only");
+        assertThat(snapshots).extracting("userType")
+                .containsExactlyInAnyOrder("renter", "renter");
     }
 
     private void stubAggregates(UUID id) {
