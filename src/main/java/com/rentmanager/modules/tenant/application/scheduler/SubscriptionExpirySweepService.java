@@ -1,12 +1,12 @@
 package com.rentmanager.modules.tenant.application.scheduler;
 
+import com.rentmanager.modules.platformsettings.application.service.PlatformSettingsService;
 import com.rentmanager.modules.tenant.domain.enums.SubscriptionPaymentRequestStatus;
 import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;
 import com.rentmanager.modules.tenant.domain.model.SubscriptionPaymentRequest;
 import com.rentmanager.modules.tenant.domain.model.Tenant;
 import com.rentmanager.modules.tenant.domain.repository.SubscriptionPaymentRequestRepository;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
-import com.rentmanager.modules.tenant.infrastructure.config.SubscriptionBillingProperties;
 import com.rentmanager.modules.tenant.infrastructure.daraja.SubscriptionPaymentCallbackTransactionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,19 +51,20 @@ public class SubscriptionExpirySweepService {
     private final TenantRepository tenantRepository;
     private final SubscriptionPaymentRequestRepository paymentRequestRepository;
     private final SubscriptionPaymentCallbackTransactionService callbackTxService;
-    private final SubscriptionBillingProperties properties;
+    private final PlatformSettingsService platformSettingsService;
 
     public void enterGraceForExpiredSubscriptions() {
         LocalDate today = LocalDate.now();
+        int graceDays = platformSettingsService.getEffectiveSettings().getPremiumGraceDays();
         List<Tenant> due = tenantRepository.findPremiumRenewalsDue(today);
         if (due.isEmpty()) {
             return;
         }
-        log.info("Subscription expiry sweep found {} candidate(s) with period ended on or before {}",
-                due.size(), today);
+        log.info("Subscription expiry sweep found {} candidate(s) with period ended on or before {} (graceDays={})",
+                due.size(), today, graceDays);
         for (Tenant tenant : due) {
             try {
-                graceOne(tenant.getId());
+                graceOne(tenant.getId(), graceDays);
             } catch (Exception e) {
                 log.error("Failed to move subscription into grace - will retry on next sweep. tenantId={}",
                         tenant.getId(), e);
@@ -108,14 +109,16 @@ public class SubscriptionExpirySweepService {
     }
 
     public void expireStalePaymentRequests() {
-        Instant cutoff = Instant.now().minus(
-                Duration.ofMinutes(properties.getPaymentRequestExpiryMinutes()));
+        int expiryMinutes = platformSettingsService.getEffectiveSettings()
+                .getSubscriptionPaymentExpiryMinutes();
+        Instant cutoff = Instant.now().minus(Duration.ofMinutes(expiryMinutes));
         List<SubscriptionPaymentRequest> stale = paymentRequestRepository
                 .findByStatusAndCreatedAtBefore(SubscriptionPaymentRequestStatus.PENDING, cutoff);
         if (stale.isEmpty()) {
             return;
         }
-        log.info("Stale subscription payment sweep found {} candidate(s) older than {}", stale.size(), cutoff);
+        log.info("Stale subscription payment sweep found {} candidate(s) older than {} (expiryMinutes={})",
+                stale.size(), cutoff, expiryMinutes);
         for (SubscriptionPaymentRequest request : stale) {
             try {
                 expireOne(request.getId());
@@ -133,7 +136,7 @@ public class SubscriptionExpirySweepService {
      * extends the period from its anchor, covering the overdue cycle.
      */
     @Transactional
-    public void graceOne(UUID tenantId) {
+    public void graceOne(UUID tenantId, int graceDays) {
         Tenant tenant = tenantRepository.findById(tenantId).orElse(null);
         if (tenant == null || !tenant.isPremiumBilling()
                 || tenant.getSubscriptionStatus() != SubscriptionStatus.ACTIVE
@@ -144,10 +147,10 @@ public class SubscriptionExpirySweepService {
             return;
         }
 
-        tenant.enterPremiumGracePeriod(tenant.getPlanEndDate().plusDays(properties.getGraceDays()));
+        tenant.enterPremiumGracePeriod(tenant.getPlanEndDate().plusDays(graceDays));
         tenantRepository.save(tenant);
-        log.warn("Premium subscription entered grace window. tenantId={} planEndDate={} graceEndsAt={}",
-                tenantId, tenant.getPlanEndDate(), tenant.getPlanGraceEndsAt());
+        log.warn("Premium subscription entered grace window. tenantId={} planEndDate={} graceEndsAt={} graceDays={}",
+                tenantId, tenant.getPlanEndDate(), tenant.getPlanGraceEndsAt(), graceDays);
     }
 
     /**

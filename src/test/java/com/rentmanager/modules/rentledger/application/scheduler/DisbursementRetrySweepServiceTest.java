@@ -1,5 +1,7 @@
 package com.rentmanager.modules.rentledger.application.scheduler;
 
+import com.rentmanager.modules.platformsettings.application.service.PlatformSettingsService;
+import com.rentmanager.modules.platformsettings.domain.model.PlatformSettings;
 import com.rentmanager.modules.rentledger.domain.enums.DisbursementStatus;
 import com.rentmanager.modules.rentledger.domain.model.Disbursement;
 import com.rentmanager.modules.rentledger.domain.repository.DisbursementRepository;
@@ -29,6 +31,8 @@ class DisbursementRetrySweepServiceTest {
     private DisbursementRepository disbursementRepository;
     @Mock
     private DarajaB2CService darajaB2CService;
+    @Mock
+    private PlatformSettingsService platformSettingsService;
 
     private DisbursementRetrySweepService sweepService;
 
@@ -39,7 +43,10 @@ class DisbursementRetrySweepServiceTest {
 
     @BeforeEach
     void setUp() {
-        sweepService = new DisbursementRetrySweepService(disbursementRepository, darajaB2CService);
+        lenient().when(platformSettingsService.getEffectiveSettings())
+                .thenReturn(PlatformSettings.defaults("test"));
+        sweepService = new DisbursementRetrySweepService(
+                disbursementRepository, darajaB2CService, platformSettingsService);
 
         failedDisbursement = Disbursement.rehydrate(
                 disbursementId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),

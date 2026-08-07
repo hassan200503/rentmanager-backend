@@ -23,8 +23,9 @@ import java.util.UUID;
 /**
  * Super-admin commission override endpoints for a single landlord. These are
  * intentionally separate from {@code /api/v1/commission-policies/*} (which a
- * landlord OWNER may also touch): only the platform owner/admin may reach the
- * admin surface, and setting/clearing here never mutates the platform default.
+ * landlord OWNER may also touch): reads are open to any platform operator,
+ * but setting/clearing an override is restricted to ROLE_PLATFORM_OWNER
+ * (commission is platform money), and never mutates the platform default.
  */
 @RestController
 @RequestMapping("/api/v1/admin/landlords/{landlordId}/commission")
@@ -40,8 +41,8 @@ public class PlatformAdminCommissionController {
                 "Commission status", commissionService.getCommissionFor(landlordId)));
     }
 
-    @PutMapping
-    @PreAuthorize("hasAnyAuthority('ROLE_PLATFORM_OWNER', 'ROLE_PLATFORM_ADMIN')")
+@PutMapping
+    @PreAuthorize("hasAuthority('ROLE_PLATFORM_OWNER')")
     public ResponseEntity<ApiResponse<LandlordCommissionResponse>> setCommission(
             @PathVariable UUID landlordId,
             @Valid @RequestBody SetLandlordCommissionRequest request,
@@ -52,8 +53,8 @@ public class PlatformAdminCommissionController {
                 commissionService.setCommission(landlordId, request.ratePercent(), resolveActor(authentication))));
     }
 
-    @DeleteMapping
-    @PreAuthorize("hasAnyAuthority('ROLE_PLATFORM_OWNER', 'ROLE_PLATFORM_ADMIN')")
+@DeleteMapping
+    @PreAuthorize("hasAuthority('ROLE_PLATFORM_OWNER')")
     public ResponseEntity<ApiResponse<Void>> clearCommission(@PathVariable UUID landlordId) {
         commissionService.clearCommission(landlordId);
         return ResponseEntity.ok(ApiResponse.ok("Commission override cleared", null));

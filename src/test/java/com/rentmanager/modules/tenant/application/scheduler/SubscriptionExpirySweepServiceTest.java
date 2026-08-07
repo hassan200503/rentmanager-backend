@@ -1,5 +1,7 @@
 package com.rentmanager.modules.tenant.application.scheduler;
 
+import com.rentmanager.modules.platformsettings.application.service.PlatformSettingsService;
+import com.rentmanager.modules.platformsettings.domain.model.PlatformSettings;
 import com.rentmanager.modules.tenant.domain.enums.BillingMode;
 import com.rentmanager.modules.tenant.domain.enums.SubscriptionPaymentPurpose;
 import com.rentmanager.modules.tenant.domain.enums.SubscriptionPaymentRequestStatus;
@@ -40,6 +42,7 @@ class SubscriptionExpirySweepServiceTest {
     private SubscriptionPaymentRequestRepository paymentRequestRepository;
     private SubscriptionPaymentCallbackTransactionService callbackTxService;
     private SubscriptionBillingProperties properties;
+    private PlatformSettingsService platformSettingsService;
 
     private SubscriptionExpirySweepService sweepService;
 
@@ -51,6 +54,9 @@ class SubscriptionExpirySweepServiceTest {
         tenantRepository = mock(TenantRepository.class);
         paymentRequestRepository = mock(SubscriptionPaymentRequestRepository.class);
         callbackTxService = mock(SubscriptionPaymentCallbackTransactionService.class);
+        platformSettingsService = mock(PlatformSettingsService.class);
+        when(platformSettingsService.getEffectiveSettings())
+                .thenReturn(PlatformSettings.defaults("test"));
         properties = new SubscriptionBillingProperties();
         properties.setGraceDays(7);
         properties.setPaymentRequestExpiryMinutes(30);
@@ -59,7 +65,7 @@ class SubscriptionExpirySweepServiceTest {
                 tenantRepository,
                 paymentRequestRepository,
                 callbackTxService,
-                properties
+                platformSettingsService
         );
     }
 
@@ -115,7 +121,7 @@ class SubscriptionExpirySweepServiceTest {
         Tenant tenant = buildPremiumTenant(LocalDate.now().plusDays(10));
         when(tenantRepository.findById(TENANT_ID)).thenReturn(Optional.of(tenant));
 
-        sweepService.graceOne(TENANT_ID);
+        sweepService.graceOne(TENANT_ID, properties.getGraceDays());
 
         assertEquals(SubscriptionStatus.ACTIVE, tenant.getSubscriptionStatus());
         verify(tenantRepository, never()).save(any());
@@ -126,7 +132,7 @@ class SubscriptionExpirySweepServiceTest {
         Tenant tenant = buildTenant();
         when(tenantRepository.findById(TENANT_ID)).thenReturn(Optional.of(tenant));
 
-        sweepService.graceOne(TENANT_ID);
+        sweepService.graceOne(TENANT_ID, properties.getGraceDays());
 
         verify(tenantRepository, never()).save(any());
     }

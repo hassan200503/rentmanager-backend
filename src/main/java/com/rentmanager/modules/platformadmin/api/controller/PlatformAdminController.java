@@ -47,6 +47,10 @@ import java.util.stream.Collectors;
  * in ClerkJwtAuthenticationConverter. An endpoint here with no
  * {@code @PreAuthorize} is a bug - landlord and renter tokens must always
  * be rejected regardless of what the frontend route guard shows.
+ *
+ * Writes that govern money or platform policy (landlord status changes,
+ * default commission, disbursement retries) require ROLE_PLATFORM_OWNER —
+ * staff platform admins are read/operational only.
  */
 @RestController
 @RequestMapping("/api/v1/admin")
@@ -127,7 +131,8 @@ public class PlatformAdminController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        Pageable pageable = PageRequest.of(page, Math.min(Math.max(size, 1), 100), Sort.by(Sort.Direction.DESC, "createdAt"));
+        Pageable pageable = PageRequest.of(page, Math.min(Math.max(size, 1), 100),
+                Sort.unsorted());
         return ResponseEntity.ok(ApiResponse.ok("Renters", queryService.getRenters(search, landlordId, pageable)));
     }
 
@@ -140,7 +145,7 @@ public class PlatformAdminController {
     }
 
     @PatchMapping("/landlords/{landlordId}/status")
-    @PreAuthorize("hasAnyAuthority('ROLE_PLATFORM_OWNER', 'ROLE_PLATFORM_ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_PLATFORM_OWNER')")
     public ResponseEntity<ApiResponse<Void>> updateLandlordStatus(
             @PathVariable UUID landlordId,
             @Valid @RequestBody UpdateLandlordStatusRequest request
@@ -156,7 +161,7 @@ public class PlatformAdminController {
     }
 
     @PutMapping("/commission/default")
-    @PreAuthorize("hasAnyAuthority('ROLE_PLATFORM_OWNER', 'ROLE_PLATFORM_ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_PLATFORM_OWNER')")
     public ResponseEntity<ApiResponse<LandlordCommissionResponse>> setDefaultCommission(
             @Valid @RequestBody SetLandlordCommissionRequest request,
             Authentication authentication
@@ -181,7 +186,7 @@ public class PlatformAdminController {
     }
 
     @PostMapping("/disbursements/{disbursementId}/retry")
-    @PreAuthorize("hasAnyAuthority('ROLE_PLATFORM_OWNER', 'ROLE_PLATFORM_ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_PLATFORM_OWNER')")
     public ResponseEntity<ApiResponse<Void>> retryDisbursement(@PathVariable UUID disbursementId) {
         queryService.retryDisbursement(disbursementId);
         return ResponseEntity.ok(ApiResponse.ok("Disbursement retry initiated", null));

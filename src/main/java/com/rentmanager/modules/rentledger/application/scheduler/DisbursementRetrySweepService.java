@@ -1,5 +1,6 @@
 package com.rentmanager.modules.rentledger.application.scheduler;
 
+import com.rentmanager.modules.platformsettings.application.service.PlatformSettingsService;
 import com.rentmanager.modules.rentledger.domain.enums.DisbursementStatus;
 import com.rentmanager.modules.rentledger.domain.model.Disbursement;
 import com.rentmanager.modules.rentledger.domain.repository.DisbursementRepository;
@@ -16,10 +17,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class DisbursementRetrySweepService {
 
-    private static final int MAX_RETRIES = 3;
-
     private final DisbursementRepository disbursementRepository;
     private final DarajaB2CService darajaB2CService;
+    private final PlatformSettingsService platformSettingsService;
 
     @Transactional
     public void retryOne(UUID disbursementId) {
@@ -37,9 +37,12 @@ public class DisbursementRetrySweepService {
             return;
         }
 
-        if (disbursement.getRetryCount() >= MAX_RETRIES) {
-            log.warn("Disbursement {} has exhausted retries (retryCount={}) — flagging for manual attention",
-                    disbursementId, disbursement.getRetryCount());
+        int maxRetries = platformSettingsService.getEffectiveSettings()
+                .getDisbursementMaxRetryAttempts();
+
+        if (disbursement.getRetryCount() >= maxRetries) {
+            log.warn("Disbursement {} has exhausted retries (retryCount={}, maxRetries={}) — flagging for manual attention",
+                    disbursementId, disbursement.getRetryCount(), maxRetries);
             disbursement.markRequiresManualAttention();
             disbursementRepository.save(disbursement);
             return;
@@ -58,7 +61,7 @@ public class DisbursementRetrySweepService {
             disbursement.markFailed("Retry failed: " + e.getMessage(), null);
             disbursementRepository.save(disbursement);
             log.error("Retry failed for disbursement {} — attempt {}/{}",
-                    disbursementId, disbursement.getRetryCount(), MAX_RETRIES, e);
+                    disbursementId, disbursement.getRetryCount(), maxRetries, e);
             return;
         }
 
