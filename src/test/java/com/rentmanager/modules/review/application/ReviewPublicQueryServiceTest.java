@@ -5,6 +5,7 @@ import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.modules.review.application.dto.response.LandlordReviewResponse;
 import com.rentmanager.modules.review.application.dto.response.ReviewSummaryResponse;
+import com.rentmanager.modules.review.domain.enums.ReviewStatus;
 import com.rentmanager.modules.unit.domain.model.Unit;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,7 +61,7 @@ class ReviewPublicQueryServiceTest {
         service.getForUnit(unitId);
 
         verify(reviewQueryService).getSummary(landlordTenantId);
-        verify(reviewQueryService).getReviews(landlordTenantId);
+        verify(reviewQueryService).getApprovedReviews(landlordTenantId);
     }
 
     @Test
@@ -101,10 +102,10 @@ class ReviewPublicQueryServiceTest {
                 .thenReturn(Optional.of(unit));
         when(reviewQueryService.getSummary(landlordTenantId))
                 .thenReturn(new ReviewSummaryResponse(2, null, false));
-        when(reviewQueryService.getReviews(landlordTenantId))
+        when(reviewQueryService.getApprovedReviews(landlordTenantId))
                 .thenReturn(List.of(
-                        new LandlordReviewResponse(UUID.randomUUID(), "Wanjiku Mwangi", 5, "Excellent", Instant.now()),
-                        new LandlordReviewResponse(UUID.randomUUID(), "Brian", 4, "Good", Instant.now())));
+                        new LandlordReviewResponse(UUID.randomUUID(), "Wanjiku Mwangi", 5, "Excellent", ReviewStatus.APPROVED, Instant.now()),
+                        new LandlordReviewResponse(UUID.randomUUID(), "Brian", 4, "Good", ReviewStatus.APPROVED, Instant.now())));
 
         var result = service.getForUnit(unitId);
 
@@ -121,7 +122,7 @@ class ReviewPublicQueryServiceTest {
                 .thenReturn(Optional.of(unit));
         when(reviewQueryService.getSummary(landlordTenantId))
                 .thenReturn(new ReviewSummaryResponse(2, null, false));
-        when(reviewQueryService.getReviews(landlordTenantId)).thenReturn(List.of());
+        when(reviewQueryService.getApprovedReviews(landlordTenantId)).thenReturn(List.of());
 
         var result = service.getForUnit(unitId);
 
@@ -132,7 +133,7 @@ class ReviewPublicQueryServiceTest {
     private void stubQueryService() {
         when(reviewQueryService.getSummary(landlordTenantId))
                 .thenReturn(new ReviewSummaryResponse(0, null, false));
-        when(reviewQueryService.getReviews(landlordTenantId)).thenReturn(List.of());
+        when(reviewQueryService.getApprovedReviews(landlordTenantId)).thenReturn(List.of());
     }
 
     private Unit mockUnit() {

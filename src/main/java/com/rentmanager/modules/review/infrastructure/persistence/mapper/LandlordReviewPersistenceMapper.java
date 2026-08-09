@@ -19,6 +19,7 @@ public class LandlordReviewPersistenceMapper {
         jpa.setLeaseId(review.getLeaseId());
         jpa.setRating(review.getRating());
         jpa.setComment(review.getComment());
+        jpa.setStatus(review.getStatus());
         return jpa;
     }
 
@@ -33,6 +34,7 @@ public class LandlordReviewPersistenceMapper {
                 jpa.getLeaseId(),
                 jpa.getRating(),
                 jpa.getComment(),
+                jpa.getStatus(),
                 jpa.getVersion(),
                 jpa.getCreatedAt(),
                 jpa.getUpdatedAt()

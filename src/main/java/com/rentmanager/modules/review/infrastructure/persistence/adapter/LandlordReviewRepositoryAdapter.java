@@ -1,5 +1,6 @@
 package com.rentmanager.modules.review.infrastructure.persistence.adapter;
 
+import com.rentmanager.modules.review.domain.enums.ReviewStatus;
 import com.rentmanager.modules.review.domain.model.LandlordReview;
 import com.rentmanager.modules.review.domain.repository.LandlordReviewRepository;
 import com.rentmanager.modules.review.infrastructure.persistence.entity.LandlordReviewJpaEntity;
@@ -46,5 +47,26 @@ public class LandlordReviewRepositoryAdapter implements LandlordReviewRepository
     @Override
     public long countByTenantId(UUID landlordTenantId) {
         return jpaRepository.countByTenantId(landlordTenantId);
+    }
+
+    @Override
+    public List<LandlordReview> findByTenantIdAndStatus(UUID landlordTenantId, ReviewStatus status) {
+        return jpaRepository.findByTenantIdAndStatusOrderByCreatedAtDesc(landlordTenantId, status)
+                .stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    public long countByTenantIdAndStatus(UUID landlordTenantId, ReviewStatus status) {
+        return jpaRepository.countByTenantIdAndStatus(landlordTenantId, status);
+    }
+
+    @Override
+    public List<LandlordReview> findApprovedByTenantId(UUID landlordTenantId) {
+        return findByTenantIdAndStatus(landlordTenantId, ReviewStatus.APPROVED);
+    }
+
+    @Override
+    public long countApprovedByTenantId(UUID landlordTenantId) {
+        return jpaRepository.countByTenantIdAndStatus(landlordTenantId, ReviewStatus.APPROVED);
     }
 }

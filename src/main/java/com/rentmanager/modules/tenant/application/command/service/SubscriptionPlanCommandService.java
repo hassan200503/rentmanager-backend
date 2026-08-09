@@ -9,5 +9,7 @@ public interface SubscriptionPlanCommandService {
 
     SubscriptionPlanResponse create(SubscriptionPlanRequest request);
 
+    SubscriptionPlanResponse update(UUID id, SubscriptionPlanRequest request);
+
     void deactivate(UUID id);
 }

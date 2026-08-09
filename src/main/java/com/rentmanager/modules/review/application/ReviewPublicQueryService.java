@@ -56,7 +56,7 @@ public class ReviewPublicQueryService {
     private PublicLandlordReviewsResponse getLandlordReviews(UUID landlordTenantId) {
         var summary = reviewQueryService.getSummary(landlordTenantId);
         List<PublicLandlordReviewResponse> reviews = reviewQueryService
-                .getReviews(landlordTenantId)
+                .getApprovedReviews(landlordTenantId)
                 .stream()
                 .map(ReviewPublicQueryService::toPublicReview)
                 .toList();

@@ -44,6 +44,28 @@ public class SubscriptionPlanCommandServiceImpl implements SubscriptionPlanComma
     }
 
     @Override
+    public SubscriptionPlanResponse update(UUID id, SubscriptionPlanRequest request) {
+        SubscriptionPlan plan = repository.findById(id)
+                .orElseThrow(() -> new com.rentmanager.shared.exception.ResourceNotFoundException(
+                        "Subscription plan not found: " + id,
+                        com.rentmanager.shared.exception.ErrorCode.RESOURCE_NOT_FOUND
+                ));
+
+        plan.update(
+                request.getName(),
+                request.getDescription(),
+                request.getBillingCycle(),
+                request.getMaxUnits(),
+                request.getMonthlyPrice(),
+                request.getYearlyPrice()
+        );
+
+        SubscriptionPlan saved = repository.save(plan);
+
+        return map(saved);
+    }
+
+    @Override
     public void deactivate(UUID id) {
         SubscriptionPlan plan = repository.findById(id)
                 .orElseThrow(() -> new com.rentmanager.shared.exception.ResourceNotFoundException(

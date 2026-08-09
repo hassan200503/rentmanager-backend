@@ -21,6 +21,8 @@ import com.rentmanager.modules.rentledger.api.dto.response.WhatsAppOptInResponse
 import com.rentmanager.modules.rentledger.application.service.TenantPortalService;
 import com.rentmanager.modules.review.api.dto.SubmitReviewRequest;
 import com.rentmanager.modules.review.application.dto.response.LandlordReviewResponse;
+import com.rentmanager.modules.review.application.dto.response.RenterReviewResponse;
+import com.rentmanager.modules.review.application.dto.response.ReviewSummaryResponse;
 import com.rentmanager.shared.security.principal.AuthenticatedUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -184,7 +186,28 @@ public class TenantPortalController {
             @Valid @RequestBody SubmitReviewRequest request
     ) {
         LandlordReviewResponse response = tenantPortalService.submitReview(
-                user.getUserId(), request.rating(), request.comment());        return ResponseEntity.ok(ApiResponse.ok("Review submitted", response));
+                user.getUserId(), request.rating(), request.comment());
+        return ResponseEntity.ok(ApiResponse.ok("Review submitted", response));
+    }
+
+    // -------------------------------------------------------
+    // RATINGS RECEIVED (V65) — landlord -> renter, approved only
+    // -------------------------------------------------------
+
+    @GetMapping("/reviews/about-me")
+    public ResponseEntity<ApiResponse<List<RenterReviewResponse>>> getReviewsReceived(
+            @AuthenticationPrincipal AuthenticatedUser user
+    ) {
+        List<RenterReviewResponse> responses = tenantPortalService.getReviewsReceived(user.getUserId());
+        return ResponseEntity.ok(ApiResponse.ok("Reviews retrieved", responses));
+    }
+
+    @GetMapping("/reviews/about-me/summary")
+    public ResponseEntity<ApiResponse<ReviewSummaryResponse>> getReviewsReceivedSummary(
+            @AuthenticationPrincipal AuthenticatedUser user
+    ) {
+        ReviewSummaryResponse response = tenantPortalService.getReviewsReceivedSummary(user.getUserId());
+        return ResponseEntity.ok(ApiResponse.ok("Review summary retrieved", response));
     }
 
     // -------------------------------------------------------

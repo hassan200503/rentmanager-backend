@@ -203,6 +203,39 @@ public class SubscriptionPlan extends BaseEntity {
   this.active = false;
  }
 
+ /**
+  * PRICE/TIER UPDATE (PLATFORM OWNER) - mutates only the catalog fields the
+  * persistence layer actually maps: pricing, tier limits and display copy.
+  * The code is the stable identity of a plan and is deliberately immutable.
+  */
+ public void update(
+         String name,
+         String description,
+         BillingCycle billingCycle,
+         Integer maxUnits,
+         BigDecimal monthlyPrice,
+         BigDecimal yearlyPrice
+ ) {
+  if (name == null || name.isBlank()) {
+   throw new IllegalArgumentException("Subscription plan name is required");
+  }
+  if (billingCycle == null) {
+   throw new IllegalArgumentException("Subscription plan billing cycle is required");
+  }
+  if (monthlyPrice != null && monthlyPrice.signum() < 0) {
+   throw new IllegalArgumentException("Monthly price cannot be negative");
+  }
+  if (yearlyPrice != null && yearlyPrice.signum() < 0) {
+   throw new IllegalArgumentException("Yearly price cannot be negative");
+  }
+  this.name = name;
+  this.description = description;
+  this.billingCycle = billingCycle;
+  this.maxUnits = maxUnits;
+  this.monthlyPrice = monthlyPrice;
+  this.yearlyPrice = yearlyPrice;
+ }
+
  public boolean isSelfService() {
   return selfService;
  }

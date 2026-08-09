@@ -36,9 +36,12 @@ import com.rentmanager.modules.rentledger.domain.repository.RentPaymentRequestRe
 import com.rentmanager.modules.rentledger.domain.repository.RentTransactionRepository;
 import com.rentmanager.modules.rentledger.domain.exception.RentLedgerStateException;
 import com.rentmanager.modules.rentledger.infrastructure.daraja.RentPaymentInitiationService;
+import com.rentmanager.modules.review.application.RenterReviewQueryService;
 import com.rentmanager.modules.review.application.ReviewCommandService;
 import com.rentmanager.modules.review.application.ReviewQueryService;
 import com.rentmanager.modules.review.application.dto.response.LandlordReviewResponse;
+import com.rentmanager.modules.review.application.dto.response.RenterReviewResponse;
+import com.rentmanager.modules.review.application.dto.response.ReviewSummaryResponse;
 import com.rentmanager.modules.tenant.domain.enums.BillingMode;
 import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;
 import com.rentmanager.modules.tenant.domain.model.Tenant;
@@ -93,6 +96,7 @@ public class TenantPortalService {
     private final AutoPayService autoPayService;
     private final ReviewCommandService reviewCommandService;
     private final ReviewQueryService reviewQueryService;
+    private final RenterReviewQueryService renterReviewQueryService;
     private final MaintenanceRequestCommandService maintenanceRequestCommandService;
     private final MaintenanceRequestRepository maintenanceRequestRepository;
     private final AnnouncementQueryService announcementQueryService;
@@ -283,6 +287,27 @@ public class TenantPortalService {
     public LandlordReviewResponse getMyReview(UUID userId) {
         TenantProfile profile = resolveTenantProfile(userId);
         return reviewQueryService.getRenterReview(profile.getTenantId(), profile.getId());
+    }
+
+    /**
+     * V65: the landlord reviews written about this renter — approved only,
+     * scoped to the authenticated renter's own profile.
+     */
+    @Transactional(readOnly = true)
+    public List<RenterReviewResponse> getReviewsReceived(UUID userId) {
+        TenantProfile profile = resolveTenantProfile(userId);
+        return renterReviewQueryService.getApprovedReviews(profile.getTenantId(), profile.getId());
+    }
+
+    /**
+     * V65: summary of the approved reviews written about this renter —
+     * same honesty rule as the landlord side (average hidden below 3
+     * reviews).
+     */
+    @Transactional(readOnly = true)
+    public ReviewSummaryResponse getReviewsReceivedSummary(UUID userId) {
+        TenantProfile profile = resolveTenantProfile(userId);
+        return renterReviewQueryService.getSummaryForProfile(profile.getTenantId(), profile.getId());
     }
 
     /**

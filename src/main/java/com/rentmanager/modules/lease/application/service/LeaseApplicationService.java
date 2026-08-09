@@ -381,6 +381,7 @@ public class LeaseApplicationService {
                 lease.getStartDate(),
                 lease.getEndDate(),
                 lease.getRentAmount(),
+                profile != null ? profile.getId() : null,
                 profile != null ? profile.getFullName() : null,
                 profile != null ? profile.getPhone() : null
         );

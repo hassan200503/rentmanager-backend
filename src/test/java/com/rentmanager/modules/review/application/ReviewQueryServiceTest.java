@@ -1,6 +1,7 @@
 package com.rentmanager.modules.review.application;
 
 import com.rentmanager.modules.review.application.dto.response.ReviewSummaryResponse;
+import com.rentmanager.modules.review.domain.enums.ReviewStatus;
 import com.rentmanager.modules.review.domain.model.LandlordReview;
 import com.rentmanager.modules.review.domain.repository.LandlordReviewRepository;
 import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
@@ -18,8 +19,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * Phase 4b: an average rating is only ever exposed once at least 3 reviews
- * exist - a trust signal built on one or two reviews is misleading.
+ * Phase 4b + V65: an average rating is only ever exposed once at least 3
+ * approved reviews exist — a trust signal built on one or two reviews is
+ * misleading, and pending/hidden content never counts.
  */
 class ReviewQueryServiceTest {
 
@@ -38,7 +40,7 @@ class ReviewQueryServiceTest {
 
     @Test
     void summaryIsEmpty_whenNoReviews() {
-        when(reviewRepository.countByTenantId(landlordTenantId)).thenReturn(0L);
+        when(reviewRepository.countApprovedByTenantId(landlordTenantId)).thenReturn(0L);
 
         ReviewSummaryResponse summary = service.getSummary(landlordTenantId);
 
@@ -51,8 +53,8 @@ class ReviewQueryServiceTest {
     void averageHidden_belowThreeReviews() {
         List<LandlordReview> twoReviews = List.of(
                 review(5), review(1));
-        when(reviewRepository.countByTenantId(landlordTenantId)).thenReturn(2L);
-        when(reviewRepository.findByTenantId(landlordTenantId)).thenReturn(twoReviews);
+        when(reviewRepository.countApprovedByTenantId(landlordTenantId)).thenReturn(2L);
+        when(reviewRepository.findApprovedByTenantId(landlordTenantId)).thenReturn(twoReviews);
 
         ReviewSummaryResponse summary = service.getSummary(landlordTenantId);
 
@@ -64,8 +66,8 @@ class ReviewQueryServiceTest {
     @Test
     void averageShown_atThreeReviews() {
         List<LandlordReview> threeReviews = List.of(review(5), review(5), review(4));
-        when(reviewRepository.countByTenantId(landlordTenantId)).thenReturn(3L);
-        when(reviewRepository.findByTenantId(landlordTenantId)).thenReturn(threeReviews);
+        when(reviewRepository.countApprovedByTenantId(landlordTenantId)).thenReturn(3L);
+        when(reviewRepository.findApprovedByTenantId(landlordTenantId)).thenReturn(threeReviews);
 
         ReviewSummaryResponse summary = service.getSummary(landlordTenantId);
 
@@ -77,12 +79,26 @@ class ReviewQueryServiceTest {
     @Test
     void averageRoundedToOneDecimal() {
         List<LandlordReview> threeReviews = List.of(review(5), review(5), review(3));
-        when(reviewRepository.countByTenantId(landlordTenantId)).thenReturn(3L);
-        when(reviewRepository.findByTenantId(landlordTenantId)).thenReturn(threeReviews);
+        when(reviewRepository.countApprovedByTenantId(landlordTenantId)).thenReturn(3L);
+        when(reviewRepository.findApprovedByTenantId(landlordTenantId)).thenReturn(threeReviews);
 
         ReviewSummaryResponse summary = service.getSummary(landlordTenantId);
 
         assertEquals(4.3, summary.averageRating());
+    }
+
+    @Test
+    void pendingAndHiddenReviewsNeverFeedTheSummary() {
+        when(reviewRepository.countApprovedByTenantId(landlordTenantId)).thenReturn(2L);
+        when(reviewRepository.findApprovedByTenantId(landlordTenantId))
+                .thenReturn(List.of(review(5), review(1)));
+
+        ReviewSummaryResponse summary = service.getSummary(landlordTenantId);
+
+        assertEquals(2, summary.reviewCount());
+        assertNull(summary.averageRating());
+        assertFalse(summary.averageShown());
+        verify(reviewRepository, never()).findByTenantId(any());
     }
 
     @Test
@@ -118,6 +134,19 @@ class ReviewQueryServiceTest {
 
         assertEquals(1, response.size());
         assertNull(response.get(0).renterName());
+    }
+
+    @Test
+    void getStatusCountsReportsEachState() {
+        when(reviewRepository.countApprovedByTenantId(landlordTenantId)).thenReturn(2L);
+        when(reviewRepository.countByTenantIdAndStatus(landlordTenantId, ReviewStatus.PENDING)).thenReturn(3L);
+        when(reviewRepository.countByTenantIdAndStatus(landlordTenantId, ReviewStatus.HIDDEN)).thenReturn(1L);
+
+        var counts = service.getStatusCounts(landlordTenantId);
+
+        assertEquals(2L, counts.approvedCount());
+        assertEquals(3L, counts.pendingCount());
+        assertEquals(1L, counts.hiddenCount());
     }
 
     private LandlordReview review(int rating) {

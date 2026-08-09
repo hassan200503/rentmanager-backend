@@ -13,6 +13,7 @@ public record LeaseSummaryResponse(
         LocalDate startDate,
         LocalDate endDate,
         BigDecimal rentAmount,
+        UUID tenantProfileId,
         String tenantFullName,
         String tenantPhone
 ) {}

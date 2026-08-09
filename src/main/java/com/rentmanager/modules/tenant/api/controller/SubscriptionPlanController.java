@@ -7,6 +7,7 @@ import com.rentmanager.modules.tenant.application.query.service.SubscriptionPlan
 import com.rentmanager.modules.tenant.application.dto.request.SubscriptionPlanRequest;
 import com.rentmanager.modules.tenant.application.dto.response.SubscriptionPlanResponse;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -45,6 +46,22 @@ public class SubscriptionPlanController {
     @GetMapping(TenantRoutes.BY_CODE)
     public ResponseEntity<ApiResponse<SubscriptionPlanResponse>> getByCode(@PathVariable String code) {
         return ResponseEntity.ok(ApiResponse.ok(queryService.getByCode(code)));
+    }
+
+    /**
+     * Platform owner route: retier / reprice a plan. The public pricing
+     * surface (GET /api/v1/public/subscription-plans) serves the mutated
+     * catalog immediately — no release or cache invalidation required.
+     * Only ROLE_PLATFORM_OWNER may reprice (platform money, same convention
+     * as commission overrides).
+     */
+    @PutMapping(TenantRoutes.BY_ID)
+    @PreAuthorize("hasAuthority('ROLE_PLATFORM_OWNER')")
+    public ResponseEntity<ApiResponse<SubscriptionPlanResponse>> update(
+            @PathVariable UUID id,
+            @RequestBody SubscriptionPlanRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(commandService.update(id, request)));
     }
 
     @PutMapping(TenantRoutes.DEACTIVATE)

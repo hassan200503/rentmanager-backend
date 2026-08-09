@@ -23,6 +23,11 @@ public class SubscriptionPlanQueryServiceImpl implements SubscriptionPlanQuerySe
     }
 
     @Override
+    public List<SubscriptionPlanResponse> getActive() {
+        return repository.findAllActive().stream().map(this::map).toList();
+    }
+
+    @Override
     public SubscriptionPlanResponse getById(UUID id) {
         return map(repository.findById(id).orElseThrow(() ->
                 new com.rentmanager.shared.exception.ResourceNotFoundException(

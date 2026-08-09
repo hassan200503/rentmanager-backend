@@ -9,6 +9,8 @@ public interface SubscriptionPlanQueryService {
 
     List<SubscriptionPlanResponse> getAll();
 
+    List<SubscriptionPlanResponse> getActive();
+
     SubscriptionPlanResponse getById(UUID id);
 
     SubscriptionPlanResponse getByCode(String code);

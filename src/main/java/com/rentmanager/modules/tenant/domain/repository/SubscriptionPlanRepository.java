@@ -16,6 +16,8 @@ public interface SubscriptionPlanRepository {
 
     List<SubscriptionPlan> findAll();
 
+    List<SubscriptionPlan> findAllActive();
+
     boolean existsById(UUID id);
 
     boolean existsByCode(String code);

@@ -21,6 +21,7 @@ import com.rentmanager.modules.rentledger.domain.repository.RentTransactionRepos
 import com.rentmanager.modules.announcement.application.AnnouncementQueryService;
 import com.rentmanager.modules.rentledger.infrastructure.daraja.RentPaymentInitiationService;
 import com.rentmanager.modules.review.application.ReviewCommandService;
+import com.rentmanager.modules.review.application.RenterReviewQueryService;
 import com.rentmanager.modules.review.application.ReviewQueryService;
 import com.rentmanager.modules.review.application.dto.response.LandlordReviewResponse;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
@@ -82,6 +83,7 @@ class TenantPortalServiceTest {
     private AutoPayService autoPayService;
     private ReviewCommandService reviewCommandService;
     private ReviewQueryService reviewQueryService;
+    private RenterReviewQueryService renterReviewQueryService;
     private MaintenanceRequestCommandService maintenanceRequestCommandService;
     private MaintenanceRequestRepository maintenanceRequestRepository;
 
@@ -111,6 +113,7 @@ class TenantPortalServiceTest {
         autoPayService = mock(AutoPayService.class);
         reviewCommandService = mock(ReviewCommandService.class);
         reviewQueryService = mock(ReviewQueryService.class);
+        renterReviewQueryService = mock(RenterReviewQueryService.class);
         maintenanceRequestCommandService = mock(MaintenanceRequestCommandService.class);
         maintenanceRequestRepository = mock(MaintenanceRequestRepository.class);
 
@@ -128,6 +131,7 @@ class TenantPortalServiceTest {
                 autoPayService,
                 reviewCommandService,
                 reviewQueryService,
+                renterReviewQueryService,
                 maintenanceRequestCommandService,
                 maintenanceRequestRepository,
                 mock(AnnouncementQueryService.class)
@@ -352,7 +356,7 @@ class TenantPortalServiceTest {
         @Test
         void submitReview_resolvesLandlordTenantAndActiveLease_callsCommandService() {
             LandlordReviewResponse response = new LandlordReviewResponse(
-                    UUID.randomUUID(), "Test Renter", 5, "Great landlord", java.time.Instant.now());
+                    UUID.randomUUID(), "Test Renter", 5, "Great landlord", com.rentmanager.modules.review.domain.enums.ReviewStatus.APPROVED, java.time.Instant.now());
             when(reviewQueryService.getRenterReview(LANDLORD_TENANT_ID, tenantProfile.getId()))
                     .thenReturn(response);
 

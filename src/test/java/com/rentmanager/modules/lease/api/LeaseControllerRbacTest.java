@@ -348,6 +348,7 @@ class LeaseControllerRbacTest {
                 LocalDate.now(),
                 LocalDate.now().plusYears(1),
                 BigDecimal.TEN,
+                UUID.fromString("20000000-0000-0000-0000-000000000004"),
                 "Test Tenant",
                 "+254700000000"
         );
