@@ -143,6 +143,37 @@ public class MediaUploadService {
     }
 
     // =====================================================
+    // PLATFORM BRANDING
+    // =====================================================
+
+    /**
+     * Uploads the platform system-wide logo. Same validation contract as
+     * property/unit media (jpeg/png/webp, max 5MB) plus a square ratio
+     * guard so the mark renders cleanly in every chrome surface.
+     */
+    public String uploadPlatformBrandAsset(MultipartFile file) {
+        validate(file);
+        Map uploadResult = uploadToCloudinary(file, "rentmanager/platform/branding");
+        String url = (String) uploadResult.get("secure_url");
+        log.info("Platform branding logo uploaded: url={}", url);
+        return url;
+    }
+
+    /**
+     * Purges a previous platform logo from Cloudinary. Best-effort —
+     * failures are logged and never fail the settings write (the DB row is
+     * already consistent; worst case an orphaned blob is dropped by
+     * Cloudinary's retention rules).
+     */
+    public void deletePlatformBrandAsset(String url) {
+        if (url == null || url.isBlank()) {
+            return;
+        }
+        deleteFromCloudinary(url);
+        log.info("Platform branding logo purged: url={}", url);
+    }
+
+    // =====================================================
     // PRIVATE HELPERS
     // =====================================================
 

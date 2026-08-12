@@ -7,14 +7,19 @@ import com.rentmanager.modules.platformsettings.application.service.PlatformSett
 import com.rentmanager.shared.security.principal.AuthenticatedUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Platform-wide owner configuration surface.
@@ -23,6 +28,9 @@ import org.springframework.web.bind.annotation.RestController;
  * restricted to ROLE_PLATFORM_OWNER — platform settings govern money
  * behaviour (grace periods, payout retries, revenue identifiers), so a
  * staff admin must never be able to change them.</p>
+ *
+ * <p>The system logo is configurable only through the dedicated multi-part
+ * endpoints — it is never part of the generic settings payload.</p>
  */
 @RestController
 @RequestMapping("/api/v1/admin/settings")
@@ -46,6 +54,27 @@ public class PlatformAdminSettingsController {
         return ResponseEntity.ok(ApiResponse.ok(
                 "Platform settings updated",
                 platformSettingsService.update(request, resolveActor(authentication))));
+    }
+
+    @PostMapping(value = "/logo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('ROLE_PLATFORM_OWNER')")
+    public ResponseEntity<ApiResponse<PlatformSettingsResponse>> uploadLogo(
+            @RequestPart("file") MultipartFile file,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                "Platform logo updated",
+                platformSettingsService.uploadLogo(file, resolveActor(authentication))));
+    }
+
+    @DeleteMapping("/logo")
+    @PreAuthorize("hasAuthority('ROLE_PLATFORM_OWNER')")
+    public ResponseEntity<ApiResponse<PlatformSettingsResponse>> removeLogo(
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                "Platform logo removed",
+                platformSettingsService.removeLogo(resolveActor(authentication))));
     }
 
     private String resolveActor(Authentication authentication) {

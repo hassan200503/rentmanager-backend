@@ -111,6 +111,12 @@ africastalking:
   sender-id: ${AT_SENDER_ID:}
   base-url: ${AT_BASE_URL:https://api.sandbox.africastalking.com/version1/messaging}
 
+# Public platform identity served by GET /api/v1/public/platform/branding.
+# branding-name is the display name shown next to the system logo across
+# every chrome surface (console, shells, landing page, favicon, emails).
+platform:
+  branding-name: ${PLATFORM_BRANDING_NAME:RentManager}
+
 # Phase 5 notification outbox. SMS goes through africastalking above;
 # email requires SMTP settings AND app.notification.email.enabled=true
 # (JavaMailEmailService is not created otherwise - LoggingEmailService

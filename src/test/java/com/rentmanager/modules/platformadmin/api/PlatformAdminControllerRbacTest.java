@@ -17,6 +17,7 @@ import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -207,6 +208,70 @@ class PlatformAdminControllerRbacTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"ratePercent\": 5.00}"))
                 .andExpect(status().isForbidden());
+    }
+
+    // ---------- platform logo (settings/logo) ----------
+
+    @Test
+    void platformOwner_canRemoveUnconfiguredLogo_idempotently() throws Exception {
+        // No logo configured in the (empty) test DB — DELETE is idempotent and
+        // does not touch Cloudinary, so it is safe to exercise in the full
+        // Spring context.
+        mockMvc.perform(delete("/api/v1/admin/settings/logo")
+                        .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_PLATFORM_OWNER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.platform.logoUrl").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    void platformAdmin_isForbiddenOnLogoRemove() throws Exception {
+        mockMvc.perform(delete("/api/v1/admin/settings/logo")
+                        .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_PLATFORM_ADMIN")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void landlordOwnerToken_isForbiddenOnLogoUpload() throws Exception {
+        mockMvc.perform(multipart("/api/v1/admin/settings/logo")
+                        .file(new org.springframework.mock.web.MockMultipartFile(
+                                "file", "logo.png", "image/png", new byte[]{1, 2, 3}))
+                        .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_LANDLORD_OWNER")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void landlordOwnerToken_isForbiddenOnLogoRemove() throws Exception {
+        mockMvc.perform(delete("/api/v1/admin/settings/logo")
+                        .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_LANDLORD_OWNER")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void renterToken_isForbiddenOnLogoUpload() throws Exception {
+        mockMvc.perform(multipart("/api/v1/admin/settings/logo")
+                        .file(new org.springframework.mock.web.MockMultipartFile(
+                                "file", "logo.png", "image/png", new byte[]{1, 2, 3}))
+                        .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_TENANT")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void unauthenticatedRequest_isForbiddenOnLogoUpload() throws Exception {
+        mockMvc.perform(multipart("/api/v1/admin/settings/logo")
+                        .file(new org.springframework.mock.web.MockMultipartFile(
+                                "file", "logo.png", "image/png", new byte[]{1, 2, 3})))
+                .andExpect(status().isForbidden());
+    }
+
+    // ---------- public platform branding ----------
+
+    @Test
+    void publicBranding_isAccessibleWithoutAuthentication() throws Exception {
+        mockMvc.perform(get("/api/v1/public/platform/branding"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.platformName").isString())
+                .andExpect(jsonPath("$.data.logoUrl").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.environment").isString());
     }
 
 }

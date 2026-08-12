@@ -26,6 +26,7 @@ public class PlatformSettingsPersistenceMapper {
         jpa.setRevenueMpesaPhone(settings.getRevenueMpesaPhone());
         jpa.setSupportEmail(settings.getSupportEmail());
         jpa.setSupportPhone(settings.getSupportPhone());
+        jpa.setLogoUrl(settings.getLogoUrl());
         return jpa;
     }
 
@@ -45,6 +46,7 @@ public class PlatformSettingsPersistenceMapper {
                 jpa.getRevenueMpesaPhone(),
                 jpa.getSupportEmail(),
                 jpa.getSupportPhone(),
+                jpa.getLogoUrl(),
                 jpa.getUpdatedBy(),
                 jpa.getUpdatedAt(),
                 jpa.getVersion()

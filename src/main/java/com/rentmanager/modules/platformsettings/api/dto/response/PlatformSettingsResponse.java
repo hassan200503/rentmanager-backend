@@ -34,6 +34,7 @@ public record PlatformSettingsResponse(
             boolean sandbox,
             String supportEmail,
             String supportPhone,
+            String logoUrl,
             String updatedBy,
             Instant updatedAt
     ) {

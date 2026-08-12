@@ -42,6 +42,8 @@ public class PlatformSettings {
     private final String supportEmail;
     private final String supportPhone;
 
+    private final String logoUrl;
+
     private final String updatedBy;
     private final Instant updatedAt;
     private final Long version;
@@ -57,6 +59,7 @@ public class PlatformSettings {
             String revenueMpesaPhone,
             String supportEmail,
             String supportPhone,
+            String logoUrl,
             String updatedBy,
             Instant updatedAt,
             Long version
@@ -71,6 +74,7 @@ public class PlatformSettings {
         this.revenueMpesaPhone = revenueMpesaPhone;
         this.supportEmail = supportEmail;
         this.supportPhone = supportPhone;
+        this.logoUrl = logoUrl;
         this.updatedBy = updatedBy;
         this.updatedAt = updatedAt;
         this.version = version;
@@ -83,6 +87,7 @@ public class PlatformSettings {
                 DEFAULT_DISBURSEMENT_MAX_RETRY_ATTEMPTS,
                 null, null, null, null, null,
                 null, null,
+                null,
                 bootstrapActor,
                 Instant.now(),
                 0L
@@ -100,6 +105,7 @@ public class PlatformSettings {
             String revenueMpesaPhone,
             String supportEmail,
             String supportPhone,
+            String logoUrl,
             String updatedBy,
             Instant updatedAt,
             Long version
@@ -115,6 +121,7 @@ public class PlatformSettings {
                 revenueMpesaPhone,
                 supportEmail,
                 supportPhone,
+                logoUrl,
                 updatedBy,
                 updatedAt,
                 version
@@ -150,6 +157,32 @@ public class PlatformSettings {
                 normalize(revenueMpesaPhone),
                 normalize(supportEmail),
                 normalize(supportPhone),
+                logoUrl,
+                updatedBy,
+                Instant.now(),
+                version == null ? 0L : version
+        );
+    }
+
+    /**
+     * Replaces the system-wide logo (Cloudinary secure URL). Keyed
+     * separately from {@link #reconfigure(...)} because the logo is written
+     * exclusively through the dedicated multi-part endpoints, never the
+     * generic settings payload.
+     */
+    public PlatformSettings withLogo(String url, String updatedBy) {
+        return new PlatformSettings(
+                premiumGraceDays,
+                subscriptionPaymentExpiryMinutes,
+                disbursementMaxRetryAttempts,
+                revenueBusinessShortcode,
+                revenuePaybill,
+                revenueTill,
+                revenueB2CShortcode,
+                revenueMpesaPhone,
+                supportEmail,
+                supportPhone,
+                normalize(url),
                 updatedBy,
                 Instant.now(),
                 version == null ? 0L : version
@@ -201,6 +234,10 @@ public class PlatformSettings {
 
     public String getSupportPhone() {
         return supportPhone;
+    }
+
+    public String getLogoUrl() {
+        return logoUrl;
     }
 
     public String getUpdatedBy() {

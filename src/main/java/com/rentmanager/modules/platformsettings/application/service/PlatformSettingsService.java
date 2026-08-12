@@ -3,14 +3,17 @@ package com.rentmanager.modules.platformsettings.application.service;
 import com.rentmanager.modules.audit.domain.model.AuditLog;
 import com.rentmanager.modules.audit.domain.service.AuditService;
 import com.rentmanager.modules.platformsettings.api.dto.request.UpdatePlatformSettingsRequest;
+import com.rentmanager.modules.platformsettings.api.dto.response.PlatformBrandingResponse;
 import com.rentmanager.modules.platformsettings.api.dto.response.PlatformSettingsResponse;
 import com.rentmanager.modules.platformsettings.domain.model.PlatformSettings;
 import com.rentmanager.modules.platformsettings.domain.repository.PlatformSettingsRepository;
 import com.rentmanager.shared.exception.BusinessException;
+import com.rentmanager.shared.service.MediaUploadService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 
@@ -22,6 +25,11 @@ import java.time.Instant;
  * {@link #getEffectiveSettings()} drive the subscription expiry sweep and
  * the disbursement retry pipeline, so owner changes take effect on the next
  * scheduler pass with no redeploy.</p>
+ *
+ * <p>System-wide branding (the platform logo) is owned by the dedicated
+ * multi-part endpoints ({@link #uploadLogo} / {@link #removeLogo}) and is
+ * served unauthenticated through {@link #getBranding()} for every chrome
+ * surface and email template.</p>
  */
 @Slf4j
 @Service
@@ -36,16 +44,22 @@ public class PlatformSettingsService {
 
     private final PlatformSettingsRepository repository;
     private final AuditService auditService;
+    private final MediaUploadService mediaUploadService;
     private final String darajaBaseUrl;
+    private final String brandingName;
 
     public PlatformSettingsService(
             PlatformSettingsRepository repository,
             AuditService auditService,
-            @Value("${daraja.base-url:https://api.safaricom.co.ke}") String darajaBaseUrl
+            MediaUploadService mediaUploadService,
+            @Value("${daraja.base-url:https://api.safaricom.co.ke}") String darajaBaseUrl,
+            @Value("${platform.branding-name:RentManager}") String brandingName
     ) {
         this.repository = repository;
         this.auditService = auditService;
+        this.mediaUploadService = mediaUploadService;
         this.darajaBaseUrl = darajaBaseUrl;
+        this.brandingName = brandingName;
     }
 
     @Transactional(readOnly = true)
@@ -93,6 +107,69 @@ public class PlatformSettingsService {
         return toResponse(saved);
     }
 
+    @Transactional
+    public PlatformSettingsResponse uploadLogo(MultipartFile file, String actor) {
+        String resolvedActor = resolveActor(actor);
+
+        // Upload first — if Cloudinary rejects the asset we never touch the row.
+        String newUrl = mediaUploadService.uploadPlatformBrandAsset(file);
+
+        PlatformSettings current = getEffectiveSettings();
+        String previousUrl = current.getLogoUrl();
+
+        PlatformSettings updated = current.withLogo(newUrl, resolvedActor);
+        PlatformSettings saved = repository.save(updated);
+
+        // Purge the replaced asset best-effort (never fails the write).
+        if (hasLogo(previousUrl)) {
+            mediaUploadService.deletePlatformBrandAsset(previousUrl);
+        }
+
+        recordAudit("PLATFORM_BRANDING_UPDATE", "{\"action\":\"logo_uploaded\"}", resolvedActor);
+        log.info("Platform owner uploaded system-wide logo: actor={}", resolvedActor);
+
+        return toResponse(saved);
+    }
+
+    @Transactional
+    public PlatformSettingsResponse removeLogo(String actor) {
+        String resolvedActor = resolveActor(actor);
+        PlatformSettings current = getEffectiveSettings();
+
+        if (!hasLogo(current.getLogoUrl())) {
+            // Idempotent — nothing configured, nothing to purge.
+            return toResponse(current);
+        }
+
+        String previousUrl = current.getLogoUrl();
+        PlatformSettings updated = current.withLogo(null, resolvedActor);
+        PlatformSettings saved = repository.save(updated);
+
+        mediaUploadService.deletePlatformBrandAsset(previousUrl);
+
+        recordAudit("PLATFORM_BRANDING_UPDATE", "{\"action\":\"logo_removed\"}", resolvedActor);
+        log.info("Platform owner removed system-wide logo: actor={}", resolvedActor);
+
+        return toResponse(saved);
+    }
+
+    /**
+     * Minimal public identity consumed unauthenticated by every branding
+     * surface (console, shells, landing page, favicon, email templates).
+     * Deliberately exposes nothing operational.
+     */
+    @Transactional(readOnly = true)
+    public PlatformBrandingResponse getBranding() {
+        PlatformSettings settings = getEffectiveSettings();
+        return new PlatformBrandingResponse(
+                brandingName,
+                settings.getLogoUrl(),
+                isSandbox() ? "SANDBOX" : "PRODUCTION",
+                settings.getSupportEmail(),
+                settings.getSupportPhone(),
+                settings.getUpdatedAt());
+    }
+
     private void validate(UpdatePlatformSettingsRequest request) {
         if (request.premiumGraceDays() < MIN_GRACE_DAYS || request.premiumGraceDays() > MAX_GRACE_DAYS) {
             throw new BusinessException(
@@ -115,33 +192,52 @@ public class PlatformSettingsService {
         }
     }
 
-    private void recordAudit(PlatformSettings after, String actor) {
+    private String resolveActor(String actor) {
+        return actor == null || actor.isBlank() ? "platform-owner" : actor;
+    }
+
+    private static boolean hasLogo(String url) {
+        return url != null && !url.isBlank();
+    }
+
+    private boolean isSandbox() {
+        return darajaBaseUrl != null && darajaBaseUrl.toLowerCase().contains("sandbox");
+    }
+
+    private void recordAudit(String eventType, String details, String actor) {
         try {
             auditService.record(new AuditLog(
                     null,
-                    "PLATFORM_SETTINGS_UPDATE",
-                    actor != null && !actor.isBlank() ? actor : "platform-owner",
+                    eventType,
+                    actor,
                     "PLATFORM_OWNER",
                     "PLATFORM_SETTINGS",
                     PlatformSettings.SINGLETON_ID.toString(),
                     null,
                     "SUCCESS",
-                    String.format(
-                            "{\"premiumGraceDays\":%d,\"subscriptionExpiryMinutes\":%d,\"disbursementMaxRetries\":%d",
-                            after.getPremiumGraceDays(),
-                            after.getSubscriptionPaymentExpiryMinutes(),
-                            after.getDisbursementMaxRetryAttempts()) + "}",
+                    details,
                     null,
                     null
             ));
         } catch (Exception e) {
             // Audit must never block the settings write.
-            log.warn("Failed to record platform settings audit event. actor={}", actor, e);
+            log.warn("Failed to record platform settings audit event. eventType={} actor={}", eventType, actor, e);
         }
     }
 
+    private void recordAudit(PlatformSettings after, String actor) {
+        recordAudit(
+                "PLATFORM_SETTINGS_UPDATE",
+                String.format(
+                        "{\"premiumGraceDays\":%d,\"subscriptionExpiryMinutes\":%d,\"disbursementMaxRetries\":%d",
+                        after.getPremiumGraceDays(),
+                        after.getSubscriptionPaymentExpiryMinutes(),
+                        after.getDisbursementMaxRetryAttempts()) + "}",
+                resolveActor(actor)
+        );
+    }
+
     private PlatformSettingsResponse toResponse(PlatformSettings settings) {
-        boolean sandbox = darajaBaseUrl != null && darajaBaseUrl.toLowerCase().contains("sandbox");
         return new PlatformSettingsResponse(
                 new PlatformSettingsResponse.BillingSettings(
                         settings.getPremiumGraceDays(),
@@ -155,10 +251,11 @@ public class PlatformSettingsService {
                         settings.getRevenueB2CShortcode(),
                         settings.getRevenueMpesaPhone()),
                 new PlatformSettingsResponse.PlatformInfo(
-                        sandbox ? "SANDBOX" : "PRODUCTION",
-                        sandbox,
+                        isSandbox() ? "SANDBOX" : "PRODUCTION",
+                        isSandbox(),
                         settings.getSupportEmail(),
                         settings.getSupportPhone(),
+                        settings.getLogoUrl(),
                         settings.getUpdatedBy(),
                         settings.getUpdatedAt()));
     }

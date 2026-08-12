@@ -47,4 +47,7 @@ public class PlatformSettingsEntity extends BaseEntity {
 
     @Column(name = "support_phone", length = 20)
     private String supportPhone;
+
+    @Column(name = "logo_url", length = 500)
+    private String logoUrl;
 }
