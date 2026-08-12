@@ -167,6 +167,24 @@ public class PropertyRepositoryAdapter implements PropertyRepository {
     }
 
     @Override
+    public Page<Property> searchByStatusAndLocation(
+            String keyword,
+            String location,
+            PropertyStatus status,
+            Pageable pageable
+    ) {
+        // Null-safe: Hibernate 6.4 binds null String params as bytea on
+        // Postgres (LOWER() then fails); "" is the documented no-filter value.
+        return jpaRepository.searchPublic(
+                        keyword == null ? "" : keyword,
+                        location == null ? "" : location,
+                        status,
+                        pageable
+                )
+                .map(persistenceMapper::toDomain);
+    }
+
+    @Override
     public Optional<Property> findByIdAndStatus(UUID id, PropertyStatus status) {
         return jpaRepository.findByIdAndStatus(id, status)
                 .map(persistenceMapper::toDomain);

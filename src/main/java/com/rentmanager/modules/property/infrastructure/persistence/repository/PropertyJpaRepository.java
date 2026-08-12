@@ -7,6 +7,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -105,4 +107,43 @@ public interface PropertyJpaRepository
     );
 
     Optional<PropertyJpaEntity> findByIdAndStatus(UUID id, PropertyStatus status);
+
+    // =====================================================
+    // PUBLIC SEARCH (2026-08-11)
+    // Single query powering the public listings page:
+    //  - keyword matches name OR any location field (hero search box,
+    //    legacy ?q= city links, and the listings keyword field)
+    //  - location matches city / state / street lines (city drill-downs
+    //    from the landing page -> ?location=)
+    // Both filters are optional, case-insensitive, and always scoped to
+    // the given status so the public path can never leak non-ACTIVE
+    // properties.
+    //
+    // IMPORTANT: never bind NULL for keyword/location — Hibernate 6.4
+    // binds null String params as bytea on Postgres, which makes
+    // LOWER(...) fail with "function lower(bytea) does not exist".
+    // Pass "" for "no filter"; the empty-string guards below are no-ops.
+    // =====================================================
+
+    @Query("""
+            SELECT p FROM PropertyJpaEntity p
+            WHERE p.status = :status
+              AND (:keyword = ''
+                   OR LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                   OR LOWER(p.address.city) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                   OR LOWER(p.address.state) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                   OR LOWER(p.address.addressLine1) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                   OR LOWER(p.address.addressLine2) LIKE LOWER(CONCAT('%', :keyword, '%')))
+              AND (:location = ''
+                   OR LOWER(p.address.city) LIKE LOWER(CONCAT('%', :location, '%'))
+                   OR LOWER(p.address.state) LIKE LOWER(CONCAT('%', :location, '%'))
+                   OR LOWER(p.address.addressLine1) LIKE LOWER(CONCAT('%', :location, '%'))
+                   OR LOWER(p.address.addressLine2) LIKE LOWER(CONCAT('%', :location, '%')))
+            """)
+    Page<PropertyJpaEntity> searchPublic(
+            @Param("keyword") String keyword,
+            @Param("location") String location,
+            @Param("status") PropertyStatus status,
+            Pageable pageable
+    );
 }

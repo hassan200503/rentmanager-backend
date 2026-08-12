@@ -10,6 +10,7 @@ public interface PublicPropertyQueryService {
 
     Page<PublicPropertyResponse> getProperties(
             String keyword,
+            String location,
             Pageable pageable
     );
 

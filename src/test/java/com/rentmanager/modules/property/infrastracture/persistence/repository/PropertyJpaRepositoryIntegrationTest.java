@@ -35,6 +35,21 @@ class PropertyJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTe
     private PropertyJpaRepository propertyJpaRepository;
 
     private PropertyJpaEntity persistProperty(PropertyStatus status, String name) {
+        return persistProperty(status, name, "Nairobi");
+    }
+
+    private PropertyJpaEntity persistProperty(PropertyStatus status, String name, String city) {
+        return persistProperty(status, name, city, "123 Test Street", null, null);
+    }
+
+    private PropertyJpaEntity persistProperty(
+            PropertyStatus status,
+            String name,
+            String city,
+            String addressLine1,
+            String addressLine2,
+            String state
+    ) {
         PropertyJpaEntity property = new PropertyJpaEntity();
         property.assignTenant(UUID.randomUUID());
         property.setReferenceCode("PROP-" + UUID.randomUUID());
@@ -44,7 +59,7 @@ class PropertyJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTe
         property.setPremisesType(PremisesType.RESIDENTIAL);
         property.setOccupancyStatus(OccupancyStatus.VACANT);
         property.setAddress(PropertyAddressJpaEntity.of(
-                "123 Test Street", null, "Nairobi", null, "00100", "Kenya"
+                addressLine1, addressLine2, city, state, "00100", "Kenya"
         ));
         return propertyJpaRepository.saveAndFlush(property);
     }
@@ -132,5 +147,94 @@ class PropertyJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTe
         );
 
         assertTrue(result.isEmpty());
+    }
+
+    // =====================================================
+    // searchPublic(keyword, location, status, pageable)
+    // =====================================================
+
+    @Test
+    void shouldMatchKeywordAgainstCity_whenPropertyNameDoesNotMatch() {
+        // The landing-page city drill-down used to pass the city as ?q=
+        // (keyword); the keyword clause must therefore hit location fields,
+        // not just the property name.
+        persistProperty(PropertyStatus.ACTIVE, "Sunset Residences", "Mombasa");
+        persistProperty(PropertyStatus.ACTIVE, "Harbour Lofts", "Mombasa");
+        persistProperty(PropertyStatus.DRAFT, "Nairobi Villas", "Nairobi");
+
+        Page<PropertyJpaEntity> result = propertyJpaRepository.searchPublic(
+                "Mombasa", "", PropertyStatus.ACTIVE, PageRequest.of(0, 10)
+        );
+
+        assertEquals(2, result.getTotalElements(),
+                "keyword must match the city of ACTIVE properties");
+        Page<PropertyJpaEntity> draftOnly = propertyJpaRepository.searchPublic(
+                "Nairobi", "", PropertyStatus.ACTIVE, PageRequest.of(0, 10)
+        );
+        assertEquals(0, draftOnly.getTotalElements(),
+                "DRAFT properties must never leak into public search");
+    }
+
+    @Test
+    void shouldFilterByLocation_onlyActiveAndCaseInsensitive() {
+        persistProperty(PropertyStatus.ACTIVE, "Green Heights", "Nairobi");
+        persistProperty(PropertyStatus.ACTIVE, "Sunset Residences", "Mombasa");
+        persistProperty(PropertyStatus.ACTIVE, "Blue Towers", "Nairobi West");
+        persistProperty(PropertyStatus.DRAFT, "Nairobi Villas", "Nairobi");
+        persistProperty(PropertyStatus.ARCHIVED, "Old Nairobi Lofts", "Nairobi");
+
+        Page<PropertyJpaEntity> result = propertyJpaRepository.searchPublic(
+                "", "nairobi", PropertyStatus.ACTIVE, PageRequest.of(0, 10)
+        );
+
+        assertEquals(2, result.getTotalElements(),
+                "location must match city case-insensitively and exclude non-ACTIVE rows");
+    }
+
+    @Test
+    void shouldMatchLocationAgainstStreetAndState() {
+        persistProperty(PropertyStatus.ACTIVE, "Kilimani Suites", "Nairobi", "Kilimani Road", null, "Nairobi");
+        persistProperty(PropertyStatus.ACTIVE, "Lakeside View", "Kisumu", "Oginga Odinga Street", null, "Kisumu");
+        persistProperty(PropertyStatus.ACTIVE, "Tulia Gardens", "Thika", null, "Kiambu", null);
+
+        Page<PropertyJpaEntity> byStreet = propertyJpaRepository.searchPublic(
+                "", "Kilimani Road", PropertyStatus.ACTIVE, PageRequest.of(0, 10)
+        );
+        assertEquals(1, byStreet.getTotalElements());
+        assertEquals("Kilimani Suites", byStreet.getContent().get(0).getName());
+
+        Page<PropertyJpaEntity> byState = propertyJpaRepository.searchPublic(
+                "", "Kiambu", PropertyStatus.ACTIVE, PageRequest.of(0, 10)
+        );
+        assertEquals(1, byState.getTotalElements());
+        assertEquals("Tulia Gardens", byState.getContent().get(0).getName());
+    }
+
+    @Test
+    void shouldCombineKeywordAndLocation_bothMustMatch() {
+        persistProperty(PropertyStatus.ACTIVE, "Green Heights", "Nairobi");
+        persistProperty(PropertyStatus.ACTIVE, "Green Meadows", "Mombasa");
+        persistProperty(PropertyStatus.ACTIVE, "Blue Towers", "Nairobi");
+
+        Page<PropertyJpaEntity> result = propertyJpaRepository.searchPublic(
+                "green", "Nairobi", PropertyStatus.ACTIVE, PageRequest.of(0, 10)
+        );
+
+        assertEquals(1, result.getTotalElements());
+        assertEquals("Green Heights", result.getContent().get(0).getName());
+    }
+
+    @Test
+    void shouldReturnAllActive_whenBothFiltersNull() {
+        persistProperty(PropertyStatus.ACTIVE, "Green Heights", "Nairobi");
+        persistProperty(PropertyStatus.ACTIVE, "Sunset Residences", "Mombasa");
+        persistProperty(PropertyStatus.DRAFT, "Hidden Draft", "Nairobi");
+
+        Page<PropertyJpaEntity> result = propertyJpaRepository.searchPublic(
+                "", "", PropertyStatus.ACTIVE, PageRequest.of(0, 10)
+        );
+
+        assertEquals(2, result.getTotalElements(),
+                "NULL filters must behave as no-ops, not empty result sets");
     }
 }

@@ -24,12 +24,13 @@ public class PublicPropertyQueryController {
     @GetMapping
     public ResponseEntity<ApiResponse<Page<PublicPropertyResponse>>> getProperties(
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String location,
             Pageable pageable
     ) {
         return ResponseEntity.ok(
                 ApiResponse.ok(
                         "Properties retrieved successfully",
-                        publicPropertyQueryService.getProperties(keyword, pageable)
+                        publicPropertyQueryService.getProperties(keyword, location, pageable)
                 )
         );
     }

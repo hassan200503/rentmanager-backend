@@ -63,5 +63,12 @@ public interface PropertyRepository {
 
     Page<Property> searchByStatus(String keyword, PropertyStatus status, Pageable pageable);
 
+    Page<Property> searchByStatusAndLocation(
+            String keyword,
+            String location,
+            PropertyStatus status,
+            Pageable pageable
+    );
+
     Optional<Property> findByIdAndStatus(UUID id, PropertyStatus status);
 }

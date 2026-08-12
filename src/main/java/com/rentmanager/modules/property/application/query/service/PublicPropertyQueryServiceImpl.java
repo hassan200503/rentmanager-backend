@@ -27,15 +27,37 @@ public class PublicPropertyQueryServiceImpl implements PublicPropertyQueryServic
     private final PropertyMediaRepository propertyMediaRepository;
     private final PropertyMapper propertyMapper;
 
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    /** Blank filters become "" (never null) — see searchPublic() contract. */
+    private static String normalize(String value) {
+        return isBlank(value) ? "" : value.trim();
+    }
+
     @Override
-    public Page<PublicPropertyResponse> getProperties(String keyword, Pageable pageable) {
+    public Page<PublicPropertyResponse> getProperties(String keyword, String location, Pageable pageable) {
         // FIX (Public Listings Hardening, 2026-07-08): previously findAll/
         // search with no status filter — a DRAFT/INACTIVE/UNDER_MAINTENANCE/
         // ARCHIVED property was fully visible to the public. Now scoped to
         // PropertyStatus.ACTIVE only.
-        Page<Property> properties = (keyword == null || keyword.isBlank())
-                ? propertyRepository.findByStatus(PropertyStatus.ACTIVE, pageable)
-                : propertyRepository.searchByStatus(keyword, PropertyStatus.ACTIVE, pageable);
+        //
+        // FIX (2026-08-11): the public search ignored location entirely —
+        // the frontend sent ?location=Nairobi but Spring silently dropped the
+        // unknown param, so "View properties in Nairobi" returned 0 results.
+        // keyword now matches name OR location fields; location matches the
+        // address/city/street fields. Blank values are normalised to "" so
+        // the repository's empty-string guards make each filter a no-op.
+        Page<Property> properties =
+                (isBlank(keyword) && isBlank(location))
+                        ? propertyRepository.findByStatus(PropertyStatus.ACTIVE, pageable)
+                        : propertyRepository.searchByStatusAndLocation(
+                                normalize(keyword),
+                                normalize(location),
+                                PropertyStatus.ACTIVE,
+                                pageable
+                        );
 
         List<UUID> propertyIds = properties.getContent().stream()
                 .map(Property::getId)
