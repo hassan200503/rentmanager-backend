@@ -2,8 +2,9 @@ package com.rentmanager.modules.notification.sms;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.rentmanager.modules.integration.application.IntegrationRegistry;
+import com.rentmanager.modules.integration.domain.model.ProviderCatalog;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -12,23 +13,37 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+/**
+ * Africa's Talking SMS sender. Credentials (username / API key / sender ID /
+ * base URL) are resolved through the {@link IntegrationRegistry} — the
+ * encrypted, per-environment config entered by the Owner in the Integrations
+ * Console — falling back to the legacy {@code africastalking.*} environment
+ * properties while no console config exists.
+ *
+ * <p>It is the single {@link SmsService} bean. When nothing is configured it
+ * degrades gracefully (logs and reports delivery as accepted) so the
+ * notification outbox never storms itself with retries; when configured it
+ * performs a real send and reports the provider's actual confirmation.</p>
+ */
 @Slf4j
 @Service
-@ConditionalOnProperty(prefix = "africastalking", name = "enabled", havingValue = "true")
 public class AfricasTalkingSmsService implements SmsService {
 
-    private final WebClient webClient;
-    private final AfricasTalkingProperties props;
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
 
-    public AfricasTalkingSmsService(AfricasTalkingProperties props) {
+    private final AfricasTalkingProperties props;
+    private final IntegrationRegistry registry;
+
+    private volatile String cachedClientKey;
+    private volatile WebClient cachedClient;
+
+    public AfricasTalkingSmsService(AfricasTalkingProperties props, IntegrationRegistry registry) {
         this.props = props;
-        this.webClient = WebClient.builder()
-                .baseUrl(props.getBaseUrl())
-                .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
-                .defaultHeader("apiKey", props.getApiKey())
-                .build();
+        this.registry = registry;
     }
 
     @Override
@@ -104,16 +119,18 @@ public class AfricasTalkingSmsService implements SmsService {
     private boolean send(String phone, String message) {
         String normalized = normalizePhoneNumber(phone);
 
+        Map<String, String> credentials = atCredentials();
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("username", props.getUsername());
+        form.add("username", credentials.getOrDefault("username", ""));
         form.add("to", normalized);
         form.add("message", message);
-        if (props.getSenderId() != null && !props.getSenderId().isBlank()) {
-            form.add("from", props.getSenderId());
+        String senderId = credentials.getOrDefault("sender_id", "");
+        if (senderId != null && !senderId.isBlank()) {
+            form.add("from", senderId);
         }
 
         try {
-            AfricasTalkingResponse response = webClient.post()
+            AfricasTalkingResponse response = webClient().post()
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .bodyValue(form)
                     .retrieve()
@@ -139,6 +156,40 @@ public class AfricasTalkingSmsService implements SmsService {
             log.error("SMS send failed. phone={}, error={}", PhoneMasker.mask(normalized), ex.getMessage());
             return false;
         }
+    }
+
+    private WebClient webClient() {
+        Map<String, String> credentials = atCredentials();
+        String baseUrl = credentials.getOrDefault("base_url", props.getBaseUrl());
+        String apiKey = credentials.getOrDefault("api_key", "");
+        String fingerprint = baseUrl + "|" + apiKey;
+        if (cachedClient == null || !fingerprint.equals(cachedClientKey)) {
+            cachedClient = WebClient.builder()
+                    .baseUrl(baseUrl)
+                    .defaultHeader("apiKey", apiKey)
+                    .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                    .build();
+            cachedClientKey = fingerprint;
+            log.info("Africa's Talking WebClient rebuilt. baseUrl={}", baseUrl);
+        }
+        return cachedClient;
+    }
+
+    private Map<String, String> atCredentials() {
+        Map<String, String> merged = new HashMap<>(Map.of(
+                "username", props.getUsername() == null ? "" : props.getUsername(),
+                "api_key", props.getApiKey() == null ? "" : props.getApiKey(),
+                "sender_id", props.getSenderId() == null ? "" : props.getSenderId(),
+                "base_url", props.getBaseUrl()));
+        var resolved = registry.resolveOrNull(ProviderCatalog.AFRICASTALKING);
+        if (resolved != null) {
+            resolved.credentials().forEach((key, value) -> {
+                if (value != null && !value.isBlank()) {
+                    merged.put(key, value);
+                }
+            });
+        }
+        return merged;
     }
 
     private String buildCredentialsMessage(String password) {

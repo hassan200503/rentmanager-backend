@@ -1,5 +1,6 @@
 package com.rentmanager.modules.tenant.application.service;
 
+import com.rentmanager.modules.integration.bridge.PlatformDarajaCredentialsResolver;
 import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaException;
 import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaProperties;
 import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaService;
@@ -44,6 +45,7 @@ class SubscriptionBillingServiceTest {
     private UnitRepository unitRepository;
     private DarajaService darajaService;
     private DarajaProperties darajaProperties;
+    private PlatformDarajaCredentialsResolver darajaResolver;
     private RatibaStandingOrderService ratibaStandingOrderService;
     private SubscriptionPaymentCallbackTransactionService callbackTransactionService;
     private SubscriptionBillingProperties subscriptionBillingProperties;
@@ -68,6 +70,7 @@ class SubscriptionBillingServiceTest {
         darajaProperties.setConsumerSecret("consumer-secret");
         darajaProperties.setBusinessShortCode("174379");
         darajaProperties.setPasskey("passkey");
+        darajaResolver = mock(PlatformDarajaCredentialsResolver.class);
         ratibaStandingOrderService = mock(RatibaStandingOrderService.class);
         callbackTransactionService = mock(SubscriptionPaymentCallbackTransactionService.class);
         subscriptionBillingProperties = new SubscriptionBillingProperties();
@@ -79,6 +82,7 @@ class SubscriptionBillingServiceTest {
                 unitRepository,
                 darajaService,
                 darajaProperties,
+                darajaResolver,
                 ratibaStandingOrderService,
                 callbackTransactionService,
                 subscriptionBillingProperties

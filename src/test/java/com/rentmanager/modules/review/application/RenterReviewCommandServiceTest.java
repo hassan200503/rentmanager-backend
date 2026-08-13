@@ -3,6 +3,7 @@ package com.rentmanager.modules.review.application;
 import com.rentmanager.modules.lease.domain.enums.LeaseStatus;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
+import com.rentmanager.modules.review.domain.enums.ReviewStatus;
 import com.rentmanager.modules.review.domain.model.RenterReview;
 import com.rentmanager.modules.review.domain.repository.RenterReviewRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -97,18 +98,40 @@ class RenterReviewCommandServiceTest {
     }
 
     @Test
-    void rejectsDuplicateReviewPerRenter() {
+    void editsExistingReview_whenReviewingSameRenterAgain() {
         Lease lease = mockLease(leaseId, tenantProfileId, LeaseStatus.ACTIVE);
+        RenterReview existing = RenterReview.rehydrate(
+                UUID.randomUUID(), landlordTenantId, tenantProfileId, leaseId,
+                5, "Already reviewed", ReviewStatus.APPROVED, 0L, null, null);
         when(leaseRepository.findAllByTenant(landlordTenantId)).thenReturn(List.of(lease));
         when(reviewRepository.findByTenantIdAndTenantProfileId(landlordTenantId, tenantProfileId))
-                .thenReturn(Optional.of(RenterReview.rehydrate(
-                        UUID.randomUUID(), landlordTenantId, tenantProfileId, leaseId,
-                        5, "Already reviewed", 0L, null, null)));
+                .thenReturn(Optional.of(existing));
+        when(reviewRepository.save(any(RenterReview.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> service.submit(landlordTenantId, tenantProfileId, 3, "Second"));
+        RenterReview saved = service.submit(landlordTenantId, tenantProfileId, 3, "Updated opinion");
 
-        assertTrue(ex.getMessage().contains("already"));
+        assertEquals(3, saved.getRating());
+        assertEquals("Updated opinion", saved.getComment());
+        assertEquals(ReviewStatus.PENDING, saved.getStatus(),
+                "An edited review must re-enter moderation before going live");
+        verify(reviewRepository).save(existing);
+    }
+
+    @Test
+    void rejectsEditWithOutOfRangeRating() {
+        Lease lease = mockLease(leaseId, tenantProfileId, LeaseStatus.ACTIVE);
+        RenterReview existing = RenterReview.rehydrate(
+                UUID.randomUUID(), landlordTenantId, tenantProfileId, leaseId,
+                5, "Approved", ReviewStatus.APPROVED, 0L, null, null);
+        when(leaseRepository.findAllByTenant(landlordTenantId)).thenReturn(List.of(lease));
+        when(reviewRepository.findByTenantIdAndTenantProfileId(landlordTenantId, tenantProfileId))
+                .thenReturn(Optional.of(existing));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.submit(landlordTenantId, tenantProfileId, 6, null));
+
+        assertEquals(5, existing.getRating(), "A failed edit must not corrupt the stored review");
+        assertEquals(ReviewStatus.APPROVED, existing.getStatus());
         verify(reviewRepository, never()).save(any());
     }
 

@@ -7,12 +7,14 @@ import java.util.UUID;
 
 /**
  * A landlord's review of a renter (V65). {@code renterName} is the full
- * name of the renter profile being reviewed; the landlord's dashboard
- * sees status badges, the renter-facing surface only ever receives
- * {@code APPROVED} reviews.
+ * name of the renter profile being reviewed; {@code tenantProfileId}
+ * lets the dashboard pre-fill and edit the review for a selected renter.
+ * The landlord's dashboard sees status badges, the renter-facing
+ * surface only ever receives {@code APPROVED} reviews.
  */
 public record RenterReviewResponse(
         UUID id,
+        UUID tenantProfileId,
         String renterName,
         int rating,
         String comment,

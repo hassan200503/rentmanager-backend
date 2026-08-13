@@ -1,5 +1,8 @@
 package com.rentmanager.modules.platformsettings.application.service;
 
+import com.rentmanager.modules.integration.application.IntegrationRegistry;
+import com.rentmanager.modules.integration.domain.model.IntegrationEnvironment;
+import com.rentmanager.modules.integration.domain.model.ProviderCatalog;
 import com.rentmanager.modules.audit.domain.model.AuditLog;
 import com.rentmanager.modules.audit.domain.service.AuditService;
 import com.rentmanager.modules.platformsettings.api.dto.request.UpdatePlatformSettingsRequest;
@@ -47,19 +50,22 @@ public class PlatformSettingsService {
     private final MediaUploadService mediaUploadService;
     private final String darajaBaseUrl;
     private final String brandingName;
+    private final IntegrationRegistry integrationRegistry;
 
     public PlatformSettingsService(
             PlatformSettingsRepository repository,
             AuditService auditService,
             MediaUploadService mediaUploadService,
             @Value("${daraja.base-url:https://api.safaricom.co.ke}") String darajaBaseUrl,
-            @Value("${platform.branding-name:RentManager}") String brandingName
+            @Value("${platform.branding-name:RentManager}") String brandingName,
+            IntegrationRegistry integrationRegistry
     ) {
         this.repository = repository;
         this.auditService = auditService;
         this.mediaUploadService = mediaUploadService;
         this.darajaBaseUrl = darajaBaseUrl;
         this.brandingName = brandingName;
+        this.integrationRegistry = integrationRegistry;
     }
 
     @Transactional(readOnly = true)
@@ -201,6 +207,14 @@ public class PlatformSettingsService {
     }
 
     private boolean isSandbox() {
+        // The active Daraja environment is the source of truth for the
+        // deployment-tier badge (per-provider Development/Production model).
+        // Falls back to the legacy env-derived base URL while nothing is
+        // activated in the console.
+        IntegrationEnvironment active = integrationRegistry.activeEnvironment(ProviderCatalog.DARAJA);
+        if (active != null) {
+            return active == IntegrationEnvironment.DEVELOPMENT;
+        }
         return darajaBaseUrl != null && darajaBaseUrl.toLowerCase().contains("sandbox");
     }
 

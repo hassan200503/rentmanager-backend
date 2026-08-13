@@ -1,5 +1,6 @@
 package com.rentmanager.modules.identity.clerk;
 
+import com.rentmanager.modules.integration.application.IntegrationRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -50,7 +51,8 @@ class ClerkServiceImplTest {
         properties.setBaseUrl(BASE_URL);
         properties.setSecretKey(SECRET);
         restTemplate = mock(RestTemplate.class);
-        service = new ClerkServiceImpl(properties, restTemplate);
+        IntegrationRegistry integrationRegistry = mock(IntegrationRegistry.class);
+        service = new ClerkServiceImpl(properties, restTemplate, integrationRegistry);
     }
 
     @Test

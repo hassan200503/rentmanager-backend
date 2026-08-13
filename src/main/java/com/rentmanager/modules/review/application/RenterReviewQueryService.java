@@ -135,6 +135,7 @@ public class RenterReviewQueryService {
         }
         return new RenterReviewResponse(
                 review.getId(),
+                review.getTenantProfileId(),
                 renterName,
                 review.getRating(),
                 review.getComment(),

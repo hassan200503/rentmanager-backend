@@ -15,8 +15,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Submits verified landlord reviews of renters (V65, bidirectional
- * ratings).
+ * Submits or edits verified landlord reviews of renters (V65,
+ * bidirectional ratings).
  *
  * <p>Verification rule mirrors the renter side: a review is only valid
  * from a landlord who has or had an active lease with the renter being
@@ -24,6 +24,11 @@ import java.util.UUID;
  * (from the calling layer, never the request body); the lease is resolved
  * server-side from the landlord's own lease book, preferring the
  * currently active one.</p>
+ *
+ * <p>One review per renter: a first submission creates a {@code PENDING}
+ * review; any later submission edits that same review in place
+ * ({@link RenterReview#replace(int, String)}) and re-enters moderation —
+ * the same editable contract the platform review builds on.</p>
  */
 @Slf4j
 @Service
@@ -57,19 +62,22 @@ public class RenterReviewCommandService {
 
         UUID leaseId = findVerifiableLeaseId(landlordTenantId, tenantProfileId);
 
-        reviewRepository.findByTenantIdAndTenantProfileId(landlordTenantId, tenantProfileId)
-                .ifPresent(existing -> {
-                    throw new IllegalArgumentException(
-                            "You have already reviewed this renter");
+        return reviewRepository.findByTenantIdAndTenantProfileId(landlordTenantId, tenantProfileId)
+                .map(existing -> {
+                    existing.replace(rating, comment);
+                    RenterReview saved = reviewRepository.save(existing);
+                    log.info("Renter review edited. reviewId={} tenantId={} tenantProfileId={} rating={}",
+                            saved.getId(), landlordTenantId, tenantProfileId, rating);
+                    return saved;
+                })
+                .orElseGet(() -> {
+                    RenterReview review = RenterReview.submit(
+                            landlordTenantId, tenantProfileId, leaseId, rating, comment);
+                    RenterReview saved = reviewRepository.save(review);
+                    log.info("Renter review submitted. reviewId={} tenantId={} tenantProfileId={} rating={}",
+                            saved.getId(), landlordTenantId, tenantProfileId, rating);
+                    return saved;
                 });
-
-        RenterReview review = RenterReview.submit(
-                landlordTenantId, tenantProfileId, leaseId, rating, comment);
-
-        RenterReview saved = reviewRepository.save(review);
-        log.info("Renter review submitted. reviewId={} tenantId={} tenantProfileId={} rating={}",
-                saved.getId(), landlordTenantId, tenantProfileId, rating);
-        return saved;
     }
 
     /**

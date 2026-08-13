@@ -2,6 +2,8 @@ package com.rentmanager.shared.service;
 
 import com.cloudinary.Cloudinary;
 import com.cloudinary.utils.ObjectUtils;
+import com.rentmanager.modules.integration.application.IntegrationNotConfiguredException;
+import com.rentmanager.modules.integration.bridge.MediaStorageClientResolver;
 import com.rentmanager.modules.property.domain.model.PropertyMedia;
 import com.rentmanager.modules.property.domain.repository.PropertyMediaRepository;
 import com.rentmanager.modules.unit.domain.model.UnitMedia;
@@ -29,7 +31,7 @@ public class MediaUploadService {
     );
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
-    private final Cloudinary cloudinary;
+    private final MediaStorageClientResolver mediaStorageClientResolver;
     private final PropertyMediaRepository propertyMediaRepository;
     private final UnitMediaRepository unitMediaRepository;
 
@@ -192,6 +194,15 @@ public class MediaUploadService {
     }
 
     private Map uploadToCloudinary(MultipartFile file, String folder) {
+        Cloudinary cloudinary;
+        try {
+            cloudinary = mediaStorageClientResolver.resolve();
+        } catch (IntegrationNotConfiguredException e) {
+            log.warn("Media upload skipped: media storage is not configured: {}", e.getMessage());
+            throw new RuntimeException(
+                    "Media storage (Cloudinary) is not configured. Ask the platform owner to "
+                            + "configure it in Platform Settings → Integrations → Media Storage.");
+        }
         try {
             return cloudinary.uploader().upload(
                     file.getBytes(),
@@ -212,8 +223,11 @@ public class MediaUploadService {
     private void deleteFromCloudinary(String url) {
         // Derive public_id from URL: everything after /upload/ and before file extension
         try {
+            Cloudinary cloudinary = mediaStorageClientResolver.resolve();
             String publicId = extractPublicId(url);
             cloudinary.uploader().destroy(publicId, ObjectUtils.emptyMap());
+        } catch (IntegrationNotConfiguredException e) {
+            log.warn("Cloudinary delete skipped: media storage is not configured: {}", e.getMessage());
         } catch (IOException e) {
             // Log but don't fail — DB record is still removed
             log.error("Cloudinary delete failed for url={}", url, e);

@@ -85,6 +85,11 @@ daraja:
   callback-secret: ${DARAJA_CALLBACK_SECRET}
   credentials-encryption-key: ${DARAJA_CREDENTIALS_ENCRYPTION_KEY}
 
+# Integrations Control Plane: master key encrypting platform-level provider
+# credentials (overrides the legacy DARAJA_CREDENTIALS_ENCRYPTION_KEY when set).
+integration:
+  encryption-key: ${INTEGRATION_ENCRYPTION_KEY:${DARAJA_CREDENTIALS_ENCRYPTION_KEY:}}
+
 # Subscription billing lifecycle (Phase 1 dual revenue model):
 # grace-days - premium benefits continue this long after a failed renewal
 # before the scheduler auto-reverts the landlord to COMMISSION.

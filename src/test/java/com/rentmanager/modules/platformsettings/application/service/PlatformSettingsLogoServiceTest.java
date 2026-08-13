@@ -2,6 +2,7 @@ package com.rentmanager.modules.platformsettings.application.service;
 
 import com.rentmanager.modules.audit.domain.model.AuditLog;
 import com.rentmanager.modules.audit.domain.service.AuditService;
+import com.rentmanager.modules.integration.application.IntegrationRegistry;
 import com.rentmanager.modules.platformsettings.api.dto.response.PlatformBrandingResponse;
 import com.rentmanager.modules.platformsettings.api.dto.response.PlatformSettingsResponse;
 import com.rentmanager.modules.platformsettings.domain.model.PlatformSettings;
@@ -36,6 +37,7 @@ class PlatformSettingsLogoServiceTest {
     private PlatformSettingsRepository repository;
     private AuditService auditService;
     private MediaUploadService mediaUploadService;
+    private IntegrationRegistry integrationRegistry;
     private PlatformSettingsService service;
 
     @BeforeEach
@@ -43,9 +45,10 @@ class PlatformSettingsLogoServiceTest {
         repository = mock(PlatformSettingsRepository.class);
         auditService = mock(AuditService.class);
         mediaUploadService = mock(MediaUploadService.class);
+        integrationRegistry = mock(IntegrationRegistry.class);
         service = new PlatformSettingsService(
                 repository, auditService, mediaUploadService,
-                "https://sandbox.safaricom.co.ke", "RentManager");
+                "https://sandbox.safaricom.co.ke", "RentManager", integrationRegistry);
     }
 
     private static MockMultipartFile png(String name, byte[] bytes) {

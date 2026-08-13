@@ -1,5 +1,6 @@
 package com.rentmanager.modules.rentledger.infrastructure.daraja;
 
+import com.rentmanager.modules.integration.bridge.PlatformDarajaCredentialsResolver;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaProperties;
@@ -53,6 +54,7 @@ public class RentPaymentInitiationService {
     private final RentPaymentRequestRepository rentPaymentRequestRepository;
     private final DarajaService darajaService;
     private final DarajaProperties darajaProperties;
+    private final PlatformDarajaCredentialsResolver darajaResolver;
 
     @Transactional
     public RentPaymentRequest initiate(
@@ -124,12 +126,9 @@ public class RentPaymentInitiationService {
         RentPaymentRequest request = RentPaymentRequest.create(tenantId, lease.getId(), rentLedgerEntryId, amount);
         request = rentPaymentRequestRepository.save(request);
 
-        DarajaCredentials platformCredentials = DarajaCredentials.of(
-                darajaProperties.getConsumerKey(),
-                darajaProperties.getConsumerSecret(),
-                darajaProperties.getBusinessShortCode(),
-                darajaProperties.getPasskey()
-        );
+        // Platform credentials are resolved through the Integration Registry
+        // (database config first, legacy daraja.* environment as fallback).
+        DarajaCredentials platformCredentials = darajaResolver.stkCredentials();
 
         String checkoutRequestId = darajaService.initiateSTKPush(
                 mpesaPhone,

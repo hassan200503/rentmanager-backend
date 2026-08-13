@@ -157,6 +157,7 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
+            <version>1.18.46</version>
             <optional>true</optional>
         </dependency>
 
@@ -255,6 +256,15 @@
                     <source>21</source>
                     <target>21</target>
 
+                    <!-- JDK 21.0.7+ (and the 21.0.11 build used by CI/dev) backported
+                         javac's newer annotation-processing behavior: processors are no
+                         longer run by default. -proc:full restores the classic
+                         behavior so Lombok + MapStruct generate code. Without this the
+                         build fails with "cannot find symbol" for every Lombok member. -->
+                    <compilerArgs>
+                        <arg>-proc:full</arg>
+                    </compilerArgs>
+
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.mapstruct</groupId>
@@ -265,7 +275,7 @@
                         <path>
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
-                            <version>1.18.32</version>
+                            <version>1.18.44</version>
                         </path>
 
                         <path>

@@ -70,11 +70,11 @@ public abstract class BaseEntity implements Serializable {
         return updatedAt;
     }
 
-    protected void restoreCreatedAt(Instant createdAt) {
+    public void restoreCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
     }
 
-    protected void restoreUpdatedAt(Instant updatedAt) {
+    public void restoreUpdatedAt(Instant updatedAt) {
         this.updatedAt = updatedAt;
     }
 

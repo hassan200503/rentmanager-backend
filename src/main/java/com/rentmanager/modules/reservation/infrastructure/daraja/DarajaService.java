@@ -1,5 +1,6 @@
 package com.rentmanager.modules.reservation.infrastructure.daraja;
 
+import com.rentmanager.modules.integration.bridge.PlatformDarajaCredentialsResolver;
 import com.rentmanager.modules.tenant.domain.valueobject.DarajaCredentials;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +28,7 @@ public class DarajaService {
 
     private final DarajaProperties properties;
     private final RestTemplate restTemplate;
+    private final PlatformDarajaCredentialsResolver darajaResolver;
 
     private static final DateTimeFormatter TIMESTAMP_FORMAT =
             DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
@@ -158,7 +160,7 @@ public class DarajaService {
         ResponseEntity<Map> response;
         try {
             response = restTemplate.exchange(
-                    properties.getBaseUrl() + "/mpesa/stkpush/v1/processrequest",
+                    activeDaraja().baseUrl() + "/mpesa/stkpush/v1/processrequest",
                     HttpMethod.POST,
                     request,
                     Map.class
@@ -246,10 +248,10 @@ public class DarajaService {
         }
 
         DarajaCredentials credentials = DarajaCredentials.of(
-                properties.getConsumerKey(),
-                properties.getConsumerSecret(),
-                properties.getBusinessShortCode(),
-                properties.getPasskey()
+                activeDaraja().consumerKey(),
+                activeDaraja().consumerSecret(),
+                activeDaraja().businessShortCode(),
+                activeDaraja().passkey()
         );
         String token = fetchAccessToken(credentials);
 
@@ -257,7 +259,7 @@ public class DarajaService {
         body.put("StandingOrderName", "RentManager Premium");
         body.put("StartDate", startDate.format(DateTimeFormatter.ofPattern("yyyyMMdd")));
         body.put("EndDate", endDate.format(DateTimeFormatter.ofPattern("yyyyMMdd")));
-        body.put("BusinessShortCode", properties.getBusinessShortCode());
+        body.put("BusinessShortCode", activeDaraja().businessShortCode());
         body.put("TransactionType", "Standing Order Customer Pay Bill");
         body.put("ReceiverPartyIdentifierType", "4");
         body.put("Amount", amount.toBigInteger());
@@ -371,7 +373,7 @@ public class DarajaService {
         ResponseEntity<Map> response;
         try {
             response = restTemplate.exchange(
-                    properties.getBaseUrl() + "/mpesa/stkpushquery/v1/query",
+                    activeDaraja().baseUrl() + "/mpesa/stkpushquery/v1/query",
                     HttpMethod.POST,
                     request,
                     Map.class
@@ -406,6 +408,26 @@ public class DarajaService {
     // PRIVATE HELPERS
     // -------------------------------------------------------
 
+    /**
+     * The platform's active Daraja credentials resolved through the
+     * Integration Registry (database config, then legacy daraja.* env as
+     * fallback). Falls back to the bound properties when the resolver is
+     * unavailable (unit tests) so behavior is unchanged in that case.
+     */
+    private PlatformDarajaCredentialsResolver.PlatformDarajaCredentials activeDaraja() {
+        PlatformDarajaCredentialsResolver.PlatformDarajaCredentials resolved = darajaResolver.credentials();
+        if (resolved != null) {
+            return resolved;
+        }
+        return new PlatformDarajaCredentialsResolver.PlatformDarajaCredentials(
+                properties.getConsumerKey(),
+                properties.getConsumerSecret(),
+                properties.getBusinessShortCode(),
+                properties.getPasskey(),
+                properties.getBaseUrl(),
+                "", "", "", "");
+    }
+
     private String fetchAccessToken(DarajaCredentials credentials) {
         String cacheKey = credentials.getConsumerKey();
         CachedToken cached = tokenCache.get(cacheKey);
@@ -425,7 +447,7 @@ public class DarajaService {
         ResponseEntity<Map> response;
         try {
             response = restTemplate.exchange(
-                    properties.getBaseUrl() + "/oauth/v1/generate?grant_type=client_credentials",
+                    activeDaraja().baseUrl() + "/oauth/v1/generate?grant_type=client_credentials",
                     HttpMethod.GET,
                     request,
                     Map.class

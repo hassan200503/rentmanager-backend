@@ -67,6 +67,26 @@ public class RenterReview extends AggregateRoot {
     }
 
     /**
+     * In-place edit of an existing review (one review per renter). The
+     * review always re-enters {@code PENDING}: edited content must be
+     * moderated again before it reaches any public surface — mirrors
+     * {@link PlatformReview#replace(int, String)}.
+     */
+    public void replace(int rating, String comment) {
+        if (rating < MIN_RATING || rating > MAX_RATING) {
+            throw new IllegalArgumentException(
+                    "Rating must be between " + MIN_RATING + " and " + MAX_RATING);
+        }
+        if (comment != null && comment.length() > MAX_COMMENT_LENGTH) {
+            throw new IllegalArgumentException(
+                    "Comment must be at most " + MAX_COMMENT_LENGTH + " characters");
+        }
+        this.rating = rating;
+        this.comment = normalizeComment(comment);
+        this.status = ReviewStatus.PENDING;
+    }
+
+    /**
      * Publishes the review once platform moderation approves it. Pending
      * reviews are approved normally; a previously hidden review can be
      * restored to the public feed with an explicit re-approval.

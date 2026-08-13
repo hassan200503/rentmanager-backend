@@ -18,12 +18,23 @@ public class CloudinaryConfig {
     @Value("${cloudinary.api-secret}")
     private String apiSecret;
 
+    /**
+     * Environment-level Cloudinary client, used as the migration fallback by
+     * {@link com.rentmanager.modules.integration.bridge.MediaStorageClientResolver}.
+     *
+     * <p>Returns {@code null} when any {@code cloudinary.*} value is unset
+     * instead of failing startup: once the Integrations Console is live the
+     * database config is the source of truth, and an incomplete env set must
+     * degrade the upload feature gracefully rather than brick the whole app.
+     * The upload service surfaces a clear "configure Media Storage" message
+     * in that case.</p>
+     */
     @Bean
     public Cloudinary cloudinary() {
-        if (apiSecret == null || apiSecret.isBlank()) {
-            throw new IllegalStateException(
-                    "Cloudinary API secret is missing. Set CLOUDINARY_API_SECRET in your environment."
-            );
+        if (cloudName == null || cloudName.isBlank()
+                || apiKey == null || apiKey.isBlank()
+                || apiSecret == null || apiSecret.isBlank()) {
+            return null;
         }
         return new Cloudinary(ObjectUtils.asMap(
                 "cloud_name", cloudName,

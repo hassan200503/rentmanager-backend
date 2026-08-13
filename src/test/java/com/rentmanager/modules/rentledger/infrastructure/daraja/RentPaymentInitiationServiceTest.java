@@ -1,5 +1,6 @@
 package com.rentmanager.modules.rentledger.infrastructure.daraja;
 
+import com.rentmanager.modules.integration.bridge.PlatformDarajaCredentialsResolver;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaProperties;
@@ -47,6 +48,8 @@ class RentPaymentInitiationServiceTest {
     @Mock
     private DarajaProperties darajaProperties;
     @Mock
+    private PlatformDarajaCredentialsResolver darajaResolver;
+    @Mock
     private Lease lease;
 
     private RentPaymentInitiationService service;
@@ -62,7 +65,7 @@ class RentPaymentInitiationServiceTest {
     void setUp() {
         service = new RentPaymentInitiationService(
                 rentLedgerEntryRepository, leaseRepository,
-                rentPaymentRequestRepository, darajaService, darajaProperties
+                rentPaymentRequestRepository, darajaService, darajaProperties, darajaResolver
         );
 
         lenient().when(rentPaymentRequestRepository.save(any(RentPaymentRequest.class)))
@@ -93,6 +96,9 @@ class RentPaymentInitiationServiceTest {
             lenient().when(darajaService.initiateSTKPush(
                     anyString(), any(), anyString(), anyString(), any(DarajaCredentials.class), anyString()))
                     .thenReturn(checkoutRequestId);
+            lenient().when(darajaResolver.stkCredentials())
+                    .thenReturn(DarajaCredentials.of(
+                            "test-consumer-key", "test-consumer-secret", "174379", "test-passkey"));
         }
 
         @Test
@@ -246,6 +252,9 @@ class RentPaymentInitiationServiceTest {
             lenient().when(darajaService.initiateSTKPush(
                     anyString(), any(), anyString(), anyString(), any(DarajaCredentials.class), anyString()))
                     .thenReturn(checkoutRequestId);
+            lenient().when(darajaResolver.stkCredentials())
+                    .thenReturn(DarajaCredentials.of(
+                            "test-consumer-key", "test-consumer-secret", "174379", "test-passkey"));
         }
 
         @Test

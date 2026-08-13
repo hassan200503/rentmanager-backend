@@ -1,5 +1,7 @@
 package com.rentmanager.modules.identity.clerk;
 
+import com.rentmanager.modules.integration.application.IntegrationRegistry;
+import com.rentmanager.modules.integration.domain.model.ProviderCatalog;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
@@ -18,6 +20,7 @@ public class ClerkServiceImpl implements ClerkService {
 
     private final ClerkProperties properties;
     private final RestTemplate restTemplate;
+    private final IntegrationRegistry integrationRegistry;
 
     @Override
     public ClerkUserCreationResult createTenantUser(String fullName, String email, String phone) {
@@ -42,7 +45,7 @@ public class ClerkServiceImpl implements ClerkService {
 
         try {
             ResponseEntity<Map> response = restTemplate.exchange(
-                    properties.getBaseUrl() + "/sign_in_tokens",
+                    baseUrl() + "/sign_in_tokens",
                     HttpMethod.POST,
                     request,
                     Map.class
@@ -108,7 +111,7 @@ public class ClerkServiceImpl implements ClerkService {
 
         try {
             ResponseEntity<Map> response = restTemplate.exchange(
-                    properties.getBaseUrl() + "/users",
+                    baseUrl() + "/users",
                     HttpMethod.POST,
                     request,
                     Map.class
@@ -146,7 +149,7 @@ public class ClerkServiceImpl implements ClerkService {
 
         try {
             restTemplate.exchange(
-                    properties.getBaseUrl() + "/users/" + clerkUserId,
+                    baseUrl() + "/users/" + clerkUserId,
                     HttpMethod.DELETE,
                     request,
                     Void.class
@@ -166,7 +169,7 @@ public class ClerkServiceImpl implements ClerkService {
 
         try {
             restTemplate.exchange(
-                    properties.getBaseUrl() + "/users/" + clerkUserId + "/metadata",
+                    baseUrl() + "/users/" + clerkUserId + "/metadata",
                     HttpMethod.PATCH,
                     request,
                     Map.class
@@ -182,7 +185,7 @@ public class ClerkServiceImpl implements ClerkService {
         HttpHeaders headers = buildAuthHeaders();
         HttpEntity<Void> request = new HttpEntity<>(headers);
 
-        String url = properties.getBaseUrl() + "/users?email_address[]=" + email;
+        String url = baseUrl() + "/users?email_address[]=" + email;
 
         ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
                 url,
@@ -201,7 +204,7 @@ public class ClerkServiceImpl implements ClerkService {
 
     private HttpHeaders buildAuthHeaders() {
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(properties.getSecretKey());
+        headers.setBearerAuth(secretKey());
         headers.setContentType(MediaType.APPLICATION_JSON);
         return headers;
     }
@@ -223,5 +226,32 @@ public class ClerkServiceImpl implements ClerkService {
             return "+" + phone;
         }
         return phone;
+    }
+
+    // ---------------------------------------------------------------
+    // Integration Registry resolution (falls back to legacy env props)
+    // ---------------------------------------------------------------
+
+    /**
+     * Secret Key resolved through the Integration Registry — the Owner can
+     * switch between Development and Production Clerk instances at runtime
+     * for backend calls. Falls back to {@code clerk.secret-key} (env) while
+     * no console config exists.
+     */
+    private String secretKey() {
+        return firstNonBlank(clerkCredentials().get("secret_key"), properties.getSecretKey());
+    }
+
+    private String baseUrl() {
+        return firstNonBlank(clerkCredentials().get("base_url"), properties.getBaseUrl());
+    }
+
+    private Map<String, String> clerkCredentials() {
+        var resolved = integrationRegistry.resolveOrNull(ProviderCatalog.CLERK);
+        return resolved == null ? Map.of() : resolved.credentials();
+    }
+
+    private static String firstNonBlank(String value, String fallback) {
+        return value != null && !value.isBlank() ? value : fallback;
     }
 }

@@ -1,7 +1,7 @@
 package com.rentmanager.modules.rentledger.infrastructure.daraja;
 
+import com.rentmanager.modules.integration.bridge.PlatformDarajaCredentialsResolver;
 import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaException;
-import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
@@ -19,15 +19,15 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class DarajaB2CService {
 
-    private final DarajaProperties darajaProperties;
-    private final DarajaB2CProperties b2cProperties;
+    private final PlatformDarajaCredentialsResolver darajaResolver;
     private final RestTemplate restTemplate;
 
     /**
      * Initiates a B2C payment via Daraja's /b2c/v3/paymentrequest endpoint.
-     * Uses platform-level credentials from DarajaProperties for the OAuth
-     * token and the B2C-specific InitiatorName/SecurityCredential for the
-     * request body.
+     * Uses platform-level credentials resolved through the Integration
+     * Registry (Consumer Key/Secret for the OAuth token, the B2C
+     * InitiatorName/SecurityCredential for the request body, and the
+     * platform business shortcode as PartyA).
      *
      * @return OriginatorConversationID from Daraja — store this to match callbacks
      */
@@ -38,19 +38,20 @@ public class DarajaB2CService {
             String remarks,
             String commandId
     ) {
-        String token = fetchAccessToken();
+        PlatformDarajaCredentialsResolver.PlatformDarajaCredentials creds = darajaResolver.credentials();
+        String token = fetchAccessToken(creds);
         String phone = normalizePhone(recipientPhone);
 
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("InitiatorName", b2cProperties.getInitiatorName());
-        body.put("SecurityCredential", b2cProperties.getSecurityCredential());
+        body.put("InitiatorName", creds.initiatorName());
+        body.put("SecurityCredential", creds.securityCredential());
         body.put("CommandID", commandId);
         body.put("Amount", amount.setScale(0, java.math.RoundingMode.CEILING).toBigInteger().toString());
-        body.put("PartyA", darajaProperties.getBusinessShortCode());
+        body.put("PartyA", creds.businessShortCode());
         body.put("PartyB", phone);
         body.put("Remarks", remarks);
-        body.put("QueueTimeOutURL", b2cProperties.getQueueTimeOutUrl());
-        body.put("ResultURL", b2cProperties.getResultUrl());
+        body.put("QueueTimeOutURL", creds.queueTimeOutUrl());
+        body.put("ResultURL", creds.resultUrl());
         body.put("Occasion", remarks);
 
         HttpHeaders headers = new HttpHeaders();
@@ -62,7 +63,7 @@ public class DarajaB2CService {
         ResponseEntity<Map> response;
         try {
             response = restTemplate.exchange(
-                    darajaProperties.getBaseUrl() + "/mpesa/b2c/v3/paymentrequest",
+                    creds.baseUrl() + "/mpesa/b2c/v3/paymentrequest",
                     HttpMethod.POST,
                     request,
                     Map.class
@@ -99,8 +100,8 @@ public class DarajaB2CService {
         return originatorConversationId;
     }
 
-    private String fetchAccessToken() {
-        String rawCredentials = darajaProperties.getConsumerKey() + ":" + darajaProperties.getConsumerSecret();
+    private String fetchAccessToken(PlatformDarajaCredentialsResolver.PlatformDarajaCredentials creds) {
+        String rawCredentials = creds.consumerKey() + ":" + creds.consumerSecret();
         String encoded = Base64.getEncoder()
                 .encodeToString(rawCredentials.getBytes(StandardCharsets.UTF_8));
 
@@ -112,7 +113,7 @@ public class DarajaB2CService {
         ResponseEntity<Map> response;
         try {
             response = restTemplate.exchange(
-                    darajaProperties.getBaseUrl() + "/oauth/v1/generate?grant_type=client_credentials",
+                    creds.baseUrl() + "/oauth/v1/generate?grant_type=client_credentials",
                     HttpMethod.GET,
                     request,
                     Map.class

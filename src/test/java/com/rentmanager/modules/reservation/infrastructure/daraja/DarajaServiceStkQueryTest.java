@@ -1,5 +1,6 @@
 package com.rentmanager.modules.reservation.infrastructure.daraja;
 
+import com.rentmanager.modules.integration.bridge.PlatformDarajaCredentialsResolver;
 import com.rentmanager.modules.tenant.domain.valueobject.DarajaCredentials;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,6 +28,7 @@ class DarajaServiceStkQueryTest {
 
     private RestTemplate restTemplate;
     private DarajaProperties properties;
+    private PlatformDarajaCredentialsResolver darajaResolver;
     private DarajaService service;
 
     private static final String CHECKOUT_ID = "ws_CO_test_1";
@@ -40,8 +42,9 @@ class DarajaServiceStkQueryTest {
         properties.setConsumerSecret("consumer-secret");
         properties.setBusinessShortCode("174379");
         properties.setPasskey("passkey");
+        darajaResolver = mock(PlatformDarajaCredentialsResolver.class);
 
-        service = new DarajaService(properties, restTemplate);
+        service = new DarajaService(properties, restTemplate, darajaResolver);
 
         when(restTemplate.exchange(
                 contains("/oauth/v1/generate"),

@@ -1,5 +1,6 @@
 package com.rentmanager.modules.tenant.application.service;
 
+import com.rentmanager.modules.integration.bridge.PlatformDarajaCredentialsResolver;
 import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaProperties;
 import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaService;
 import com.rentmanager.modules.tenant.api.dto.response.RatibaSetupResponse;
@@ -73,6 +74,7 @@ public class SubscriptionBillingService {
     private final UnitRepository unitRepository;
     private final DarajaService darajaService;
     private final DarajaProperties darajaProperties;
+    private final PlatformDarajaCredentialsResolver darajaResolver;
     private final RatibaStandingOrderService ratibaStandingOrderService;
     private final SubscriptionPaymentCallbackTransactionService callbackTransactionService;
     private final SubscriptionBillingProperties subscriptionBillingProperties;
@@ -266,7 +268,7 @@ public class SubscriptionBillingService {
                 tenant.getPlanEndDate(),
                 tenant.getPlanGraceEndsAt(),
                 tenant.isPlanAutoRenew(),
-                darajaProperties.getBusinessShortCode(),
+                darajaResolver.credentials().businessShortCode(),
                 tenant.getTenantCode(),
                 darajaProperties.isRatibaEnabled(),
                 standingOrderStatus
@@ -377,9 +379,9 @@ public class SubscriptionBillingService {
         SubscriptionStandingOrder order = ratibaStandingOrderService.createStandingOrder(tenantId);
         return RatibaSetupResponse.from(
                 order,
-                darajaProperties.getBusinessShortCode(),
+                darajaResolver.credentials().businessShortCode(),
                 "Open *334# or the M-Pesa app > My Subscriptions and set up a recurring payment of "
-                        + order.getAmount() + " KES to Paybill " + darajaProperties.getBusinessShortCode()
+                        + order.getAmount() + " KES to Paybill " + darajaResolver.credentials().businessShortCode()
                         + " with account reference " + order.getAccountReference()
         );
     }
@@ -393,11 +395,6 @@ public class SubscriptionBillingService {
     }
 
     private DarajaCredentials platformCredentials() {
-        return DarajaCredentials.of(
-                darajaProperties.getConsumerKey(),
-                darajaProperties.getConsumerSecret(),
-                darajaProperties.getBusinessShortCode(),
-                darajaProperties.getPasskey()
-        );
+        return darajaResolver.stkCredentials();
     }
 }
