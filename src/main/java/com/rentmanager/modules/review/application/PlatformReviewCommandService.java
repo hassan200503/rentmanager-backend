@@ -1,8 +1,10 @@
 package com.rentmanager.modules.review.application;
 
 import com.rentmanager.modules.review.application.dto.response.PlatformReviewResponse;
+import com.rentmanager.modules.review.domain.enums.ReviewerType;
 import com.rentmanager.modules.review.domain.model.PlatformReview;
 import com.rentmanager.modules.review.domain.repository.PlatformReviewRepository;
+import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
 import com.rentmanager.modules.user.domain.model.User;
 import com.rentmanager.modules.user.domain.repository.UserRepository;
 import com.rentmanager.shared.exception.ErrorCode;
@@ -32,6 +34,7 @@ public class PlatformReviewCommandService {
 
     private final PlatformReviewRepository platformReviewRepository;
     private final UserRepository userRepository;
+    private final TenantProfileRepository tenantProfileRepository;
 
     @Transactional
     public PlatformReviewResponse submit(UUID reviewerUserId, int rating, String comment) {
@@ -47,9 +50,11 @@ public class PlatformReviewCommandService {
             platformReviewRepository.save(review);
             log.info("Platform review edited. reviewId={} userId={}", review.getId(), reviewerUserId);
         } else {
-            review = PlatformReview.submit(reviewerUserId, fullName(user), rating, comment);
+            review = PlatformReview.submit(
+                    reviewerUserId, fullName(user), resolveReviewerType(user), rating, comment);
             review = platformReviewRepository.save(review);
-            log.info("Platform review submitted. reviewId={} userId={}", review.getId(), reviewerUserId);
+            log.info("Platform review submitted. reviewId={} userId={} reviewerType={}",
+                    review.getId(), reviewerUserId, review.getReviewerType());
         }
         return toResponse(review);
     }
@@ -66,10 +71,31 @@ public class PlatformReviewCommandService {
                 ReviewModerationService.ReviewType.PLATFORM,
                 review.getId(),
                 review.getReviewerName(),
+                review.getReviewerType(),
                 review.getRating(),
                 review.getComment(),
                 review.getStatus(),
                 review.getCreatedAt());
+    }
+
+    /**
+     * Resolve the reviewer's side of the platform at write time (V69):
+     * a user holding a tenant link is a landlord; a user with a
+     * {@code tenant_profile} row (and no tenant link) is a renter.
+     * Pending-onboarding users default to landlord, mirroring the
+     * platform admin's {@code classifyUser} rule. Snapshotting keeps the
+     * public testimonials wall truthful even if the account changes side
+     * later.
+     */
+    private ReviewerType resolveReviewerType(User user) {
+        if (user.getTenantId() != null) {
+            return ReviewerType.LANDLORD;
+        }
+        if (user.getClerkUserId() != null
+                && tenantProfileRepository.existsByClerkUserId(user.getClerkUserId())) {
+            return ReviewerType.RENTER;
+        }
+        return ReviewerType.LANDLORD;
     }
 
     /**

@@ -4,6 +4,7 @@ import com.rentmanager.modules.review.application.dto.response.PlatformReviewRes
 import com.rentmanager.modules.review.application.dto.response.PlatformStatsResponse;
 import com.rentmanager.modules.review.application.dto.response.PlatformTestimonialResponse;
 import com.rentmanager.modules.review.domain.enums.ReviewStatus;
+import com.rentmanager.modules.review.domain.enums.ReviewerType;
 import com.rentmanager.modules.review.domain.model.LandlordReview;
 import com.rentmanager.modules.review.domain.model.PlatformReview;
 import com.rentmanager.modules.review.domain.model.RenterReview;
@@ -70,6 +71,7 @@ class PlatformReviewQueryServiceTest {
         PlatformTestimonialResponse t = testimonials.get(0);
         assertEquals(platformReviewId, t.reviewId());
         assertEquals("Amina", t.reviewerFirstName());
+        assertEquals(ReviewerType.LANDLORD, t.reviewerType());
         assertEquals(5, t.rating());
         verify(aggregationRepository, never())
                 .findLandlordReviews(any(ReviewStatus.class), anyInt());
@@ -92,10 +94,10 @@ class PlatformReviewQueryServiceTest {
     @Test
     void getTestimonials_sortsNewestFirst() {
         PlatformReview older = PlatformReview.rehydrate(UUID.randomUUID(),
-                UUID.randomUUID(), "Grace Wanjiku", 4, "old", ReviewStatus.APPROVED,
+                UUID.randomUUID(), "Grace Wanjiku", ReviewerType.RENTER, 4, "old", ReviewStatus.APPROVED,
                 0L, Instant.parse("2026-01-01T00:00:00Z"), null);
         PlatformReview newer = PlatformReview.rehydrate(UUID.randomUUID(),
-                UUID.randomUUID(), "Daniel Kipchoge", 5, "new", ReviewStatus.APPROVED,
+                UUID.randomUUID(), "Daniel Kipchoge", ReviewerType.RENTER, 5, "new", ReviewStatus.APPROVED,
                 0L, Instant.parse("2026-02-01T00:00:00Z"), null);
         when(platformReviewRepository.findByStatusOrderByCreatedAtDesc(
                 ReviewStatus.APPROVED, 10)).thenReturn(List.of(older, newer));
@@ -147,10 +149,13 @@ class PlatformReviewQueryServiceTest {
         assertEquals(3, reviews.size());
         assertEquals(ReviewModerationService.ReviewType.LANDLORD, reviews.get(2).type());
         assertEquals("Fatima Nyambura", reviews.get(2).reviewerName());
+        assertNull(reviews.get(2).reviewerType());
         assertEquals(ReviewModerationService.ReviewType.RENTER, reviews.get(1).type());
         assertEquals("Sunrise Properties", reviews.get(1).reviewerName());
+        assertNull(reviews.get(1).reviewerType());
         assertEquals(ReviewModerationService.ReviewType.PLATFORM, reviews.get(0).type());
         assertEquals("Amina Hassan", reviews.get(0).reviewerName());
+        assertEquals(ReviewerType.LANDLORD, reviews.get(0).reviewerType());
     }
 
     @Test
@@ -205,7 +210,7 @@ class PlatformReviewQueryServiceTest {
 
     private PlatformReview platform(String reviewerName, ReviewStatus status) {
         return PlatformReview.rehydrate(platformReviewId, UUID.randomUUID(),
-                reviewerName, 5, "testimonial", status, 0L,
+                reviewerName, ReviewerType.LANDLORD, 5, "testimonial", status, 0L,
                 Instant.parse("2026-02-01T00:00:00Z"), null);
     }
 }

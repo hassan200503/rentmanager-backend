@@ -3,8 +3,10 @@ package com.rentmanager.modules.review.application;
 import com.rentmanager.modules.review.application.ReviewModerationService.ReviewType;
 import com.rentmanager.modules.review.application.dto.response.PlatformReviewResponse;
 import com.rentmanager.modules.review.domain.enums.ReviewStatus;
+import com.rentmanager.modules.review.domain.enums.ReviewerType;
 import com.rentmanager.modules.review.domain.model.PlatformReview;
 import com.rentmanager.modules.review.domain.repository.PlatformReviewRepository;
+import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
 import com.rentmanager.modules.user.domain.model.User;
 import com.rentmanager.modules.user.domain.model.UserRole;
 import com.rentmanager.modules.user.domain.repository.UserRepository;
@@ -34,6 +36,7 @@ class PlatformReviewCommandServiceTest {
 
     private PlatformReviewRepository platformReviewRepository;
     private UserRepository userRepository;
+    private TenantProfileRepository tenantProfileRepository;
     private PlatformReviewCommandService service;
 
     private final UUID userId = UUID.randomUUID();
@@ -42,7 +45,9 @@ class PlatformReviewCommandServiceTest {
     void setUp() {
         platformReviewRepository = mock(PlatformReviewRepository.class);
         userRepository = mock(UserRepository.class);
-        service = new PlatformReviewCommandService(platformReviewRepository, userRepository);
+        tenantProfileRepository = mock(TenantProfileRepository.class);
+        service = new PlatformReviewCommandService(
+                platformReviewRepository, userRepository, tenantProfileRepository);
     }
 
     @Test
@@ -61,14 +66,43 @@ class PlatformReviewCommandServiceTest {
 
         assertEquals(ReviewType.PLATFORM, response.type());
         assertEquals("Amina Hassan", response.reviewerName());
+        assertEquals(ReviewerType.LANDLORD, response.reviewerType());
         assertEquals(ReviewStatus.PENDING, response.status());
         verify(platformReviewRepository).save(any(PlatformReview.class));
     }
 
     @Test
+    void submit_landlordWithTenantLink_isSnapshottedAsLandlord() {
+        User user = user();
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(platformReviewRepository.findByReviewerUserId(userId)).thenReturn(Optional.empty());
+        when(platformReviewRepository.save(any(PlatformReview.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        PlatformReviewResponse response = service.submit(userId, 5, "Amazing");
+
+        assertEquals(ReviewerType.LANDLORD, response.reviewerType());
+    }
+
+    @Test
+    void submit_renterWithoutTenantLink_isSnapshottedAsRenter() {
+        User user = User.createFromClerk("clerk_1", "user@example.com");
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(tenantProfileRepository.existsByClerkUserId("clerk_1")).thenReturn(true);
+        when(platformReviewRepository.findByReviewerUserId(userId)).thenReturn(Optional.empty());
+        when(platformReviewRepository.save(any(PlatformReview.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        PlatformReviewResponse response = service.submit(userId, 4, "Renter opinion");
+
+        assertEquals(ReviewerType.RENTER, response.reviewerType());
+    }
+
+    @Test
     void submit_secondTime_editsExistingReview() {
         User user = user();
-        PlatformReview existing = PlatformReview.submit(userId, "Amina Hassan", 5, "old");
+        PlatformReview existing = PlatformReview.submit(
+                userId, "Amina Hassan", ReviewerType.LANDLORD, 5, "old");
         existing.approve();
         existing.setId(UUID.randomUUID());
 
@@ -122,7 +156,8 @@ class PlatformReviewCommandServiceTest {
 
     @Test
     void getMyReview_returnsExistingReview() {
-        PlatformReview existing = PlatformReview.submit(userId, "Amina Hassan", 4, "nice");
+        PlatformReview existing = PlatformReview.submit(
+                userId, "Amina Hassan", ReviewerType.LANDLORD, 4, "nice");
         existing.setId(UUID.randomUUID());
         when(platformReviewRepository.findByReviewerUserId(userId))
                 .thenReturn(Optional.of(existing));

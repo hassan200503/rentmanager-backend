@@ -2,6 +2,7 @@ package com.rentmanager.modules.review.domain.model;
 
 import com.rentmanager.domain.base.BaseEntity;
 import com.rentmanager.modules.review.domain.enums.ReviewStatus;
+import com.rentmanager.modules.review.domain.enums.ReviewerType;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -38,6 +39,7 @@ public class PlatformReview extends BaseEntity {
 
     private UUID reviewerUserId;
     private String reviewerName;
+    private ReviewerType reviewerType;
     private int rating;
     private String comment;
     private ReviewStatus status;
@@ -45,11 +47,15 @@ public class PlatformReview extends BaseEntity {
     public static PlatformReview submit(
             UUID reviewerUserId,
             String reviewerName,
+            ReviewerType reviewerType,
             int rating,
             String comment
     ) {
         if (reviewerUserId == null) {
             throw new IllegalArgumentException("Reviewer is required");
+        }
+        if (reviewerType == null) {
+            throw new IllegalArgumentException("Reviewer type is required");
         }
         String displayName = (reviewerName == null || reviewerName.isBlank())
                 ? DEFAULT_REVIEWER_NAME
@@ -63,6 +69,7 @@ public class PlatformReview extends BaseEntity {
         PlatformReview review = new PlatformReview();
         review.reviewerUserId = reviewerUserId;
         review.reviewerName = displayName;
+        review.reviewerType = reviewerType;
         review.rating = rating;
         review.comment = normalizeComment(comment);
         review.status = ReviewStatus.PENDING;
@@ -132,6 +139,7 @@ public class PlatformReview extends BaseEntity {
             UUID id,
             UUID reviewerUserId,
             String reviewerName,
+            ReviewerType reviewerType,
             int rating,
             String comment,
             ReviewStatus status,
@@ -143,6 +151,7 @@ public class PlatformReview extends BaseEntity {
         review.setId(id);
         review.reviewerUserId = reviewerUserId;
         review.reviewerName = reviewerName;
+        review.reviewerType = reviewerType;
         review.rating = rating;
         review.comment = comment;
         review.status = status != null ? status : ReviewStatus.PENDING;

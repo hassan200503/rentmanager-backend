@@ -47,6 +47,7 @@ public class PlatformReviewQueryService {
                         ReviewModerationService.ReviewType.LANDLORD,
                         r.getId(),
                         resolveRenterName(r.getTenantProfileId()),
+                        null,
                         r.getRating(),
                         r.getComment(),
                         r.getStatus(),
@@ -56,6 +57,7 @@ public class PlatformReviewQueryService {
                         ReviewModerationService.ReviewType.RENTER,
                         r.getId(),
                         resolveLandlordName(r.getTenantId()),
+                        null,
                         r.getRating(),
                         r.getComment(),
                         r.getStatus(),
@@ -65,6 +67,7 @@ public class PlatformReviewQueryService {
                         ReviewModerationService.ReviewType.PLATFORM,
                         r.getId(),
                         r.getReviewerName(),
+                        r.getReviewerType(),
                         r.getRating(),
                         r.getComment(),
                         r.getStatus(),
@@ -81,6 +84,7 @@ public class PlatformReviewQueryService {
                 .map(r -> new PlatformTestimonialResponse(
                         r.getId(),
                         toFirstName(r.getReviewerName()),
+                        r.getReviewerType(),
                         r.getRating(),
                         r.getComment(),
                         r.getCreatedAt()))

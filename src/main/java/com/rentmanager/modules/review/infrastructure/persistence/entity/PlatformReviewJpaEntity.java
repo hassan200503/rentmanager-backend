@@ -2,6 +2,7 @@ package com.rentmanager.modules.review.infrastructure.persistence.entity;
 
 import com.rentmanager.domain.base.BaseEntity;
 import com.rentmanager.modules.review.domain.enums.ReviewStatus;
+import com.rentmanager.modules.review.domain.enums.ReviewerType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -37,6 +38,10 @@ public class PlatformReviewJpaEntity extends BaseEntity {
 
     @Column(name = "reviewer_name", nullable = false, length = 100)
     private String reviewerName;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "reviewer_type", nullable = false, length = 30)
+    private ReviewerType reviewerType;
 
     @Column(name = "rating", nullable = false)
     private int rating;

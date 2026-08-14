@@ -2,6 +2,7 @@ package com.rentmanager.modules.review.application;
 
 import com.rentmanager.modules.review.application.ReviewModerationService.ReviewType;
 import com.rentmanager.modules.review.domain.enums.ReviewStatus;
+import com.rentmanager.modules.review.domain.enums.ReviewerType;
 import com.rentmanager.modules.review.domain.model.LandlordReview;
 import com.rentmanager.modules.review.domain.model.PlatformReview;
 import com.rentmanager.modules.review.domain.model.RenterReview;
@@ -171,6 +172,6 @@ class ReviewModerationServiceTest {
 
     private PlatformReview platform(ReviewStatus status) {
         return PlatformReview.rehydrate(reviewId, UUID.randomUUID(), "Amina Hassan",
-                5, "comment", status, 0L, null, null);
+                ReviewerType.LANDLORD, 5, "comment", status, 0L, null, null);
     }
 }

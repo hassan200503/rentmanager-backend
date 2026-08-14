@@ -16,6 +16,7 @@ public class PlatformReviewPersistenceMapper {
         jpa.setVersion(review.getVersion());
         jpa.setReviewerUserId(review.getReviewerUserId());
         jpa.setReviewerName(review.getReviewerName());
+        jpa.setReviewerType(review.getReviewerType());
         jpa.setRating(review.getRating());
         jpa.setComment(review.getComment());
         jpa.setStatus(review.getStatus());
@@ -30,6 +31,7 @@ public class PlatformReviewPersistenceMapper {
                 jpa.getId(),
                 jpa.getReviewerUserId(),
                 jpa.getReviewerName(),
+                jpa.getReviewerType(),
                 jpa.getRating(),
                 jpa.getComment(),
                 jpa.getStatus(),
