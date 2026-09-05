@@ -44,8 +44,35 @@ public class RentPaymentCallbackService {
             return;
         }
 
-        RentPaymentCallbackTransactionService.SuccessfulPaymentResult result =
-                txService.processSuccessfulCallback(checkoutRequestId, mpesaReceiptNumber);
+        RentPaymentCallbackTransactionService.SuccessfulPaymentResult result;
+        try {
+            result = txService.processSuccessfulCallback(checkoutRequestId, mpesaReceiptNumber);
+        } catch (Exception e) {
+            // The renter has already paid. Letting this escape meant the
+            // payment was recorded nowhere, Safaricom got an error and
+            // retried a callback that could never succeed, and the only
+            // trace was a stack trace.
+            //
+            // Observed in the wild: an STK push prompted against an entry
+            // that was already PAID, so applying it threw "cannot modify a
+            // PAID entry" with the money already gone from the renter's
+            // phone. The initiation guard now prevents that specific cause;
+            // this is the net under every other one — a concurrent payment,
+            // an admin adjustment landing mid-flight, a lease change.
+            log.error("Rent payment callback could not be applied — parking it. "
+                            + "checkoutRequestId={} receipt={}",
+                    checkoutRequestId, mpesaReceiptNumber, e);
+            txService.parkUnappliedPayment(
+                    checkoutRequestId,
+                    mpesaReceiptNumber,
+                    parseAmount(callback),
+                    callback.getCallbackMetadata() == null
+                            ? null : callback.getCallbackMetadata().getPhoneNumber(),
+                    e.getMessage());
+            // Returns normally so the controller answers 200. Safaricom must
+            // not retry a callback that will fail identically every time.
+            return;
+        }
 
         if (result == null) {
             log.info("Duplicate callback — already processed. CheckoutRequestID={}", checkoutRequestId);
@@ -127,5 +154,22 @@ public class RentPaymentCallbackService {
         log.warn("Rent payment M-Pesa callback reported failure. CheckoutRequestID={} Reason={}",
                 checkoutRequestId, reason);
         txService.processFailedCallback(checkoutRequestId, reason);
+    }
+
+    /**
+     * Best-effort amount from the callback metadata, for the parked record.
+     * Never throws: this runs on the failure path, and losing the parked row
+     * to a parse error would defeat the point of parking it.
+     */
+    private static java.math.BigDecimal parseAmount(StkCallback callback) {
+        try {
+            if (callback.getCallbackMetadata() == null) {
+                return null;
+            }
+            String raw = callback.getCallbackMetadata().getAmount();
+            return raw == null || raw.isBlank() ? null : new java.math.BigDecimal(raw);
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

@@ -67,6 +67,9 @@ class RentPaymentCallbackTransactionServicePremiumTest {
 
         service = new RentPaymentCallbackTransactionService(
                 rentPaymentRequestRepository,
+                // Money that arrives but cannot be applied is parked here
+                // rather than lost — see parkUnappliedPayment.
+                mock(com.rentmanager.modules.rentledger.domain.repository.UnmatchedPaymentRepository.class),
                 rentLedgerApplicationService,
                 rentTransactionRepository,
                 commissionPolicyService,

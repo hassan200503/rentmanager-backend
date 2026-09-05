@@ -121,6 +121,25 @@ public class RentPaymentInitiationService {
                         ErrorCode.RESOURCE_NOT_FOUND
                 ));
 
+        // Refuse to prompt for money the entry cannot accept.
+        //
+        // initiate() has always guarded this - it derives the amount from
+        // getBalanceOwed() and throws RENT_LEDGER_ENTRY_ALREADY_SETTLED at
+        // zero. This method took a caller-supplied amount and never checked,
+        // so a partial payment could be prompted against a PAID entry: the
+        // renter's money left their phone, Safaricom returned ResultCode=0,
+        // and the callback then threw "cannot modify a PAID entry" while
+        // applying it. Money taken, nothing recorded.
+        //
+        // Checked here, before the push, because this is the only point at
+        // which refusing costs nobody anything.
+        if (!entry.getStatus().isOutstanding()) {
+            throw new RentLedgerStateException(
+                    "This charge is already settled, so it cannot take another payment.",
+                    ErrorCode.RENT_LEDGER_ENTRY_ALREADY_SETTLED
+            );
+        }
+
         UUID leaseId = entry.getLeaseId();
         Lease lease = leaseRepository.findByIdAndTenantId(leaseId, tenantId)
                 .orElseThrow(() -> new RentLedgerStateException(

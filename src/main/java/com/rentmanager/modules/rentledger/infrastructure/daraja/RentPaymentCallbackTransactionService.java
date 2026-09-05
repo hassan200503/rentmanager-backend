@@ -12,6 +12,8 @@ import com.rentmanager.modules.rentledger.domain.model.RentTransaction;
 import com.rentmanager.modules.rentledger.domain.repository.DisbursementRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentPaymentRequestRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentTransactionRepository;
+import com.rentmanager.modules.rentledger.domain.model.UnmatchedPayment;
+import com.rentmanager.modules.rentledger.domain.repository.UnmatchedPaymentRepository;
 import com.rentmanager.modules.tenant.domain.enums.BillingMode;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import jakarta.persistence.EntityManager;
@@ -31,6 +33,7 @@ import java.util.UUID;
 public class RentPaymentCallbackTransactionService {
 
     private final RentPaymentRequestRepository rentPaymentRequestRepository;
+    private final UnmatchedPaymentRepository unmatchedPaymentRepository;
     private final RentLedgerApplicationService rentLedgerApplicationService;
     private final RentTransactionRepository rentTransactionRepository;
     private final CommissionPolicyService commissionPolicyService;
@@ -242,4 +245,66 @@ public class RentPaymentCallbackTransactionService {
             BigDecimal commissionAmount,
             BigDecimal netAmount
     ) {}
+
+    /**
+     * Records money Safaricom confirmed but the ledger could not accept.
+     *
+     * <p>Runs in its OWN transaction: the caller reaches this only after
+     * {@link #processSuccessfulCallback} threw, which rolled its transaction
+     * back. Writing the parked row inside that rolled-back transaction would
+     * discard it too, which is the failure this method exists to prevent.
+     *
+     * <p><b>Why parking rather than throwing.</b> The renter has already paid.
+     * Letting the exception escape the callback meant three bad things at
+     * once: the payment was recorded nowhere, Safaricom received an error and
+     * retried a callback that could never succeed, and the only trace was a
+     * stack trace in the application log. An unmatched payment is money the
+     * system admits it holds and cannot yet attribute — visible under
+     * GET /rent-ledger/unmatched-payments and resolvable by an owner, with
+     * the resolution audited.
+     *
+     * <p>Deliberately swallows its own failures. If parking itself breaks,
+     * the callback must still return 200: a retry would replay a payment the
+     * ledger already rejected once, and the log line below is then the only
+     * record — which is worse than this method working, and better than a
+     * retry storm.
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public void parkUnappliedPayment(
+            String checkoutRequestId,
+            String mpesaReceiptNumber,
+            java.math.BigDecimal amount,
+            String phoneNumber,
+            String reason
+    ) {
+        try {
+            RentPaymentRequest request = rentPaymentRequestRepository
+                    .findByMpesaCheckoutRequestId(checkoutRequestId)
+                    .orElse(null);
+
+            UUID tenantId = request == null ? null : request.getTenantId();
+
+            UnmatchedPayment unmatched = UnmatchedPayment.create(
+                    tenantId,
+                    mpesaReceiptNumber,
+                    amount,
+                    phoneNumber,
+                    request == null ? null : String.valueOf(request.getRentLedgerEntryId()),
+                    java.time.LocalDateTime.now(),
+                    checkoutRequestId,
+                    mpesaReceiptNumber,
+                    null,
+                    "rent-callback: " + reason
+            );
+            unmatchedPaymentRepository.save(unmatched);
+
+            log.warn("Rent payment could not be applied and was parked for manual resolution. "
+                            + "checkoutRequestId={} receipt={} amount={} tenantId={} reason={}",
+                    checkoutRequestId, mpesaReceiptNumber, amount, tenantId, reason);
+        } catch (Exception e) {
+            log.error("FAILED TO PARK an unapplied rent payment. The renter has paid and the "
+                            + "system has no record of it. checkoutRequestId={} receipt={} amount={}",
+                    checkoutRequestId, mpesaReceiptNumber, amount, e);
+        }
+    }
 }
