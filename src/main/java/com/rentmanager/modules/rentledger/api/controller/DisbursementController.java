@@ -68,8 +68,6 @@ public class DisbursementController {
                 request.leaseId(),
                 request.ledgerEntryId(),
                 request.amount(),
-                request.recipientPhone(),
-                request.recipientName(),
                 request.commandId() != null ? request.commandId() : "BusinessPayment",
                 request.remarks() != null ? request.remarks() : "Disbursement"
         );

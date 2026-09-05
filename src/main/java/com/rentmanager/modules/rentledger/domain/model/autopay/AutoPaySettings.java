@@ -45,6 +45,7 @@ public class AutoPaySettings extends AggregateRoot {
     private LocalDate lastAutoPayDate;
     private int consecutiveFailures;
     private LocalDateTime lastAttemptAt;
+    private String lastFailureReason;
 
     // -------------------------------------------------------
     // FACTORY
@@ -90,21 +91,32 @@ public class AutoPaySettings extends AggregateRoot {
 
     /**
      * Called after a successful auto-pay STK push. Resets the failure
-     * counter and records the date.
+     * counter and clears any prior failure reason — a renter looking at
+     * their auto-pay status after a successful run should not see a stale
+     * "last attempt failed" message.
      */
     public void recordSuccess() {
         this.lastAutoPayDate = LocalDate.now();
         this.consecutiveFailures = 0;
         this.lastAttemptAt = LocalDateTime.now();
+        this.lastFailureReason = null;
     }
 
     /**
      * Called after a failed auto-pay attempt. Increments the failure
-     * counter. If the counter reaches 3, auto-disables.
+     * counter and records a renter-safe explanation. If the counter reaches
+     * 3, auto-disables.
+     *
+     * {@code reason} MUST already be a sanitized, renter-facing string — see
+     * AutoPayService's failure classification, which deliberately never
+     * persists a raw exception message here (Daraja/provider error text can
+     * embed phone numbers or other details this system otherwise never logs
+     * or displays; see backend CLAUDE.md "never log ... full phone numbers").
      */
-    public void recordFailure() {
+    public void recordFailure(String reason) {
         this.consecutiveFailures++;
         this.lastAttemptAt = LocalDateTime.now();
+        this.lastFailureReason = reason;
         if (this.consecutiveFailures >= 3) {
             this.enabled = false;
         }
@@ -133,6 +145,7 @@ public class AutoPaySettings extends AggregateRoot {
             LocalDate lastAutoPayDate,
             int consecutiveFailures,
             LocalDateTime lastAttemptAt,
+            String lastFailureReason,
             Long version
     ) {
         AutoPaySettings settings = AutoPaySettings.builder()
@@ -143,6 +156,7 @@ public class AutoPaySettings extends AggregateRoot {
                 .lastAutoPayDate(lastAutoPayDate)
                 .consecutiveFailures(consecutiveFailures)
                 .lastAttemptAt(lastAttemptAt)
+                .lastFailureReason(lastFailureReason)
                 .build();
 
         settings.setId(id);

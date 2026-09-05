@@ -1,6 +1,7 @@
 package com.rentmanager.modules.rentledger.application.service;
 
 import com.rentmanager.modules.rentledger.domain.enums.DisbursementStatus;
+import com.rentmanager.modules.rentledger.domain.enums.RentTransactionSource;
 import com.rentmanager.modules.rentledger.domain.enums.RentTransactionType;
 import com.rentmanager.modules.rentledger.domain.model.Disbursement;
 import com.rentmanager.modules.rentledger.domain.model.RentLedgerEntry;
@@ -9,6 +10,7 @@ import com.rentmanager.modules.rentledger.domain.repository.RentLedgerEntryRepos
 import com.rentmanager.modules.rentledger.domain.repository.RentTransactionRepository;
 import com.rentmanager.modules.rentledger.infrastructure.daraja.DarajaB2CService;
 import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
+import com.rentmanager.modules.support.MinimalTenantChainFixture;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,18 +61,27 @@ class B2CCallbackIdempotencyIntegrationTest extends AbstractPostgresIntegrationT
     private RentTransactionRepository rentTransactionRepository;
 
     @Autowired
+    private RentLedgerApplicationService rentLedgerApplicationService;
+
+    @Autowired
     private EntityManager entityManager;
 
-    private final UUID tenantId = UUID.randomUUID();
-    private final UUID leaseId = UUID.randomUUID();
-    private final UUID unitId = UUID.randomUUID();
-    private final UUID tenantProfileId = UUID.randomUUID();
+    private UUID tenantId;
+    private UUID leaseId;
+    private UUID unitId;
+    private UUID tenantProfileId;
     private UUID ledgerEntryId;
 
     @BeforeEach
     void setUp() {
         when(darajaB2CService.initiateB2C(any(), any(), any(), any(), any()))
                 .thenReturn("OCID-IT-" + UUID.randomUUID());
+
+        MinimalTenantChainFixture.ChainWithLease chain = MinimalTenantChainFixture.persistFullChainWithLease(entityManager);
+        tenantId = chain.tenantId();
+        unitId = chain.unitId();
+        tenantProfileId = chain.tenantProfileId();
+        leaseId = chain.leaseId();
 
         RentLedgerEntry entry = RentLedgerEntry.create(
                 tenantId, "corr-" + UUID.randomUUID(), leaseId, unitId, tenantProfileId,
@@ -80,6 +91,29 @@ class B2CCallbackIdempotencyIntegrationTest extends AbstractPostgresIntegrationT
         entry = rentLedgerEntryRepository.save(entry);
         entityManager.flush();
         ledgerEntryId = entry.getId();
+
+        // Preconditions the initiation guards now require. Both are real
+        // product state, not test scaffolding: a landlord cannot be paid
+        // without a registered payout number, and a payout cannot exceed the
+        // proceeds the charge has actually collected.
+        entityManager.createNativeQuery(
+                        "UPDATE tenants SET payout_phone_number = :phone WHERE id = :id")
+                .setParameter("phone", "+254711000111")
+                .setParameter("id", tenantId)
+                .executeUpdate();
+
+        rentLedgerApplicationService.applyTransaction(
+                tenantId,
+                "it-payment-" + UUID.randomUUID(),
+                ledgerEntryId,
+                RentTransactionType.PAYMENT,
+                new BigDecimal("10000.00"),
+                "IT-RECEIPT-" + UUID.randomUUID(),
+                RentTransactionSource.MPESA,
+                "SYSTEM",
+                LocalDateTime.now()
+        );
+        entityManager.flush();
     }
 
     /**
@@ -94,8 +128,7 @@ class B2CCallbackIdempotencyIntegrationTest extends AbstractPostgresIntegrationT
     void duplicateSuccessCallback_doesNotCreateDuplicateRefund() {
         Disbursement disbursement = b2cDisbursementService.initiateDisbursement(
                 tenantId, leaseId, ledgerEntryId,
-                new BigDecimal("5000.00"), "+254712345678", "Test Recipient",
-                "BusinessPayment", "Test disbursement"
+                new BigDecimal("5000.00"), "BusinessPayment", "Test disbursement"
         );
         entityManager.flush();
         assertThat(disbursement.getStatus()).isEqualTo(DisbursementStatus.PENDING);
@@ -106,18 +139,21 @@ class B2CCallbackIdempotencyIntegrationTest extends AbstractPostgresIntegrationT
         entityManager.flush();
         entityManager.clear();
 
-        assertThat(rentTransactionRepository.findByLedgerEntry(tenantId, ledgerEntryId))
+        // Filtered by type rather than counting every row on the entry. The
+        // setup now posts a real PAYMENT so the charge has proceeds to
+        // disburse — without one the initiation guard correctly refuses — so
+        // a bare size check would be asserting the absence of the very
+        // precondition this test needs.
+        assertThat(refundsOnEntry())
                 .as("first callback creates exactly one REFUND")
                 .hasSize(1);
-        assertThat(rentTransactionRepository.findByLedgerEntry(tenantId, ledgerEntryId).get(0).getType())
-                .isEqualTo(RentTransactionType.REFUND);
 
         b2cDisbursementService.handleResult(
                 disbursement.getId(), "0", "Success", "TXN-IT-001", "CONV-IT-001"
         );
         entityManager.flush();
 
-        assertThat(rentTransactionRepository.findByLedgerEntry(tenantId, ledgerEntryId))
+        assertThat(refundsOnEntry())
                 .as("duplicate callback does not create a second REFUND")
                 .hasSize(1);
     }
@@ -132,8 +168,7 @@ class B2CCallbackIdempotencyIntegrationTest extends AbstractPostgresIntegrationT
     void successThenTimeout_doesNotOverwriteStatus() {
         Disbursement disbursement = b2cDisbursementService.initiateDisbursement(
                 tenantId, leaseId, ledgerEntryId,
-                new BigDecimal("3000.00"), "+254712345679", "Test Recipient 2",
-                "SalaryPayment", "Test disbursement 2"
+                new BigDecimal("3000.00"), "SalaryPayment", "Test disbursement 2"
         );
         entityManager.flush();
 
@@ -160,8 +195,7 @@ class B2CCallbackIdempotencyIntegrationTest extends AbstractPostgresIntegrationT
     void failureCallback_doesNotCreateRefund() {
         Disbursement disbursement = b2cDisbursementService.initiateDisbursement(
                 tenantId, leaseId, ledgerEntryId,
-                new BigDecimal("2000.00"), "+254712345680", "Test Recipient 3",
-                "BusinessPayment", "Test disbursement 3"
+                new BigDecimal("2000.00"), "BusinessPayment", "Test disbursement 3"
         );
         entityManager.flush();
 
@@ -175,8 +209,14 @@ class B2CCallbackIdempotencyIntegrationTest extends AbstractPostgresIntegrationT
         assertThat(reloaded.getStatus()).isEqualTo(DisbursementStatus.FAILED);
         assertThat(reloaded.getFailureReason()).isEqualTo("Insufficient funds");
 
-        assertThat(rentTransactionRepository.findByLedgerEntry(tenantId, ledgerEntryId))
+        assertThat(refundsOnEntry())
                 .as("failure callback creates no REFUND transaction")
                 .isEmpty();
+    }
+
+    private java.util.List<com.rentmanager.modules.rentledger.domain.model.RentTransaction> refundsOnEntry() {
+        return rentTransactionRepository.findByLedgerEntry(tenantId, ledgerEntryId).stream()
+                .filter(t -> t.getType() == RentTransactionType.REFUND)
+                .toList();
     }
 }

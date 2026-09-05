@@ -1,170 +1,78 @@
 package com.rentmanager.modules.rentledger.application.scheduler;
 
-import com.rentmanager.modules.lease.domain.model.Lease;
-import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
-import com.rentmanager.modules.notification.sms.SmsService;
-import com.rentmanager.modules.property.domain.model.Property;
-import com.rentmanager.modules.property.domain.repository.PropertyRepository;
-import com.rentmanager.modules.rentledger.domain.enums.RentLedgerStatus;
-import com.rentmanager.modules.rentledger.domain.model.RentLedgerEntry;
-import com.rentmanager.modules.rentledger.domain.repository.RentLedgerEntryRepository;
-import com.rentmanager.modules.tenant.domain.model.Tenant;
-import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
-import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
-import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
-import com.rentmanager.modules.unit.domain.model.Unit;
-import com.rentmanager.modules.unit.domain.repository.UnitRepository;
+import com.rentmanager.modules.rentledger.application.reminder.RentReminderService;
+import com.rentmanager.shared.observability.BusinessMetrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
-import java.math.BigDecimal;
+import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+/**
+ * The scheduler is now a delegator: it decides <em>when</em>, and
+ * {@code RentReminderService} decides <em>what</em>.
+ *
+ * <p>The behavioural coverage that used to live here — zero balances, missing
+ * leases, missing contact details, and one bad entry not aborting the sweep —
+ * moved with the logic to {@code RentReminderServiceTest}, where it can be
+ * asserted against an explicit run date instead of whatever today happens to
+ * be. What remains here is the schedule itself.
+ */
 class RentReminderSchedulerTest {
 
-    private RentLedgerEntryRepository rentLedgerEntryRepository;
-    private LeaseRepository leaseRepository;
-    private UnitRepository unitRepository;
-    private PropertyRepository propertyRepository;
-    private TenantRepository tenantRepository;
-    private TenantProfileRepository tenantProfileRepository;
-    private SmsService smsService;
+    private RentReminderService rentReminderService;
     private RentReminderScheduler scheduler;
-
-    private final UUID tenantId = UUID.randomUUID();
-    private final UUID leaseId = UUID.randomUUID();
-    private final UUID tenantProfileId = UUID.randomUUID();
-    private final UUID unitId = UUID.randomUUID();
-    private final UUID propertyId = UUID.randomUUID();
-    private final LocalDate dueDate = LocalDate.now(ZoneId.of("Africa/Nairobi")).plusDays(3);
 
     @BeforeEach
     void setUp() {
-        rentLedgerEntryRepository = mock(RentLedgerEntryRepository.class);
-        leaseRepository = mock(LeaseRepository.class);
-        unitRepository = mock(UnitRepository.class);
-        propertyRepository = mock(PropertyRepository.class);
-        tenantRepository = mock(TenantRepository.class);
-        tenantProfileRepository = mock(TenantProfileRepository.class);
-        smsService = mock(SmsService.class);
-        scheduler = new RentReminderScheduler(rentLedgerEntryRepository, leaseRepository, unitRepository,
-                propertyRepository, tenantRepository, tenantProfileRepository, smsService);
+        rentReminderService = mock(RentReminderService.class);
+        scheduler = new RentReminderScheduler(rentReminderService, mock(BusinessMetrics.class));
     }
 
     @Test
-    void sendsReminderForEntryDueInThreeDays() {
-        RentLedgerEntry entry = buildDueEntry(tenantId, leaseId, dueDate, new BigDecimal("15000"));
-        Lease lease = mockLease();
-        TenantProfile profile = mockTenantProfile("+254712345678");
-        Unit unit = mockUnit("A101");
+    void sweepsForTodayInNairobiTime() {
+        when(rentReminderService.sweep(any()))
+                .thenReturn(new RentReminderService.SweepResult(0, 0, 0, 0, 0));
 
-        when(rentLedgerEntryRepository.findAllByStatusInAndDueDateLessThanEqual(
-                List.of(RentLedgerStatus.DUE), dueDate)).thenReturn(List.of(entry));
-        when(leaseRepository.findByIdAndTenantId(leaseId, tenantId)).thenReturn(Optional.of(lease));
-        when(tenantProfileRepository.findById(tenantProfileId)).thenReturn(Optional.of(profile));
-        when(unitRepository.findByIdAndTenantId(unitId, tenantId)).thenReturn(Optional.of(unit));
+        scheduler.sendRentReminders();
 
-        scheduler.sendUpcomingPaymentReminders();
+        ArgumentCaptor<LocalDate> runDate = ArgumentCaptor.forClass(LocalDate.class);
+        verify(rentReminderService).sweep(runDate.capture());
 
-        verify(smsService).sendRentUpcomingPaymentReminder(eq("+254712345678"), eq("15,000"), anyString());
+        assertThat(runDate.getValue()).isEqualTo(LocalDate.now(ZoneId.of("Africa/Nairobi")));
+    }
+
+    /**
+     * A container that comes up in UTC would otherwise fire this at noon
+     * Nairobi time, and the run date computed inside would disagree with the
+     * trigger that caused it either side of midnight.
+     */
+    @Test
+    void cronIsPinnedToNairobiRatherThanTheServerDefaultZone() throws NoSuchMethodException {
+        Method method = RentReminderScheduler.class.getMethod("sendRentReminders");
+        org.springframework.scheduling.annotation.Scheduled scheduled =
+                method.getAnnotation(org.springframework.scheduling.annotation.Scheduled.class);
+
+        assertThat(scheduled).isNotNull();
+        assertThat(scheduled.zone()).isEqualTo("Africa/Nairobi");
+        assertThat(scheduled.cron()).isEqualTo("0 0 9 * * *");
     }
 
     @Test
-    void skipsEntryWithZeroBalance() {
-        RentLedgerEntry paidEntry = buildDueEntry(tenantId, leaseId, dueDate, BigDecimal.ZERO);
+    void reportsTheSweepOutcomeWithoutThrowing() {
+        when(rentReminderService.sweep(any()))
+                .thenReturn(new RentReminderService.SweepResult(12, 8, 3, 1, 0));
 
-        when(rentLedgerEntryRepository.findAllByStatusInAndDueDateLessThanEqual(
-                List.of(RentLedgerStatus.DUE), dueDate)).thenReturn(List.of(paidEntry));
+        scheduler.sendRentReminders();
 
-        scheduler.sendUpcomingPaymentReminders();
-
-        verifyNoInteractions(smsService);
-    }
-
-    @Test
-    void skipsEntryWhereLeaseNotFound() {
-        RentLedgerEntry entry = buildDueEntry(tenantId, leaseId, dueDate, new BigDecimal("15000"));
-
-        when(rentLedgerEntryRepository.findAllByStatusInAndDueDateLessThanEqual(
-                List.of(RentLedgerStatus.DUE), dueDate)).thenReturn(List.of(entry));
-        when(leaseRepository.findByIdAndTenantId(leaseId, tenantId)).thenReturn(Optional.empty());
-
-        scheduler.sendUpcomingPaymentReminders();
-
-        verifyNoInteractions(smsService);
-    }
-
-    @Test
-    void skipsEntryWhereTenantProfilePhoneIsBlank() {
-        RentLedgerEntry entry = buildDueEntry(tenantId, leaseId, dueDate, new BigDecimal("15000"));
-        Lease lease = mockLease();
-        TenantProfile profile = mockTenantProfile("");
-
-        when(rentLedgerEntryRepository.findAllByStatusInAndDueDateLessThanEqual(
-                List.of(RentLedgerStatus.DUE), dueDate)).thenReturn(List.of(entry));
-        when(leaseRepository.findByIdAndTenantId(leaseId, tenantId)).thenReturn(Optional.of(lease));
-        when(tenantProfileRepository.findById(tenantProfileId)).thenReturn(Optional.of(profile));
-
-        scheduler.sendUpcomingPaymentReminders();
-
-        verifyNoInteractions(smsService);
-    }
-
-    @Test
-    void continuesWhenOneEntryFails() {
-        RentLedgerEntry failingEntry = buildDueEntry(tenantId, leaseId, dueDate, new BigDecimal("15000"));
-        RentLedgerEntry successEntry = buildDueEntry(tenantId, leaseId, dueDate, new BigDecimal("10000"));
-        Lease lease = mockLease();
-        TenantProfile profile = mockTenantProfile("+254712345678");
-        Unit unit = mockUnit("A101");
-
-        when(rentLedgerEntryRepository.findAllByStatusInAndDueDateLessThanEqual(
-                List.of(RentLedgerStatus.DUE), dueDate)).thenReturn(List.of(failingEntry, successEntry));
-        when(leaseRepository.findByIdAndTenantId(leaseId, tenantId))
-                .thenReturn(Optional.empty())
-                .thenReturn(Optional.of(lease));
-        when(tenantProfileRepository.findById(tenantProfileId)).thenReturn(Optional.of(profile));
-        when(unitRepository.findByIdAndTenantId(unitId, tenantId)).thenReturn(Optional.of(unit));
-
-        scheduler.sendUpcomingPaymentReminders();
-
-        verify(smsService).sendRentUpcomingPaymentReminder(anyString(), eq("10,000"), anyString());
-    }
-
-    private RentLedgerEntry buildDueEntry(UUID tenantId, UUID leaseId, LocalDate dueDate, BigDecimal balance) {
-        RentLedgerEntry entry = mock(RentLedgerEntry.class);
-        when(entry.getTenantId()).thenReturn(tenantId);
-        when(entry.getLeaseId()).thenReturn(leaseId);
-        when(entry.getDueDate()).thenReturn(dueDate);
-        when(entry.getBalanceOwed()).thenReturn(balance);
-        when(entry.getStatus()).thenReturn(RentLedgerStatus.DUE);
-        return entry;
-    }
-
-    private Lease mockLease() {
-        Lease lease = mock(Lease.class);
-        when(lease.getTenantProfileId()).thenReturn(tenantProfileId);
-        when(lease.getUnitId()).thenReturn(unitId);
-        return lease;
-    }
-
-    private TenantProfile mockTenantProfile(String phone) {
-        TenantProfile p = mock(TenantProfile.class);
-        when(p.getPhone()).thenReturn(phone);
-        return p;
-    }
-
-    private Unit mockUnit(String unitNumber) {
-        Unit u = mock(Unit.class);
-        when(u.getUnitNumber()).thenReturn(unitNumber);
-        when(u.getPropertyId()).thenReturn(propertyId);
-        return u;
+        verify(rentReminderService).sweep(any());
     }
 }

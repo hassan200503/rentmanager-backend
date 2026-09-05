@@ -49,4 +49,12 @@ public class RentPaymentRequestRepositoryAdapter implements RentPaymentRequestRe
                 .map(mapper::toDomain)
                 .toList();
     }
+
+    @Override
+    public Optional<RentPaymentRequest> findLatestPendingForEntry(UUID tenantId, UUID rentLedgerEntryId) {
+        return jpaRepository
+                .findFirstByTenantIdAndRentLedgerEntryIdAndStatusOrderByCreatedAtDesc(
+                        tenantId, rentLedgerEntryId, RentPaymentRequestStatus.PENDING)
+                .map(mapper::toDomain);
+    }
 }

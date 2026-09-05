@@ -13,7 +13,8 @@ public record ProviderDefinition(
         String category,
         String docsUrl,
         boolean supportsTestConnection,
-        List<ProviderField> fields
+        List<ProviderField> fields,
+        ProviderTestTarget testTarget
 ) {
     public ProviderField field(String key) {
         return fields.stream().filter(f -> f.key().equals(key)).findFirst().orElse(null);

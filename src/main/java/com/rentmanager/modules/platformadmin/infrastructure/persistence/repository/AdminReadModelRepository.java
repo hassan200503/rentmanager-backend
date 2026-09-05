@@ -124,6 +124,31 @@ public interface AdminReadModelRepository extends JpaRepository<TenantEntity, UU
     @Query("select rt from RentTransactionJpaEntity rt where rt.tenantId = :tenantId order by rt.occurredAt desc")
     List<RentTransactionJpaEntity> findRecentTransactionsByTenant(@Param("tenantId") UUID tenantId, Pageable pageable);
 
+    // ---------- Platform-wide rent payment queue ----------
+    //
+    // The admin overview has always returned counts of pending/paid/failed
+    // payment requests, and the dashboard's alert panel linked those counts
+    // to /admin/payments — a page that did not exist, because nothing could
+    // list the rows behind the count. An admin who saw "3 failed payments"
+    // and clicked, at the moment they most needed to act, got a 404.
+
+    @Query("select p from RentPaymentRequestJpaEntity p order by p.createdAt desc")
+    org.springframework.data.domain.Page<RentPaymentRequestJpaEntity> findAllPaymentRequests(Pageable pageable);
+
+    @Query("select p from RentPaymentRequestJpaEntity p where p.status = :status order by p.createdAt desc")
+    org.springframework.data.domain.Page<RentPaymentRequestJpaEntity> findPaymentRequestsByStatus(
+            @Param("status") RentPaymentRequestStatus status, Pageable pageable);
+
+    @Query("select p from RentPaymentRequestJpaEntity p where p.tenantId = :tenantId order by p.createdAt desc")
+    org.springframework.data.domain.Page<RentPaymentRequestJpaEntity> findPaymentRequestsByTenantPaged(
+            @Param("tenantId") UUID tenantId, Pageable pageable);
+
+    @Query("select p from RentPaymentRequestJpaEntity p where p.tenantId = :tenantId and p.status = :status order by p.createdAt desc")
+    org.springframework.data.domain.Page<RentPaymentRequestJpaEntity> findPaymentRequestsByTenantAndStatus(
+            @Param("tenantId") UUID tenantId,
+            @Param("status") RentPaymentRequestStatus status,
+            Pageable pageable);
+
     // ---------- Platform-wide disbursement queue ----------
 
     @Query("select d from DisbursementJpaEntity d order by d.createdAt desc")

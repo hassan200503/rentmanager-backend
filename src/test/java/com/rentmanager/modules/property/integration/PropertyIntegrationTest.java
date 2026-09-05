@@ -6,6 +6,7 @@ import com.rentmanager.modules.property.application.dto.request.UpdatePropertyRe
 import com.rentmanager.modules.property.domain.enums.PropertyType;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
+import com.rentmanager.modules.support.MinimalTenantChainFixture;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.*;
 
@@ -35,8 +36,8 @@ class PropertyIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @BeforeEach
     void setup() {
-        tenantA = UUID.randomUUID();
-        tenantB = UUID.randomUUID();
+        tenantA = MinimalTenantChainFixture.persistTenant(entityManager);
+        tenantB = MinimalTenantChainFixture.persistTenant(entityManager);
         userId = UUID.randomUUID();
 
         entityManager.flush();

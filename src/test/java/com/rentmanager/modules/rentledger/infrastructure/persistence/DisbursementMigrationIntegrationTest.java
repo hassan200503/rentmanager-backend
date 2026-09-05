@@ -3,7 +3,9 @@ package com.rentmanager.modules.rentledger.infrastructure.persistence;
 import com.rentmanager.modules.rentledger.domain.model.Disbursement;
 import com.rentmanager.modules.rentledger.domain.repository.DisbursementRepository;
 import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
+import com.rentmanager.modules.support.MinimalTenantChainFixture;
 import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -37,8 +39,13 @@ class DisbursementMigrationIntegrationTest extends AbstractPostgresIntegrationTe
     @Autowired
     private EntityManager entityManager;
 
-    private final UUID tenantId = UUID.randomUUID();
+    private UUID tenantId;
     private static final String OCID = "ocid-" + UUID.randomUUID();
+
+    @BeforeEach
+    void setUp() {
+        tenantId = MinimalTenantChainFixture.persistTenant(entityManager);
+    }
 
     /**
      * Flushes the persistence context and re-throws any constraint violation
@@ -59,8 +66,8 @@ class DisbursementMigrationIntegrationTest extends AbstractPostgresIntegrationTe
     private Disbursement createDisbursement() {
         return Disbursement.create(
                 tenantId,
-                UUID.randomUUID(), // leaseId
-                UUID.randomUUID(), // ledgerEntryId
+                null, // leaseId — nullable; this test is only about the OCID unique index
+                null, // ledgerEntryId — nullable, same reason
                 new BigDecimal("5000.00"),
                 "+254712345678",
                 "Test Recipient",

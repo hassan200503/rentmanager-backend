@@ -16,6 +16,7 @@ import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -129,6 +130,37 @@ public interface UnitJpaRepository extends JpaRepository<UnitJpaEntity, UUID> {
             Pageable pageable
     );
 
+    /**
+     * Occupied and total unit counts per property, for one landlord, in a
+     * single grouped query.
+     *
+     * <p>Returns raw rows — {@code [propertyId, totalUnits, occupiedUnits]} —
+     * rather than a JPQL constructor expression. A {@code new ...} expression
+     * has to match a constructor by type, and {@code COUNT}/{@code SUM} yield
+     * {@code Long} while the projection record takes primitives; getting that
+     * wrong fails at context load rather than at the call site, which is a
+     * needlessly sharp edge for a read query. The adapter does the mapping.
+     *
+     * <p>ARCHIVED units are excluded from both figures, matching
+     * {@code PropertyOccupancyRollupListener}, which excludes them when it
+     * derives a property's OccupancyStatus. If the two disagreed, a property
+     * could read "fully occupied" beside counts that said otherwise.
+     *
+     * <p>One query for the whole portfolio rather than one per property: the
+     * dashboard renders every property at once.
+     */
+    @Query("""
+            SELECT u.propertyId,
+                   COUNT(u.id),
+                   SUM(CASE WHEN u.occupancyStatus = com.rentmanager.modules.unit.domain.enums.UnitOccupancyStatus.OCCUPIED
+                            THEN 1 ELSE 0 END)
+            FROM UnitJpaEntity u
+            WHERE u.tenantId = :tenantId
+              AND u.status <> com.rentmanager.modules.unit.domain.enums.UnitStatus.ARCHIVED
+            GROUP BY u.propertyId
+            """)
+    List<Object[]> countUnitsByPropertyRaw(@Param("tenantId") UUID tenantId);
+
     long countByTenantId(UUID tenantId);
 
     long countByTenantIdAndOccupancyStatus(UUID tenantId, UnitOccupancyStatus occupancyStatus);
@@ -174,6 +206,38 @@ public interface UnitJpaRepository extends JpaRepository<UnitJpaEntity, UUID> {
     // method was introduced, exposing the bug. Fixed here with an explicit
     // CAST(:keyword AS string), which gives Postgres an unambiguous type
     // and avoids reintroducing service-layer branching.
+    /**
+     * The search a renter uses to find somewhere to live.
+     *
+     * <h2>What it used to match, and why that was the problem</h2>
+     * Only {@code u.unitNumber} and {@code u.description}. A unit number is
+     * "A101" — meaningless to somebody looking for a home — which left the
+     * free-text description as the only real search surface. There was no
+     * location match at all, so a renter typing "Kilimani" found nothing
+     * unless a landlord happened to have typed that word into a description,
+     * and no way whatsoever to filter by price.
+     *
+     * <p>Location and budget are the first two questions any renter asks. The
+     * data to answer both was already here — {@code p.address.city},
+     * {@code p.address.state} and {@code u.rentAmount} — and simply unused.
+     *
+     * <h2>Filters</h2>
+     * Every filter is null-tolerant: a null means "no constraint", so the
+     * same query serves an unfiltered browse and a fully specified search.
+     *
+     * <p>{@code propertyType} stands in for bedroom count. No bedroom column
+     * exists, and in this market BEDSITTER / STUDIO / APARTMENT / MAISONETTE
+     * is how supply is actually described — inventing a bedroom number from a
+     * type would be guessing at data nobody entered.
+     *
+     * <h2>The CAST is load-bearing</h2>
+     * Every string parameter is wrapped in {@code CAST(... AS string)} for the
+     * reason documented above: a null bound into {@code LOWER(CONCAT(...))}
+     * makes the Postgres driver infer {@code bytea} and fail with
+     * "function lower(bytea) does not exist". That bug was found by an
+     * integration test once already; each new string filter here would
+     * reintroduce it without the cast.
+     */
     @Query("""
         SELECT u FROM UnitJpaEntity u
         JOIN PropertyJpaEntity p ON u.propertyId = p.id
@@ -184,10 +248,26 @@ public interface UnitJpaRepository extends JpaRepository<UnitJpaEntity, UUID> {
                 :keyword IS NULL
                 OR LOWER(u.unitNumber) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))
                 OR LOWER(u.description) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))
+                OR LOWER(u.label) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))
+                OR LOWER(p.name) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))
+                OR LOWER(p.address.city) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))
+                OR LOWER(p.address.state) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))
               )
+          AND (
+                :city IS NULL
+                OR LOWER(p.address.city) LIKE LOWER(CONCAT('%', CAST(:city AS string), '%'))
+                OR LOWER(p.address.state) LIKE LOWER(CONCAT('%', CAST(:city AS string), '%'))
+              )
+          AND (:minRent IS NULL OR u.rentAmount >= :minRent)
+          AND (:maxRent IS NULL OR u.rentAmount <= :maxRent)
+          AND (:propertyType IS NULL OR p.propertyType = :propertyType)
     """)
     Page<UnitJpaEntity> searchPubliclyVisible(
             @Param("keyword") String keyword,
+            @Param("city") String city,
+            @Param("minRent") java.math.BigDecimal minRent,
+            @Param("maxRent") java.math.BigDecimal maxRent,
+            @Param("propertyType") com.rentmanager.modules.property.domain.enums.PropertyType propertyType,
             @Param("occupancyStatus") UnitOccupancyStatus occupancyStatus,
             @Param("unitStatus") UnitStatus unitStatus,
             @Param("propertyStatus") PropertyStatus propertyStatus,
@@ -240,4 +320,132 @@ public interface UnitJpaRepository extends JpaRepository<UnitJpaEntity, UUID> {
             @Param("propertyStatus") PropertyStatus propertyStatus,
             Pageable pageable
     );
+
+    // =====================================================
+    // PUBLIC LISTINGS: VACANCY-BACKED PROPERTY SEARCH
+    // =====================================================
+
+    /**
+     * Ids of properties that actually have somewhere to rent.
+     *
+     * <p>Answers {@code PublicVacancyPort} for the property module. The public
+     * listings page previously ran {@code findByStatus(ACTIVE)}, which listed
+     * fully-occupied properties beside genuinely available ones under the
+     * heading "Available Properties". Requiring a matching vacant unit here
+     * makes the page's promise true in the query rather than in the copy.
+     *
+     * <p>Ordered by property name because the page is paged: an unordered
+     * Postgres result can return the same row on two different pages and drop
+     * another entirely, which reads to a renter as listings that flicker in
+     * and out as they browse.
+     *
+     * <p>The {@code CAST(... AS string)} on every string parameter is
+     * load-bearing for the reason documented on {@code searchPubliclyVisible}:
+     * a null bound into {@code LOWER(CONCAT(...))} makes the Postgres driver
+     * infer {@code bytea} and fail at runtime.
+     */
+    @Query(value = """
+        SELECT p.id FROM PropertyJpaEntity p
+        WHERE p.status = :propertyStatus
+          AND (:propertyType IS NULL OR p.propertyType = :propertyType)
+          AND (
+                :keyword IS NULL
+                OR LOWER(p.name) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))
+                OR LOWER(p.address.city) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))
+                OR LOWER(p.address.state) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))
+                OR LOWER(p.address.addressLine1) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))
+                OR LOWER(p.address.addressLine2) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))
+              )
+          AND (
+                :location IS NULL
+                OR LOWER(p.address.city) LIKE LOWER(CONCAT('%', CAST(:location AS string), '%'))
+                OR LOWER(p.address.state) LIKE LOWER(CONCAT('%', CAST(:location AS string), '%'))
+                OR LOWER(p.address.addressLine1) LIKE LOWER(CONCAT('%', CAST(:location AS string), '%'))
+                OR LOWER(p.address.addressLine2) LIKE LOWER(CONCAT('%', CAST(:location AS string), '%'))
+              )
+          AND EXISTS (
+                SELECT 1 FROM UnitJpaEntity u
+                WHERE u.propertyId = p.id
+                  AND u.occupancyStatus = :occupancyStatus
+                  AND u.status = :unitStatus
+                  AND (:minRent IS NULL OR u.rentAmount >= :minRent)
+                  AND (:maxRent IS NULL OR u.rentAmount <= :maxRent)
+              )
+        ORDER BY p.name ASC
+    """,
+            countQuery = """
+        SELECT COUNT(p.id) FROM PropertyJpaEntity p
+        WHERE p.status = :propertyStatus
+          AND (:propertyType IS NULL OR p.propertyType = :propertyType)
+          AND (
+                :keyword IS NULL
+                OR LOWER(p.name) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))
+                OR LOWER(p.address.city) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))
+                OR LOWER(p.address.state) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))
+                OR LOWER(p.address.addressLine1) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))
+                OR LOWER(p.address.addressLine2) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%'))
+              )
+          AND (
+                :location IS NULL
+                OR LOWER(p.address.city) LIKE LOWER(CONCAT('%', CAST(:location AS string), '%'))
+                OR LOWER(p.address.state) LIKE LOWER(CONCAT('%', CAST(:location AS string), '%'))
+                OR LOWER(p.address.addressLine1) LIKE LOWER(CONCAT('%', CAST(:location AS string), '%'))
+                OR LOWER(p.address.addressLine2) LIKE LOWER(CONCAT('%', CAST(:location AS string), '%'))
+              )
+          AND EXISTS (
+                SELECT 1 FROM UnitJpaEntity u
+                WHERE u.propertyId = p.id
+                  AND u.occupancyStatus = :occupancyStatus
+                  AND u.status = :unitStatus
+                  AND (:minRent IS NULL OR u.rentAmount >= :minRent)
+                  AND (:maxRent IS NULL OR u.rentAmount <= :maxRent)
+              )
+    """)
+    Page<UUID> searchPropertyIdsWithVacancy(
+            @Param("keyword") String keyword,
+            @Param("location") String location,
+            @Param("minRent") java.math.BigDecimal minRent,
+            @Param("maxRent") java.math.BigDecimal maxRent,
+            @Param("propertyType") com.rentmanager.modules.property.domain.enums.PropertyType propertyType,
+            @Param("occupancyStatus") UnitOccupancyStatus occupancyStatus,
+            @Param("unitStatus") UnitStatus unitStatus,
+            @Param("propertyStatus") PropertyStatus propertyStatus,
+            Pageable pageable
+    );
+
+    /**
+     * How many units are available in each property, and the asking-price
+     * range across them — one grouped query for a whole page of cards.
+     *
+     * <p>Deliberately does not join properties: callers pass ids that came
+     * from a query which already enforced {@code PropertyStatus.ACTIVE}, and
+     * re-checking here would only hide a caller that had not.
+     */
+    @Query("""
+        SELECT u.propertyId AS propertyId,
+               COUNT(u.id) AS availableUnits,
+               MIN(u.rentAmount) AS minRent,
+               MAX(u.rentAmount) AS maxRent
+        FROM UnitJpaEntity u
+        WHERE u.propertyId IN :propertyIds
+          AND u.occupancyStatus = :occupancyStatus
+          AND u.status = :unitStatus
+        GROUP BY u.propertyId
+    """)
+    List<VacancySummaryRow> summariseVacancy(
+            @Param("propertyIds") List<UUID> propertyIds,
+            @Param("occupancyStatus") UnitOccupancyStatus occupancyStatus,
+            @Param("unitStatus") UnitStatus unitStatus
+    );
+
+    /** Projection for {@link #summariseVacancy}. */
+    interface VacancySummaryRow {
+        UUID getPropertyId();
+
+        long getAvailableUnits();
+
+        java.math.BigDecimal getMinRent();
+
+        java.math.BigDecimal getMaxRent();
+    }
 }

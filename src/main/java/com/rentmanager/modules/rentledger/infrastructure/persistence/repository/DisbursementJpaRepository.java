@@ -10,6 +10,8 @@ import java.util.UUID;
 
 public interface DisbursementJpaRepository extends JpaRepository<DisbursementJpaEntity, UUID> {
     List<DisbursementJpaEntity> findByTenantIdOrderByCreatedAtDesc(UUID tenantId);
+
+    List<DisbursementJpaEntity> findByTenantIdAndLedgerEntryId(UUID tenantId, UUID ledgerEntryId);
     List<DisbursementJpaEntity> findByStatusInOrderByCreatedAtAsc(List<DisbursementStatus> statuses);
     List<DisbursementJpaEntity> findByTenantIdAndStatusInOrderByCreatedAtDesc(UUID tenantId, List<DisbursementStatus> statuses);
     List<DisbursementJpaEntity> findByStatusInAndRetryCountLessThanOrderByCreatedAtAsc(List<DisbursementStatus> statuses, int retryCount);

@@ -13,5 +13,7 @@ public interface DepositJpaRepository extends JpaRepository<DepositJpaEntity, UU
 
     Optional<DepositJpaEntity> findByLeaseId(UUID leaseId);
 
+    Optional<DepositJpaEntity> findByLeaseIdAndTenantId(UUID leaseId, UUID tenantId);
+
     List<DepositJpaEntity> findByTenantProfileId(UUID tenantProfileId);
 }

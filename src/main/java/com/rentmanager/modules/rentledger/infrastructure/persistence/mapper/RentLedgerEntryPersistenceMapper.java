@@ -24,6 +24,7 @@ public class RentLedgerEntryPersistenceMapper {
         jpa.setAmountPaid(entry.getAmountPaid());
         jpa.setStatus(entry.getStatus());
         jpa.setProrated(entry.isProrated());
+        jpa.setCurrency(entry.getCurrency());
         return jpa;
     }
 
@@ -43,6 +44,7 @@ public class RentLedgerEntryPersistenceMapper {
                 jpa.getAmountPaid(),
                 jpa.getStatus(),
                 jpa.isProrated(),
+                jpa.getCurrency(),
                 jpa.getVersion(),
                 jpa.getCreatedAt(),
                 jpa.getUpdatedAt()

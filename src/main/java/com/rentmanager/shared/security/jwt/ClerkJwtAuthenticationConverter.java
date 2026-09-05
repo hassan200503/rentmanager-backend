@@ -17,11 +17,13 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractAuthenticationToken> {
@@ -46,21 +48,57 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
     // as fully authorized for either role.
     private static final String ROLE_PENDING_ONBOARDING = "ROLE_PENDING_ONBOARDING";
 
+    /**
+     * Stamped when a Clerk token carries no email claim. Deliberately named
+     * so a grep for it finds every place that must not treat it as a real
+     * address — it is non-blank, so it passes naive null/blank guards.
+     */
+    public static final String PLACEHOLDER_EMAIL = "unknown@clerk.user";
+
+    // How long a resolved identity is trusted before re-querying. Long
+    // enough to absorb a dashboard's typical burst of parallel requests
+    // (all land within milliseconds of each other on page load); short
+    // enough that a role or tenant-binding change made through a different
+    // code path (e.g. an admin promoting a STAFF user to MANAGER) is picked
+    // up within a minute, with no explicit cache-invalidation hook needed
+    // at every place that could mutate a User's role/tenant.
+    private static final long CACHE_TTL_MILLIS = 60_000;
+    // Above this size, a cache write also sweeps expired entries — bounds
+    // memory for a long-running JVM without needing a dedicated eviction
+    // thread or a caching library (see the class-level rationale for
+    // avoiding one: this project deliberately keeps caching in-process and
+    // dependency-free at this scale).
+    private static final int CACHE_SWEEP_THRESHOLD = 5_000;
+
     private final UserRepository userRepository;
     private final TenantRepository tenantRepository;
     private final TenantProfileRepository tenantProfileRepository;
     private final ObjectProvider<ClerkService> clerkServiceProvider;
+    private final Clock clock;
+    private final Map<String, CachedIdentity> identityCache = new ConcurrentHashMap<>();
 
+    /**
+     * Clock is an ObjectProvider, same resilience pattern as
+     * clerkServiceProvider above: @WebMvcTest slices across this codebase
+     * construct this converter as part of the security filter chain but
+     * don't load ClockConfig (a plain @Configuration bean, out of scope for
+     * a web-layer slice), so a required Clock dependency would fail
+     * ApplicationContext startup for every one of those tests. Falls back
+     * to the real system clock when no bean is available — identical
+     * behavior to what this class had before the cache was introduced.
+     */
     public ClerkJwtAuthenticationConverter(
             UserRepository userRepository,
             TenantRepository tenantRepository,
             TenantProfileRepository tenantProfileRepository,
-            ObjectProvider<ClerkService> clerkServiceProvider
+            ObjectProvider<ClerkService> clerkServiceProvider,
+            ObjectProvider<Clock> clockProvider
     ) {
         this.userRepository = userRepository;
         this.tenantRepository = tenantRepository;
         this.tenantProfileRepository = tenantProfileRepository;
         this.clerkServiceProvider = clerkServiceProvider;
+        this.clock = clockProvider.getIfAvailable(Clock::systemUTC);
     }
 
     @Override
@@ -69,28 +107,83 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
 
         String clerkUserId = jwt.getSubject();
         String clerkOrgId = jwt.getClaimAsString(CLAIM_TENANT_ID);
-        String email = jwt.getClaimAsString(CLAIM_EMAIL);
+        String emailClaim = jwt.getClaimAsString(CLAIM_EMAIL);
         String platformRole = jwt.getClaimAsString(CLAIM_PLATFORM_ROLE);
 
-        User user = resolveOrProvisionUser(clerkUserId, email);
-        UUID resolvedTenantId = resolveTenantId(clerkOrgId, user, platformRole);
+        CachedIdentity identity = resolveIdentity(clerkUserId, clerkOrgId, emailClaim, platformRole);
 
-        Set<SimpleGrantedAuthority> authorities = resolveAuthorities(clerkUserId, resolvedTenantId, user);
+        Set<SimpleGrantedAuthority> authorities =
+                resolveAuthorities(identity.tenantId(), identity.role(), identity.isRenterProfile());
         authorities = withPlatformAuthorities(authorities, platformRole);
 
         AuthenticatedUser authenticatedUser = new AuthenticatedUser(
-                user.getId(),
-                resolvedTenantId,
-                user.getEmail(),
+                identity.userId(),
+                identity.tenantId(),
+                identity.email(),
                 "",
-                user.isActive(),
+                identity.active(),
                 authorities
         );
 
-        TenantContext.setTenantId(resolvedTenantId);
-        TenantContext.setUserId(user.getId());
+        TenantContext.setTenantId(identity.tenantId());
+        TenantContext.setUserId(identity.userId());
         return new ClerkAuthenticationToken(authenticatedUser, jwt, authorities);
     }
+
+    /**
+     * Resolves {clerkUserId, clerkOrgId} -> the local identity (user id,
+     * tenant id, role, active flag, renter-profile flag), caching the
+     * result for CACHE_TTL_MILLIS. Before this cache existed, EVERY
+     * authenticated request ran findByClerkUserId + findByClerkOrgId (plus
+     * a third query, existsByClerkUserId, on the renter/pending-onboarding
+     * path) — a dashboard firing 5 parallel calls meant 10-15 extra round
+     * trips per page load. See the class-level CACHE_TTL_MILLIS javadoc for
+     * why a short TTL, not event-driven invalidation.
+     */
+    private CachedIdentity resolveIdentity(String clerkUserId, String clerkOrgId, String emailClaim, String platformRole) {
+        String cacheKey = clerkUserId + "|" + (clerkOrgId == null ? "" : clerkOrgId);
+        long now = clock.millis();
+
+        CachedIdentity cached = identityCache.get(cacheKey);
+        if (cached != null && cached.expiresAtMillis() > now) {
+            return cached;
+        }
+
+        User user = resolveOrProvisionUser(clerkUserId, emailClaim);
+        UUID resolvedTenantId = resolveTenantId(clerkOrgId, user, platformRole);
+        // Deliberately NOT short-circuited on resolvedTenantId == null. Landlord
+        // and renter are not mutually exclusive in this schema: tenant_profile is
+        // keyed (tenant_id, clerk_user_id), so one person may rent from several
+        // landlords AND separately run their own landlord org. Skipping this
+        // lookup for org-bound users silently denied ROLE_TENANT to exactly those
+        // dual-role people, which broke the whole renter portal for them.
+        boolean isRenterProfile = tenantProfileRepository.existsByClerkUserId(clerkUserId);
+
+        CachedIdentity fresh = new CachedIdentity(
+                user.getId(), resolvedTenantId, user.getEmail(), user.getRole(), user.isActive(),
+                isRenterProfile, now + CACHE_TTL_MILLIS
+        );
+        identityCache.put(cacheKey, fresh);
+        sweepExpiredIfLarge(now);
+        return fresh;
+    }
+
+    private void sweepExpiredIfLarge(long now) {
+        if (identityCache.size() <= CACHE_SWEEP_THRESHOLD) {
+            return;
+        }
+        identityCache.entrySet().removeIf(e -> e.getValue().expiresAtMillis() <= now);
+    }
+
+    private record CachedIdentity(
+            UUID userId,
+            UUID tenantId,
+            String email,
+            UserRole role,
+            boolean active,
+            boolean isRenterProfile,
+            long expiresAtMillis
+    ) {}
 
     /**
      * Coarse role (LANDLORD/TENANT/PENDING_ONBOARDING) is derived from
@@ -106,25 +199,36 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
      * single ROLE_TENANT grant here. Per-landlord/per-lease authorization
      * (e.g. "can only view their own lease") must be enforced separately at
      * the service/controller layer, not at this JWT-conversion stage.
+     *
+     * LANDLORD AND RENTER ARE ADDITIVE, NOT EXCLUSIVE. These used to be an
+     * if/else chain, so a user bound to a landlord org could never receive
+     * ROLE_TENANT even when they genuinely held a TenantProfile — which is a
+     * real, supported state (a landlord who also rents somewhere). That made
+     * every renter-portal endpoint 403 for them the moment those endpoints
+     * gained an explicit ROLE_TENANT gate. Each authority is now granted on
+     * its own merits, and PENDING_ONBOARDING is the fallback only when the
+     * caller is genuinely neither.
      */
-    private Set<SimpleGrantedAuthority> resolveAuthorities(String clerkUserId, UUID resolvedTenantId, User user) {
+    private Set<SimpleGrantedAuthority> resolveAuthorities(UUID resolvedTenantId, UserRole role, boolean isRenterProfile) {
+
+        Set<SimpleGrantedAuthority> authorities = new HashSet<>();
 
         if (resolvedTenantId != null) {
-            Set<SimpleGrantedAuthority> authorities = new HashSet<>();
             authorities.add(new SimpleGrantedAuthority(ROLE_LANDLORD));
-
-            UserRole role = user.getRole();
             if (role != null) {
                 authorities.add(new SimpleGrantedAuthority(toAuthority(role)));
             }
-            return Set.copyOf(authorities);
         }
 
-        if (tenantProfileRepository.existsByClerkUserId(clerkUserId)) {
-            return Set.of(new SimpleGrantedAuthority(ROLE_TENANT));
+        if (isRenterProfile) {
+            authorities.add(new SimpleGrantedAuthority(ROLE_TENANT));
         }
 
-        return Set.of(new SimpleGrantedAuthority(ROLE_PENDING_ONBOARDING));
+        if (authorities.isEmpty()) {
+            authorities.add(new SimpleGrantedAuthority(ROLE_PENDING_ONBOARDING));
+        }
+
+        return Set.copyOf(authorities);
     }
 
     private String toAuthority(UserRole role) {
@@ -185,10 +289,22 @@ public class ClerkJwtAuthenticationConverter implements Converter<Jwt, AbstractA
         Optional<User> existing = userRepository.findByClerkUserId(clerkUserId);
 
         if (existing.isPresent()) {
-            return existing.get();
+            User user = existing.get();
+            // Backfill. A user provisioned before the Clerk JWT template
+            // carried an `email` claim is stamped PLACEHOLDER_EMAIL forever
+            // otherwise — adding the claim later would fix nothing, because
+            // this branch returned early without ever looking at it.
+            //
+            // Writes only on an actual change, so the common path stays a
+            // pure read: this runs on every authenticated request, and an
+            // unconditional save here would be a write per request.
+            if (user.updateEmailIfChanged(email)) {
+                userRepository.save(user);
+            }
+            return user;
         }
 
-        User newUser = User.createFromClerk(clerkUserId, email != null ? email : "unknown@clerk.user");
+        User newUser = User.createFromClerk(clerkUserId, email != null ? email : PLACEHOLDER_EMAIL);
         return userRepository.save(newUser);
     }
 

@@ -2,6 +2,7 @@ package com.rentmanager.modules.tenant.application.command.service;
 
 import com.rentmanager.modules.tenant.application.dto.request.*;
 import com.rentmanager.modules.tenant.application.dto.response.DarajaCredentialsStatusResponse;
+import com.rentmanager.modules.tenant.application.dto.response.DarajaCredentialsTestResponse;
 import com.rentmanager.modules.tenant.application.dto.response.TenantResponse;
 import org.springframework.stereotype.Service;
 
@@ -39,4 +40,11 @@ public interface TenantCommandService {
 
 
     DarajaCredentialsStatusResponse getDarajaCredentialsStatus(UUID tenantId, UUID targetTenantId);
+
+    /**
+     * Runs a real connection test against Safaricom with the landlord's saved
+     * credentials. Reports the provider's own verdict; never stores or
+     * returns credential material.
+     */
+    DarajaCredentialsTestResponse testDarajaCredentials(UUID tenantId, UUID targetTenantId);
 }

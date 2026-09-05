@@ -79,17 +79,24 @@ public class RentLedgerCommandController {
         return ApiResponse.ok(RentLedgerEntryResponse.from(entry));
     }
 
+    /**
+     * Despite the DELETE verb (kept for API compatibility with existing
+     * clients), this does NOT hard-delete the transaction — it posts a
+     * compensating REVERSAL transaction and keeps both rows. See
+     * RentLedgerApplicationService#reverseTransaction.
+     */
     @DeleteMapping("/transactions/{transactionId}")
     @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER')")
     public ApiResponse<Void> deleteTransaction(
             @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable UUID transactionId
     ) {
-        rentLedgerApplicationService.deleteTransaction(
+        rentLedgerApplicationService.reverseTransaction(
                 requireTenantId(user),
-                transactionId
+                transactionId,
+                user.getEmail()
         );
-        return ApiResponse.ok("Transaction deleted", null);
+        return ApiResponse.ok("Transaction reversed", null);
     }
 
     @PostMapping("/entries/{entryId}/adjustments")

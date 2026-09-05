@@ -50,6 +50,29 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
+        <!--
+            Health, readiness and liveness probes.
+
+            SecurityConfig has permitted /actuator/health since the project
+            started, but the dependency was never added, so that endpoint
+            returned 404 and nothing could health-check this service. A
+            container orchestrator with no readiness probe routes traffic to
+            an instance that has not finished migrating the database yet.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!--
+            Prometheus-format metrics. Micrometer ships with actuator; this
+            adds the registry that exposes /actuator/prometheus.
+        -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
         <!-- SECURITY -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -189,4 +189,16 @@ public class PropertyRepositoryAdapter implements PropertyRepository {
         return jpaRepository.findByIdAndStatus(id, status)
                 .map(persistenceMapper::toDomain);
     }
+
+    @Override
+    public List<Property> findAllByIdInAndStatus(List<UUID> ids, PropertyStatus status) {
+        // An IN () with no values is a syntax error on Postgres.
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return jpaRepository.findAllByIdInAndStatus(ids, status)
+                .stream()
+                .map(persistenceMapper::toDomain)
+                .toList();
+    }
 }

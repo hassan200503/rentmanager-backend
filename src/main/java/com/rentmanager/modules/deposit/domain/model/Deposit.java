@@ -30,6 +30,7 @@ public class Deposit extends AggregateRoot {
     private DepositStatus status;
     private LocalDateTime paidAt;
     private LocalDateTime refundedAt;
+    private String currency;
 
     public static Deposit create(
             UUID tenantId,
@@ -37,7 +38,8 @@ public class Deposit extends AggregateRoot {
             UUID unitId,
             UUID tenantProfileId,
             BigDecimal amountRequired,
-            String correlationId
+            String correlationId,
+            String currency
     ) {
         if (leaseId == null) {
             throw new DepositStateException("leaseId cannot be null", ErrorCode.DEPOSIT_LEASE_NULL);
@@ -60,6 +62,7 @@ public class Deposit extends AggregateRoot {
                 .amountPaid(BigDecimal.ZERO)
                 .amountRefunded(BigDecimal.ZERO)
                 .status(DepositStatus.UNPAID)
+                .currency(currency != null ? currency : "KES")
                 .build();
 
         deposit.setId(UUID.randomUUID());
@@ -136,7 +139,8 @@ public class Deposit extends AggregateRoot {
             BigDecimal amountRefunded,
             DepositStatus status,
             LocalDateTime paidAt,
-            LocalDateTime refundedAt
+            LocalDateTime refundedAt,
+            String currency
     ) {
         Deposit deposit = Deposit.builder()
                 .leaseId(leaseId)
@@ -148,6 +152,7 @@ public class Deposit extends AggregateRoot {
                 .status(status)
                 .paidAt(paidAt)
                 .refundedAt(refundedAt)
+                .currency(currency != null ? currency : "KES")
                 .build();
 
         deposit.setId(id);

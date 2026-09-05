@@ -58,4 +58,7 @@ public class RentPaymentRequestJpaEntity extends BaseTenantEntity {
 
     @Column(name = "mpesa_receipt_number")
     private String mpesaReceiptNumber;
+
+    @Column(name = "currency", nullable = false, length = 3)
+    private String currency;
 }

@@ -92,6 +92,15 @@ class RentPaymentCallbackTransactionServicePremiumTest {
                 "T-001", "Test Landlord", "test-landlord",
                 "landlord@example.com", "+254712345678", TenantType.STANDARD);
         tenant.setId(TENANT_ID);
+        // Commission only exists where the platform actually holds the money.
+        // Since V89, Tenant.create() defaults to CollectionMode.DIRECT — rent
+        // settles into the landlord's own paybill — and a DIRECT landlord
+        // correctly has no commission deducted and nothing to disburse. Every
+        // test in this class is about the custody path, so it must say so
+        // rather than rely on a default that no longer means custody.
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                tenant, "collectionMode",
+                com.rentmanager.modules.tenant.domain.enums.CollectionMode.PLATFORM_CUSTODY);
         if (billingMode == BillingMode.PREMIUM_MONTHLY) {
             tenant.activatePremiumSubscription(UUID.randomUUID(), LocalDate.now().minusMonths(1), LocalDate.now().plusDays(15));
         }
@@ -187,15 +196,61 @@ class RentPaymentCallbackTransactionServicePremiumTest {
     // ----------------------------------------------------------------
 
     @Test
-    void unresolvableTenant_treatedAsCommission() {
+    void unresolvableTenant_treatedAsDirect_soNoCommissionAndNothingToDisburse() {
         RentPaymentRequest request = buildPendingRentPayment();
-        RentTransaction transaction = stubSuccessfulFlow(request);
+        stubSuccessfulFlow(request);
         when(tenantRepository.findById(TENANT_ID)).thenReturn(Optional.empty());
-        when(commissionPolicyService.getActiveRate(TENANT_ID)).thenReturn(new BigDecimal("3.00"));
 
         var result = service.processSuccessfulCallback(CHECKOUT_ID, RECEIPT);
 
-        assertEquals(new BigDecimal("45.00"), result.commissionAmount());
-        verify(transaction).applyCommission(any(), any(), any());
+        // V89 REVERSED the fail-closed direction here, deliberately.
+        //
+        // This test previously asserted that an unresolvable tenant was
+        // treated as COMMISSION — correct while custody was the default,
+        // because the safe assumption was "we are holding this money".
+        // That assumption no longer holds. Under DIRECT the money went
+        // straight to the landlord, so treating an unknown tenant as
+        // COMMISSION would deduct a cut from funds the platform never
+        // received and then hand a net amount to the B2C path to pay out
+        // of a float that has no such money in it.
+        //
+        // Between two guesses, the safe one is now DIRECT: take nothing,
+        // pay out nothing, and let the ledger record the payment.
+        org.assertj.core.api.Assertions.assertThat(result.commissionAmount()).isNull();
+        org.assertj.core.api.Assertions.assertThat(result.netAmount()).isNull();
+        verifyNoInteractions(commissionPolicyService);
+    }
+
+    /**
+     * The behaviour V89 introduced, stated positively.
+     *
+     * <p>A DIRECT landlord's rent never reaches the platform, so there is
+     * nothing to take a commission from and nothing to pay out. netAmount
+     * must stay null: it is what drives the downstream B2C, and a non-null
+     * value here would attempt a disbursement against a float that never
+     * received the funds.
+     */
+    @Test
+    void directCollection_takesNoCommissionAndLeavesNothingToDisburse() {
+        Tenant tenant = Tenant.create(
+                "T-002", "Direct Landlord", "direct-landlord",
+                "direct@example.com", "+254712345679", TenantType.STANDARD);
+        tenant.setId(TENANT_ID);
+        // No reflection needed — DIRECT is the default, which is the point.
+
+        RentPaymentRequest request = buildPendingRentPayment();
+        stubSuccessfulFlow(request);
+        when(tenantRepository.findById(TENANT_ID)).thenReturn(Optional.of(tenant));
+
+        var result = service.processSuccessfulCallback(CHECKOUT_ID, RECEIPT);
+
+        org.assertj.core.api.Assertions.assertThat(result.commissionAmount())
+                .as("nothing to take a cut of — the money went straight to the landlord")
+                .isNull();
+        org.assertj.core.api.Assertions.assertThat(result.netAmount())
+                .as("null netAmount is what stops initiateB2CIfNeeded from paying out "
+                        + "money the platform never received")
+                .isNull();
+        verifyNoInteractions(commissionPolicyService);
     }
 }

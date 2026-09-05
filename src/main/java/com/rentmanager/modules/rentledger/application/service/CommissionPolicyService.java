@@ -1,5 +1,6 @@
 package com.rentmanager.modules.rentledger.application.service;
 
+import com.rentmanager.modules.audit.application.service.FinancialAuditService;
 import com.rentmanager.modules.rentledger.domain.model.CommissionPolicy;
 import com.rentmanager.modules.rentledger.domain.repository.CommissionPolicyRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,7 @@ import java.util.UUID;
 public class CommissionPolicyService {
 
     private final CommissionPolicyRepository commissionPolicyRepository;
+    private final FinancialAuditService financialAuditService;
 
     /**
      * Returns the active commission rate (as a percentage, e.g. 5.00 = 5%)
@@ -72,13 +74,29 @@ public class CommissionPolicyService {
      */
     @Transactional
     public CommissionPolicy setDefaultRate(BigDecimal ratePercent, Instant effectiveFrom, String createdBy) {
+        // Captured before deactivation: afterwards the previous rate is only
+        // discoverable by reading deactivated rows in the right order.
+        BigDecimal previousRate = commissionPolicyRepository.findActiveDefault()
+                .map(CommissionPolicy::getRatePercent)
+                .orElse(null);
+
         commissionPolicyRepository.findActiveDefault().ifPresent(existing -> {
             existing.deactivate();
             commissionPolicyRepository.save(existing);
         });
 
         CommissionPolicy policy = CommissionPolicy.create(ratePercent, effectiveFrom, createdBy);
-        return commissionPolicyRepository.save(policy);
+        CommissionPolicy saved = commissionPolicyRepository.save(policy);
+
+        // The platform-wide default changes what every landlord without an
+        // override pays on every future payment, so it is the more
+        // consequential of the two rate changes.
+        financialAuditService.commissionPolicyChanged(
+                null,
+                previousRate == null ? null : previousRate.toPlainString(),
+                ratePercent == null ? null : ratePercent.toPlainString());
+
+        return saved;
     }
 
     /**
@@ -86,13 +104,24 @@ public class CommissionPolicyService {
      */
     @Transactional
     public CommissionPolicy setLandlordRate(UUID landlordOrgId, BigDecimal ratePercent, Instant effectiveFrom, String createdBy) {
+        BigDecimal previousRate = commissionPolicyRepository.findActiveByLandlordOrgId(landlordOrgId)
+                .map(CommissionPolicy::getRatePercent)
+                .orElse(null);
+
         commissionPolicyRepository.findActiveByLandlordOrgId(landlordOrgId).ifPresent(existing -> {
             existing.deactivate();
             commissionPolicyRepository.save(existing);
         });
 
         CommissionPolicy policy = CommissionPolicy.createForLandlord(ratePercent, effectiveFrom, createdBy, landlordOrgId);
-        return commissionPolicyRepository.save(policy);
+        CommissionPolicy saved = commissionPolicyRepository.save(policy);
+
+        financialAuditService.commissionPolicyChanged(
+                landlordOrgId,
+                previousRate == null ? null : previousRate.toPlainString(),
+                ratePercent == null ? null : ratePercent.toPlainString());
+
+        return saved;
     }
 
     /**
@@ -103,8 +132,18 @@ public class CommissionPolicyService {
     @Transactional
     public void clearLandlordRate(UUID landlordOrgId) {
         commissionPolicyRepository.findActiveByLandlordOrgId(landlordOrgId).ifPresent(existing -> {
+            BigDecimal previousRate = existing.getRatePercent();
+
             existing.deactivate();
             commissionPolicyRepository.save(existing);
+
+            // Recorded as a change to "cleared" rather than skipped. Removing
+            // an override moves the landlord back to the platform default,
+            // which may be higher or lower — it is a rate change either way.
+            financialAuditService.commissionPolicyChanged(
+                    landlordOrgId,
+                    previousRate == null ? null : previousRate.toPlainString(),
+                    null);
         });
     }
 }

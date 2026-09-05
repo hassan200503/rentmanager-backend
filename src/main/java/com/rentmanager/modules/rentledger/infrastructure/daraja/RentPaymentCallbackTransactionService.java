@@ -93,16 +93,36 @@ public class RentPaymentCallbackTransactionService {
                         com.rentmanager.shared.exception.ErrorCode.RESOURCE_NOT_FOUND
                 ));
 
+        // No commission when the platform never received the money. Under
+        // DIRECT collection the rent settled straight into the landlord's own
+        // paybill, so there is nothing here to take a cut of — deducting one
+        // would record a commission that was never actually collected, and
+        // hand the disbursement path a net amount to pay out of a float that
+        // never received it. See CollectionMode and V89.
+        boolean collectsDirectly = collectsDirectly(request.getTenantId());
         boolean premiumBilling = isPremiumMonthly(request.getTenantId());
+
         BigDecimal ratePercent = null;
         BigDecimal commissionAmount = null;
+        // netAmount means "what the platform holds and must pay out". It
+        // drives the B2C disbursement downstream, so it stays NULL whenever
+        // the platform is holding nothing.
         BigDecimal netAmount = null;
 
-        if (premiumBilling) {
-            // Phase 1: PREMIUM_MONTHLY - zero commission line, 100% of the
-            // payment disbursed to the landlord (netAmount = gross), in
-            // exchange for the flat monthly fee. Applies during the grace
-            // window too (features keep working until the revert).
+        if (collectsDirectly) {
+            // DIRECT: the money settled into the landlord's own paybill at
+            // the moment the renter paid. No commission to deduct and — the
+            // load-bearing part — nothing to disburse. Leaving netAmount null
+            // is what stops initiateB2CIfNeeded from trying to pay out money
+            // the platform never received. Setting it to gross here, as the
+            // premium branch does, would attempt a B2C against a float that
+            // has no such funds in it.
+            netAmount = null;
+        } else if (premiumBilling) {
+            // PLATFORM_CUSTODY + PREMIUM_MONTHLY: the platform does hold the
+            // money, takes no commission, and disburses 100% in exchange for
+            // the flat monthly fee. Applies during the grace window too
+            // (features keep working until the revert).
             netAmount = request.getAmount();
         } else if ((ratePercent = commissionPolicyService.getActiveRate(request.getTenantId())) != null) {
             commissionAmount = CommissionPolicyService.computeCommission(request.getAmount(), ratePercent);
@@ -111,8 +131,9 @@ public class RentPaymentCallbackTransactionService {
             rentTransactionRepository.save(transaction);
         }
 
-        log.info("Rent payment applied. requestId={} receipt={} premium={} rate={}% commission={} net={}",
-                request.getId(), mpesaReceiptNumber, premiumBilling, ratePercent, commissionAmount, netAmount);
+        log.info("Rent payment applied. requestId={} receipt={} direct={} premium={} rate={}% commission={} net={}",
+                request.getId(), mpesaReceiptNumber, collectsDirectly, premiumBilling,
+                ratePercent, commissionAmount, netAmount);
 
         return new SuccessfulPaymentResult(
                 request, transaction, ratePercent, commissionAmount, netAmount
@@ -128,6 +149,20 @@ public class RentPaymentCallbackTransactionService {
      * holds (landlord override -&gt; platform default -&gt; null = no
      * commission) - never hardcoded here.
      */
+    /**
+     * True when this landlord's rent settles directly into their own M-Pesa
+     * and never passes through the platform.
+     *
+     * <p>Fails closed toward DIRECT — a landlord we cannot resolve is assumed
+     * NOT to be a custody arrangement, so no commission is taken from money
+     * we may never have held.
+     */
+    private boolean collectsDirectly(UUID tenantId) {
+        return tenantRepository.findById(tenantId)
+                .map(com.rentmanager.modules.tenant.domain.model.Tenant::collectsDirectly)
+                .orElse(true);
+    }
+
     private boolean isPremiumMonthly(UUID tenantId) {
         return tenantRepository.findById(tenantId)
                 .map(tenant -> tenant.getBillingMode() == BillingMode.PREMIUM_MONTHLY)

@@ -71,18 +71,19 @@ class DisbursementControllerRbacTest {
     private static final UUID OTHER_TENANT_ID = UUID.randomUUID();
     private static final UUID DISBURSEMENT_ID = UUID.randomUUID();
 
+    // No recipient fields: the payout destination is read from
+    // tenants.payout_phone_number by the service, never from the request.
     private static final String INITIATE_BODY = """
             {
               "leaseId": "%s",
-              "amount": 5000.00,
-              "recipientPhone": "+254712345678",
-              "recipientName": "Test Recipient"
+              "ledgerEntryId": "%s",
+              "amount": 5000.00
             }
-            """.formatted(UUID.randomUUID());
+            """.formatted(UUID.randomUUID(), UUID.randomUUID());
 
     @BeforeEach
     void setUp() {
-        when(b2cDisbursementService.initiateDisbursement(any(), any(), any(), any(), any(), any(), any(), any()))
+        when(b2cDisbursementService.initiateDisbursement(any(), any(), any(), any(), any(), any()))
                 .thenReturn(buildDummyDisbursement(TENANT_ID));
         when(disbursementRepository.findByIdAndTenantId(DISBURSEMENT_ID, TENANT_ID))
                 .thenReturn(Optional.of(buildDummyDisbursement(TENANT_ID)));
@@ -193,11 +194,10 @@ class DisbursementControllerRbacTest {
         void initiateWithNullLeaseId_returns400() throws Exception {
             String bodyWithNullLeaseId = """
                     {
-                      "amount": 5000.00,
-                      "recipientPhone": "+254712345678",
-                      "recipientName": "Test"
+                      "ledgerEntryId": "%s",
+                      "amount": 5000.00
                     }
-                    """;
+                    """.formatted(UUID.randomUUID());
 
             mockMvc.perform(post("/api/v1/disbursements")
                             .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_LANDLORD_OWNER"))
@@ -213,11 +213,10 @@ class DisbursementControllerRbacTest {
             String bodyWithZeroAmount = """
                     {
                       "leaseId": "%s",
-                      "amount": 0.00,
-                      "recipientPhone": "+254712345678",
-                      "recipientName": "Test"
+                      "ledgerEntryId": "%s",
+                      "amount": 0.00
                     }
-                    """.formatted(UUID.randomUUID());
+                    """.formatted(UUID.randomUUID(), UUID.randomUUID());
 
             mockMvc.perform(post("/api/v1/disbursements")
                             .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_LANDLORD_OWNER"))
@@ -228,61 +227,67 @@ class DisbursementControllerRbacTest {
             verifyNoInteractions(b2cDisbursementService);
         }
 
+        /**
+         * Replaces a test that asserted a supplied recipientPhone had to match
+         * ^\+2547\d{8}$. There is no recipient field to validate any more —
+         * the destination comes from tenants.payout_phone_number — so the
+         * property worth protecting is the stronger one: a caller who sends a
+         * phone number anyway must not be able to influence where money goes.
+         */
         @Test
-        void initiateWithInvalidPhone_returns400() throws Exception {
-            // Missing +254 prefix
-            String bodyWithBadPhone = """
+        void initiateIgnoresAnyRecipientSuppliedByTheCaller() throws Exception {
+            String bodyWithSmuggledRecipient = """
                     {
                       "leaseId": "%s",
+                      "ledgerEntryId": "%s",
                       "amount": 5000.00,
-                      "recipientPhone": "0712345678",
-                      "recipientName": "Test"
+                      "recipientPhone": "+254700000001",
+                      "recipientName": "Attacker"
                     }
-                    """.formatted(UUID.randomUUID());
+                    """.formatted(UUID.randomUUID(), UUID.randomUUID());
 
             mockMvc.perform(post("/api/v1/disbursements")
                             .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_LANDLORD_OWNER"))
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(bodyWithBadPhone))
-                    .andExpect(status().isBadRequest());
-        }
-
-        @Test
-        void initiateWithValidPhone_passes() throws Exception {
-            // Valid: +2547 followed by 8 digits
-            String validBody = """
-                    {
-                      "leaseId": "%s",
-                      "amount": 100.00,
-                      "recipientPhone": "+254712345678",
-                      "recipientName": "Valid Recipient"
-                    }
-                    """.formatted(UUID.randomUUID());
-
-            mockMvc.perform(post("/api/v1/disbursements")
-                            .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_LANDLORD_OWNER"))
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(validBody))
+                            .content(bodyWithSmuggledRecipient))
                     .andExpect(status().isOk());
+
+            // Six arguments, none of them a recipient. The service resolves the
+            // destination itself, so nothing the caller sent can reach Daraja.
+            verify(b2cDisbursementService).initiateDisbursement(
+                    any(), any(), any(), any(), any(), any());
         }
 
         @Test
-        void initiateWithBlankRecipientName_returns400() throws Exception {
-            String bodyWithBlankName = """
+        void initiateWithoutLedgerEntryId_returns400() throws Exception {
+            // Without the entry there is nothing to validate the amount
+            // against, which is the situation the entitlement cap exists to end.
+            String bodyWithoutEntry = """
                     {
                       "leaseId": "%s",
-                      "amount": 5000.00,
-                      "recipientPhone": "+254712345678",
-                      "recipientName": "   "
+                      "amount": 5000.00
                     }
                     """.formatted(UUID.randomUUID());
 
             mockMvc.perform(post("/api/v1/disbursements")
                             .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_LANDLORD_OWNER"))
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(bodyWithBlankName))
+                            .content(bodyWithoutEntry))
                     .andExpect(status().isBadRequest());
+
+            verifyNoInteractions(b2cDisbursementService);
         }
+
+        /*
+         * Removed here: initiateWithValidPhone_passes and
+         * initiateWithBlankRecipientName_returns400. Both asserted validation
+         * on recipientPhone / recipientName, fields the request no longer
+         * carries — the destination is resolved from the landlord record. The
+         * property they were reaching for is covered more strongly by
+         * initiateIgnoresAnyRecipientSuppliedByTheCaller above, which proves a
+         * caller cannot influence the destination at all rather than proving
+         * their chosen destination was well-formatted.
+         */
     }
 
     private Disbursement buildDummyDisbursement(UUID tenantId) {
@@ -302,6 +307,7 @@ class DisbursementControllerRbacTest {
                 null, 0, false,
                 Instant.now(),
                 Instant.now(),
+                "KES",
                 0L
         );
     }

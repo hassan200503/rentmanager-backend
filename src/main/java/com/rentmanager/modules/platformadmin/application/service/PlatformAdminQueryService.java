@@ -111,6 +111,35 @@ public class PlatformAdminQueryService {
      * filterable by status and landlord. Used by the admin disbursements page.
      */
     @Transactional(readOnly = true)
+    /**
+     * The rows behind the "failed payments" and "payments pending" counters
+     * on the admin overview.
+     *
+     * <p>Filters mirror {@link #getDisbursements} exactly, so the two admin
+     * queues behave the same way: an optional landlord, an optional status,
+     * newest first. Cross-tenant by design — this is the platform view, and
+     * the role gate on the controller is what constrains it.
+     */
+    public Page<RentPaymentRequestJpaEntity> getPaymentRequests(
+            UUID landlordId,
+            RentPaymentRequestStatus status,
+            Pageable pageable) {
+
+        if (landlordId != null) {
+            if (status != null) {
+                return adminReadModelRepository.findPaymentRequestsByTenantAndStatus(
+                        landlordId, status, pageable);
+            }
+            return adminReadModelRepository.findPaymentRequestsByTenantPaged(landlordId, pageable);
+        }
+
+        if (status != null) {
+            return adminReadModelRepository.findPaymentRequestsByStatus(status, pageable);
+        }
+
+        return adminReadModelRepository.findAllPaymentRequests(pageable);
+    }
+
     public Page<DisbursementJpaEntity> getDisbursements(
             UUID landlordId,
             DisbursementStatus status,

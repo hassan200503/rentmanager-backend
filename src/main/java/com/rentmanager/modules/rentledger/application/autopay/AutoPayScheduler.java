@@ -20,7 +20,7 @@ public class AutoPayScheduler {
 
     private final AutoPayService autoPayService;
 
-    @Scheduled(cron = "0 0 8 * * *")
+    @Scheduled(cron = "0 0 8 * * *", zone = "Africa/Nairobi")
     public void runDaily() {
         log.info("AutoPayScheduler: starting daily run at {}", java.time.LocalTime.now(TZ));
         autoPayService.processAll();

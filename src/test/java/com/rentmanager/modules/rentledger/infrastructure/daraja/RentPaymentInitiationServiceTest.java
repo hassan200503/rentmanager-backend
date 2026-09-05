@@ -50,6 +50,8 @@ class RentPaymentInitiationServiceTest {
     @Mock
     private PlatformDarajaCredentialsResolver darajaResolver;
     @Mock
+    private com.rentmanager.modules.tenant.domain.repository.TenantRepository tenantRepository;
+    @Mock
     private Lease lease;
 
     private RentPaymentInitiationService service;
@@ -65,11 +67,27 @@ class RentPaymentInitiationServiceTest {
     void setUp() {
         service = new RentPaymentInitiationService(
                 rentLedgerEntryRepository, leaseRepository,
-                rentPaymentRequestRepository, darajaService, darajaProperties, darajaResolver
+                rentPaymentRequestRepository, darajaService, darajaProperties, darajaResolver,
+                tenantRepository
         );
 
         lenient().when(rentPaymentRequestRepository.save(any(RentPaymentRequest.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
+
+        // Rent is now signed with the LANDLORD's own Daraja credentials
+        // (V89 / CollectionMode.DIRECT), so every initiation test needs a
+        // landlord who has finished M-Pesa setup. Before this, the service
+        // used the platform's credentials unconditionally and no landlord
+        // lookup happened at all — see the refusal test below for the case
+        // this replaced.
+        com.rentmanager.modules.tenant.domain.model.Tenant landlord =
+                mock(com.rentmanager.modules.tenant.domain.model.Tenant.class);
+        lenient().when(landlord.collectsDirectly()).thenReturn(true);
+        lenient().when(landlord.getDarajaCredentials()).thenReturn(
+                com.rentmanager.modules.tenant.domain.valueobject.DarajaCredentials.of(
+                        "landlord-key", "landlord-secret", "556677", "landlord-passkey"));
+        lenient().when(tenantRepository.findById(tenantId))
+                .thenReturn(java.util.Optional.of(landlord));
 
         lenient().when(darajaProperties.getConsumerKey()).thenReturn("test-consumer-key");
         lenient().when(darajaProperties.getConsumerSecret()).thenReturn("test-consumer-secret");
@@ -99,6 +117,60 @@ class RentPaymentInitiationServiceTest {
             lenient().when(darajaResolver.stkCredentials())
                     .thenReturn(DarajaCredentials.of(
                             "test-consumer-key", "test-consumer-secret", "174379", "test-passkey"));
+        }
+
+        /**
+         * Regression guard (2026-09-03). Nothing used to dedupe initiation:
+         * a renter double-tapping Pay, or reloading the page and starting
+         * again, could put two live STK prompts on the same entry. Each
+         * needs their PIN, so neither double-charges by itself — but two
+         * completed prompts produce two genuine M-Pesa receipts and a real
+         * overpayment, which the OVERPAID admin flow then has to unwind.
+         */
+        @Test
+        void aSecondPushIsSuppressedWhileTheFirstIsStillLive() {
+            when(rentLedgerEntryRepository.findByIdAndTenantId(entryId, tenantId))
+                    .thenReturn(Optional.of(entry));
+            when(leaseRepository.findByIdAndTenantId(leaseId, tenantId))
+                    .thenReturn(Optional.of(lease));
+
+            RentPaymentRequest live = RentPaymentRequest.create(
+                    tenantId, leaseId, entryId, new BigDecimal("1500.00"), "KES");
+            when(rentPaymentRequestRepository.findLatestPendingForEntry(tenantId, entryId))
+                    .thenReturn(Optional.of(live));
+
+            RentPaymentRequest result = service.initiate(tenantId, entryId, mpesaPhone);
+
+            assertThat(result).isSameAs(live);
+            verifyNoInteractions(darajaService);
+            verify(rentPaymentRequestRepository, never()).save(any(RentPaymentRequest.class));
+        }
+
+        /**
+         * The window has to expire, and quickly. There is no stale-request
+         * sweep for rent payments, so a renter who simply cancels the prompt
+         * leaves a PENDING row behind for good — a guard without an expiry
+         * would lock them out of paying at all, which is worse than the
+         * problem it fixes.
+         */
+        @Test
+        void anOldPendingRequestDoesNotBlockANewAttempt() {
+            when(rentLedgerEntryRepository.findByIdAndTenantId(entryId, tenantId))
+                    .thenReturn(Optional.of(entry));
+            when(leaseRepository.findByIdAndTenantId(leaseId, tenantId))
+                    .thenReturn(Optional.of(lease));
+
+            RentPaymentRequest stale = RentPaymentRequest.rehydrate(
+                    UUID.randomUUID(), tenantId, leaseId, entryId, new BigDecimal("1500.00"),
+                    null, RentPaymentRequestStatus.PENDING, null,
+                    java.time.Instant.now().minus(java.time.Duration.ofHours(20)), "KES", 0L);
+            when(rentPaymentRequestRepository.findLatestPendingForEntry(tenantId, entryId))
+                    .thenReturn(Optional.of(stale));
+
+            RentPaymentRequest result = service.initiate(tenantId, entryId, mpesaPhone);
+
+            assertThat(result).isNotSameAs(stale);
+            assertThat(result.getMpesaCheckoutRequestId()).isEqualTo(checkoutRequestId);
         }
 
         @Test
@@ -131,8 +203,13 @@ class RentPaymentInitiationServiceTest {
                     credentialsCaptor.capture(),
                     eq(callbackUrl)
             );
-            assertThat(credentialsCaptor.getValue().getConsumerKey()).isEqualTo("test-consumer-key");
-            assertThat(credentialsCaptor.getValue().getConsumerSecret()).isEqualTo("test-consumer-secret");
+            // Re-pinned by V89 / CollectionMode.DIRECT. This previously
+            // asserted the PLATFORM's key, which is what made every rent
+            // payment an aggregation arrangement. Asserting the landlord's
+            // key is the whole change: the money settles in their paybill.
+            assertThat(credentialsCaptor.getValue().getConsumerKey()).isEqualTo("landlord-key");
+            assertThat(credentialsCaptor.getValue().getConsumerSecret()).isEqualTo("landlord-secret");
+            assertThat(credentialsCaptor.getValue().getBusinessShortCode()).isEqualTo("556677");
         }
 
         @Test
@@ -155,7 +232,7 @@ class RentPaymentInitiationServiceTest {
                     UUID.randomUUID(), tenantId, leaseId, UUID.randomUUID(), UUID.randomUUID(),
                     LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 31), LocalDate.of(2026, 7, 1),
                     new BigDecimal("1500.00"), new BigDecimal("1500.00"),
-                    RentLedgerStatus.PAID, false, 1L, Instant.now(), Instant.now()
+                    RentLedgerStatus.PAID, false, "KES", 1L, Instant.now(), Instant.now()
             );
             when(rentLedgerEntryRepository.findByIdAndTenantId(entryId, tenantId))
                     .thenReturn(Optional.of(settledEntry));
@@ -339,7 +416,33 @@ class RentPaymentInitiationServiceTest {
         }
 
         @Test
-        void usesPlatformCredentials() {
+        void refusesRatherThanFallingBackToPlatformCredentialsWhenSetupIsIncomplete() {
+            com.rentmanager.modules.tenant.domain.model.Tenant unconfigured =
+                    mock(com.rentmanager.modules.tenant.domain.model.Tenant.class);
+            when(unconfigured.collectsDirectly()).thenReturn(true);
+            when(unconfigured.getDarajaCredentials()).thenReturn(
+                    com.rentmanager.modules.tenant.domain.valueobject.DarajaCredentials.unconfigured());
+            when(tenantRepository.findById(tenantId)).thenReturn(java.util.Optional.of(unconfigured));
+
+            when(rentLedgerEntryRepository.findByIdAndTenantId(entryId, tenantId))
+                    .thenReturn(Optional.of(entry));
+            when(leaseRepository.findByIdAndTenantId(leaseId, tenantId))
+                    .thenReturn(Optional.of(lease));
+
+            // The load-bearing assertion. A landlord who has not finished
+            // M-Pesa setup must get a refusal, NOT a payment quietly routed
+            // through the platform's account. The refusal costs a support
+            // message; the fallback would be unlicensed aggregation.
+            org.assertj.core.api.Assertions.assertThatThrownBy(
+                            () -> service.initiateWithAmount(tenantId, entryId, customAmount, mpesaPhone))
+                    .isInstanceOf(com.rentmanager.modules.rentledger.domain.exception.RentLedgerStateException.class)
+                    .hasMessageContaining("has not finished M-Pesa setup");
+
+            verifyNoInteractions(darajaService);
+        }
+
+        @Test
+        void signsWithTheLandlordsOwnCredentialsSoRentNeverReachesThePlatform() {
             when(rentLedgerEntryRepository.findByIdAndTenantId(entryId, tenantId))
                     .thenReturn(Optional.of(entry));
             when(leaseRepository.findByIdAndTenantId(leaseId, tenantId))
@@ -352,8 +455,13 @@ class RentPaymentInitiationServiceTest {
                     anyString(), any(), anyString(), anyString(),
                     credentialsCaptor.capture(), anyString()
             );
-            assertThat(credentialsCaptor.getValue().getConsumerKey()).isEqualTo("test-consumer-key");
-            assertThat(credentialsCaptor.getValue().getConsumerSecret()).isEqualTo("test-consumer-secret");
+            // Re-pinned by V89 / CollectionMode.DIRECT. This previously
+            // asserted the PLATFORM's key, which is what made every rent
+            // payment an aggregation arrangement. Asserting the landlord's
+            // key is the whole change: the money settles in their paybill.
+            assertThat(credentialsCaptor.getValue().getConsumerKey()).isEqualTo("landlord-key");
+            assertThat(credentialsCaptor.getValue().getConsumerSecret()).isEqualTo("landlord-secret");
+            assertThat(credentialsCaptor.getValue().getBusinessShortCode()).isEqualTo("556677");
         }
 
         @Test

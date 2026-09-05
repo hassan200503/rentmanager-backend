@@ -46,8 +46,15 @@ public class PublicUnitQueryServiceImpl implements PublicUnitQueryService {
     // =====================================================
 
     @Override
-    public Page<PublicUnitResponse> getVacantUnits(String keyword, Pageable pageable) {
-        Page<Unit> units = unitRepository.findPubliclyVisibleVacantUnits(keyword, pageable);
+    public Page<PublicUnitResponse> getVacantUnits(
+            String keyword,
+            String city,
+            java.math.BigDecimal minRent,
+            java.math.BigDecimal maxRent,
+            com.rentmanager.modules.property.domain.enums.PropertyType propertyType,
+            Pageable pageable) {
+        Page<Unit> units = unitRepository.findPubliclyVisibleVacantUnits(
+                keyword, city, minRent, maxRent, propertyType, pageable);
         return attachImages(units);
     }
 
@@ -145,15 +152,23 @@ public class PublicUnitQueryServiceImpl implements PublicUnitQueryService {
         return response;
     }
 
+    /**
+     * Reads the same signal the renter portal does, so a landlord cannot show
+     * as verified on a public listing and unverified inside the product — the
+     * situation the live data was actually in, because this read
+     * {@code tenants.verified} (backfilled true in V42 and never written
+     * since) while the portal read subscription status.
+     *
+     * <p>{@code tenants.verified} was dropped in V87.
+     */
     private void attachLandlordVerified(PublicUnitResponse response, Unit unit) {
         try {
-            String sql = "SELECT verified FROM tenants WHERE id = :tenantId";
+            String sql = "SELECT status FROM tenants WHERE id = :tenantId";
             Object raw = entityManager
                     .createNativeQuery(sql)
                     .setParameter("tenantId", unit.getTenantId())
                     .getSingleResult();
-            Boolean verified = raw instanceof Boolean b ? b : false;
-            response.setLandlordVerified(Boolean.TRUE.equals(verified));
+            response.setLandlordVerified("ACTIVE".equals(String.valueOf(raw)));
         } catch (NoResultException e) {
             response.setLandlordVerified(false);
         }

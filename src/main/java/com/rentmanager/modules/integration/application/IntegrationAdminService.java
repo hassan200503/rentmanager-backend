@@ -9,6 +9,7 @@ import com.rentmanager.modules.integration.domain.model.IntegrationEnvironment;
 import com.rentmanager.modules.integration.domain.model.IntegrationStatus;
 import com.rentmanager.modules.integration.domain.model.ProviderCatalog;
 import com.rentmanager.modules.integration.domain.model.ProviderDefinition;
+import com.rentmanager.modules.integration.domain.model.ProviderTestTarget;
 import com.rentmanager.modules.integration.domain.repository.IntegrationConfigRepository;
 import com.rentmanager.modules.integration.infrastructure.persistence.entity.IntegrationAuditLogEntity;
 import com.rentmanager.modules.integration.infrastructure.persistence.repository.IntegrationAuditLogJpaRepository;
@@ -179,16 +180,24 @@ public class IntegrationAdminService {
         IntegrationConfig config = repository.find(providerKey, environment)
                 .orElseGet(() -> IntegrationConfig.newUnconfigured(providerKey, environment));
 
-        Map<String, String> credentials = registry.resolveSaved(providerKey, environment);
+        String effectiveTarget = blankToNull(target);
+        ProviderTestTarget spec = definition.testTarget();
 
-        ProviderTester tester = testerRegistry.get(providerKey);
         ProviderTester.TestResult result;
-        try {
-            result = tester.test(credentials, blankToNull(target), null);
-        } catch (Exception e) {
-            log.warn("Integration test crashed for provider={} env={}", providerKey, environment, e);
-            result = ProviderTester.TestResult.failure(
-                    "Test connection crashed", String.valueOf(e.getMessage()));
+        // Server-side authoritative guard: a Test whose target is required is
+        // refused before any provider call — the client can never bypass it.
+        if (spec != null && spec.required() && effectiveTarget == null) {
+            result = ProviderTester.TestResult.failure("Recipient required", spec.message());
+        } else {
+            Map<String, String> credentials = registry.resolveSaved(providerKey, environment);
+            ProviderTester tester = testerRegistry.get(providerKey);
+            try {
+                result = tester.test(credentials, effectiveTarget, null);
+            } catch (Exception e) {
+                log.warn("Integration test crashed for provider={} env={}", providerKey, environment, e);
+                result = ProviderTester.TestResult.failure(
+                        "Test connection crashed", String.valueOf(e.getMessage()));
+            }
         }
 
         if (result.ok()) {
@@ -212,6 +221,51 @@ public class IntegrationAdminService {
                 config.getStatus().name());
     }
 
+    /**
+     * "Roll to Production" — the single-switch ergonomics without a single,
+     * unguarded flip. Activates PRODUCTION only for providers whose PRODUCTION
+     * config is VERIFIED (a real Test Connection passed since the last
+     * credential change). Providers that are not yet ready are reported back
+     * with the reason so the Owner resolves them first. Idempotent: providers
+     * already live on PRODUCTION are left as-is and not reported as actions.
+     */
+    @Transactional
+    public IntegrationDtos.RolloutView rollToProduction(String actor, String ipAddress) {
+        IntegrationEnvironment target = IntegrationEnvironment.PRODUCTION;
+        List<String> activated = new ArrayList<>();
+        List<IntegrationDtos.RolloutSkipView> skipped = new ArrayList<>();
+
+        for (ProviderDefinition definition : ProviderCatalog.all()) {
+            Optional<IntegrationConfig> prod = repository.find(definition.key(), target);
+            if (prod.isEmpty()) {
+                skipped.add(new IntegrationDtos.RolloutSkipView(
+                        definition.key(), definition.displayName(), "PRODUCTION not configured"));
+                continue;
+            }
+            IntegrationConfig config = prod.get();
+            if (config.getStatus() != IntegrationStatus.VERIFIED) {
+                skipped.add(new IntegrationDtos.RolloutSkipView(definition.key(), definition.displayName(),
+                        "Not verified — run a successful Test Connection against PRODUCTION first"));
+                continue;
+            }
+            if (config.isActive()) {
+                continue; // already live — nothing to do
+            }
+            repository.deactivateAll(definition.key(), target);
+            config.activate();
+            config.touchUpdatedAt();
+            repository.save(config);
+            registry.invalidate(definition.key());
+            audit(definition.key(), target, "activated", actor, ipAddress,
+                    Map.of("environment", target.name(), "rollout", "true"));
+            activated.add(definition.key());
+        }
+
+        log.info("Integration roll-to-production: activated={} target={} actor={}",
+                activated.size(), target, actor);
+        return new IntegrationDtos.RolloutView(target.name(), activated, skipped);
+    }
+
     // ---------------------------------------------------------------
     // Views
     // ---------------------------------------------------------------
@@ -227,12 +281,19 @@ public class IntegrationAdminService {
                 envViews.add(unconfiguredView(definition, environment));
             }
         }
+        ProviderTestTarget targetDef = definition.testTarget();
+        IntegrationDtos.TestTargetView testTarget = targetDef == null
+                ? null
+                : new IntegrationDtos.TestTargetView(
+                        targetDef.kind().name(), targetDef.required(), targetDef.label(), targetDef.message());
+
         return new IntegrationDtos.ProviderView(
                 definition.key(),
                 definition.displayName(),
                 definition.category(),
                 definition.docsUrl(),
                 definition.supportsTestConnection(),
+                testTarget,
                 envViews);
     }
 

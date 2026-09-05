@@ -8,6 +8,7 @@ import com.rentmanager.modules.lease.domain.enums.LeaseType;
 import com.rentmanager.modules.lease.domain.enums.TerminationType;
 import com.rentmanager.modules.lease.infrastructure.persistence.entity.LeaseEntity;
 import com.rentmanager.modules.lease.infrastructure.persistence.repository.JpaLeaseRepository;
+import com.rentmanager.modules.support.MinimalTenantChainFixture;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -69,11 +70,13 @@ class LeaseEntityLifecycleMetadataPersistenceTest extends AbstractPostgresIntegr
         TerminationType terminationType = TerminationType.TENANT_REQUEST;
         String terminationReason = "Tenant relocating for work";
 
+        MinimalTenantChainFixture.Chain chain = MinimalTenantChainFixture.persistFullChain(em);
+
         LeaseEntity entity = new LeaseEntity();
-        entity.assignTenant(UUID.randomUUID());
-        entity.setPropertyId(UUID.randomUUID());
-        entity.setUnitId(UUID.randomUUID());
-        entity.setTenantProfileId(UUID.randomUUID());
+        entity.assignTenant(chain.tenantId());
+        entity.setPropertyId(chain.propertyId());
+        entity.setUnitId(chain.unitId());
+        entity.setTenantProfileId(chain.tenantProfileId());
         entity.setLeaseNumber("LSE-TEST-" + UUID.randomUUID());
         entity.setLeaseType(LeaseType.FIXED_TERM);
         entity.setBillingCycle(BillingCycle.MONTHLY);

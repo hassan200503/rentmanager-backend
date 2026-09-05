@@ -20,6 +20,7 @@ public class RentPaymentRequestPersistenceMapper {
         jpa.setMpesaCheckoutRequestId(request.getMpesaCheckoutRequestId());
         jpa.setStatus(request.getStatus());
         jpa.setMpesaReceiptNumber(request.getMpesaReceiptNumber());
+        jpa.setCurrency(request.getCurrency());
         return jpa;
     }
 
@@ -36,6 +37,7 @@ public class RentPaymentRequestPersistenceMapper {
                 jpa.getStatus(),
                 jpa.getMpesaReceiptNumber(),
                 jpa.getCreatedAt(),
+                jpa.getCurrency(),
                 jpa.getVersion()
         );
     }

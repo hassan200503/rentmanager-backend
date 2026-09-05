@@ -8,6 +8,8 @@ import com.rentmanager.modules.property.infrastructure.persistence.entity.Proper
 import com.rentmanager.modules.property.infrastructure.persistence.entity.PropertyJpaEntity;
 import com.rentmanager.modules.property.infrastructure.persistence.repository.PropertyJpaRepository;
 import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
+import com.rentmanager.modules.support.MinimalTenantChainFixture;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -34,6 +36,9 @@ class PropertyJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTe
     @Autowired
     private PropertyJpaRepository propertyJpaRepository;
 
+    @Autowired
+    private EntityManager entityManager;
+
     private PropertyJpaEntity persistProperty(PropertyStatus status, String name) {
         return persistProperty(status, name, "Nairobi");
     }
@@ -51,7 +56,7 @@ class PropertyJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTe
             String state
     ) {
         PropertyJpaEntity property = new PropertyJpaEntity();
-        property.assignTenant(UUID.randomUUID());
+        property.assignTenant(MinimalTenantChainFixture.persistTenant(entityManager));
         property.setReferenceCode("PROP-" + UUID.randomUUID());
         property.setName(name);
         property.setStatus(status);

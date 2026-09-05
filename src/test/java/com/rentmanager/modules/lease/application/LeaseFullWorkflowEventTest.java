@@ -4,10 +4,11 @@ import com.rentmanager.modules.lease.domain.enums.*;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowEngine;
+import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
+import com.rentmanager.modules.support.MinimalTenantChainFixture;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -16,9 +17,8 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest
 @Transactional
-class LeaseFullWorkflowEventTest {
+class LeaseFullWorkflowEventTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
     private LeaseWorkflowEngine workflowEngine;
@@ -32,13 +32,14 @@ class LeaseFullWorkflowEventTest {
     @Test
     void shouldExecuteFullLeaseLifecycleWithEventConsistency() {
 
-        UUID tenantId = UUID.randomUUID();
+        MinimalTenantChainFixture.Chain chain = MinimalTenantChainFixture.persistFullChain(entityManager);
+        UUID tenantId = chain.tenantId();
 
         Lease lease = Lease.create(
                 tenantId,
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                UUID.randomUUID(),
+                chain.propertyId(),
+                chain.unitId(),
+                chain.tenantProfileId(),
                 "LS-FULL-" + UUID.randomUUID(),
                 LeaseType.STANDARD,
                 BillingCycle.MONTHLY,

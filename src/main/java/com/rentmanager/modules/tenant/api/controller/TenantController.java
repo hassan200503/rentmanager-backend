@@ -6,6 +6,7 @@ import com.rentmanager.modules.tenant.application.dto.request.ConfigureDarajaCre
 import com.rentmanager.modules.tenant.application.dto.request.CreateTenantRequest;
 import com.rentmanager.modules.tenant.application.dto.request.SuspendTenantRequest;
 import com.rentmanager.modules.tenant.application.dto.response.DarajaCredentialsStatusResponse;
+import com.rentmanager.modules.tenant.application.dto.response.DarajaCredentialsTestResponse;
 import com.rentmanager.modules.tenant.application.dto.response.TenantResponse;
 import com.rentmanager.shared.security.context.TenantContext;
 import jakarta.validation.Valid;
@@ -97,6 +98,32 @@ public class TenantController {
         DarajaCredentialsStatusResponse response =
                 tenantCommandService.configureDarajaCredentials(currentTenant, tenantId, request);
 
+        return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
+    // ------------------------------------------------------------
+    // TEST DARAJA (M-PESA) CREDENTIALS
+    // ------------------------------------------------------------
+    // Real call to Safaricom with the SAVED credentials — no mock, no
+    // "looks well-formed" check. OWNER-gated to match the configure action:
+    // the test reveals whether a credential works, which is information
+    // about the credential itself.
+    //
+    // POST rather than GET because it causes an outbound call to a third
+    // party; it must not be retried by a cache or a link prefetch.
+    @PreAuthorize("hasAuthority('ROLE_LANDLORD_OWNER')")
+    @PostMapping("/{tenantId}/daraja-credentials/test")
+    public ResponseEntity<ApiResponse<DarajaCredentialsTestResponse>> testDarajaCredentials(
+            @PathVariable UUID tenantId
+    ) {
+        UUID currentTenant = resolveStrictTenantId();
+
+        DarajaCredentialsTestResponse response =
+                tenantCommandService.testDarajaCredentials(currentTenant, tenantId);
+
+        // 200 either way: the request succeeded, and the body carries
+        // Safaricom's verdict. A 4xx here would conflate "we could not run
+        // the test" with "Safaricom rejected the key".
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 

@@ -217,7 +217,7 @@ class TenantControllerSecurityTest {
     @Test
     void owner_succeeds_onDarajaCredentials() throws Exception {
         when(tenantCommandService.configureDarajaCredentials(any(), any(), any()))
-                .thenReturn(new DarajaCredentialsStatusResponse(true));
+                .thenReturn(new DarajaCredentialsStatusResponse(true, "DIRECT"));
 
         mockMvc.perform(put(TENANTS_BASE + "/{tenantId}/daraja-credentials", TENANT_ID)
                         .with(authentication(tokenWithAuthority("ROLE_LANDLORD_OWNER")))

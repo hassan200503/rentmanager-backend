@@ -51,6 +51,11 @@ import java.util.UUID;
 @Builder
 public class RentTransaction extends AggregateRoot {
 
+    // Kenya-first default, matching CreateTenantCommandHandler.DEFAULT_CURRENCY
+    // — used when a caller doesn't pass an explicit currency (see the
+    // shorter create() overload below).
+    private static final String DEFAULT_CURRENCY = "KES";
+
     private UUID ledgerEntryId;
     private UUID leaseId;
     private RentTransactionType type;
@@ -59,6 +64,12 @@ public class RentTransaction extends AggregateRoot {
     private RentTransactionSource source;
     private String recordedBy;
     private LocalDateTime occurredAt;
+
+    // Populated only for type REVERSAL: the id of the transaction this one
+    // voids. Null for every other type. See RentTransactionType#REVERSAL.
+    private UUID reversesTransactionId;
+
+    private String currency;
 
     // Commission snapshot — populated only for MPESA rent payments.
     // Null for all other transaction types (CASH, ADMIN_ADJUSTMENT, etc.).
@@ -71,6 +82,14 @@ public class RentTransaction extends AggregateRoot {
     private Instant createdAt;
     private Instant updatedAt;
 
+    /**
+     * Shorter overload defaulting {@code currency} to {@link #DEFAULT_CURRENCY}
+     * — most callers (including the bulk of this class's own test suite)
+     * don't need to think about currency. Real money-posting call sites in
+     * RentLedgerApplicationService use the currency-explicit overload below,
+     * always passing the parent RentLedgerEntry's own currency so every
+     * transaction against an entry agrees with it.
+     */
     public static RentTransaction create(
             UUID tenantId,
             UUID ledgerEntryId,
@@ -81,6 +100,24 @@ public class RentTransaction extends AggregateRoot {
             RentTransactionSource source,
             String recordedBy,
             LocalDateTime occurredAt
+    ) {
+        return create(
+                tenantId, ledgerEntryId, leaseId, type, amount, externalReference,
+                source, recordedBy, occurredAt, DEFAULT_CURRENCY
+        );
+    }
+
+    public static RentTransaction create(
+            UUID tenantId,
+            UUID ledgerEntryId,
+            UUID leaseId,
+            RentTransactionType type,
+            BigDecimal amount,
+            String externalReference,
+            RentTransactionSource source,
+            String recordedBy,
+            LocalDateTime occurredAt,
+            String currency
     ) {
         if (tenantId == null) {
             throw new RentLedgerStateException("tenantId cannot be null", ErrorCode.RENT_TRANSACTION_TENANT_NULL);
@@ -130,6 +167,7 @@ public class RentTransaction extends AggregateRoot {
                 .source(source)
                 .recordedBy(recordedBy)
                 .occurredAt(occurredAt)
+                .currency(currency != null ? currency : DEFAULT_CURRENCY)
                 .build();
 
         transaction.setId(UUID.randomUUID());
@@ -152,6 +190,8 @@ public class RentTransaction extends AggregateRoot {
             BigDecimal commissionRatePercent,
             BigDecimal commissionAmount,
             BigDecimal netAmount,
+            UUID reversesTransactionId,
+            String currency,
             Long version,
             Instant createdAt,
             Instant updatedAt
@@ -168,6 +208,8 @@ public class RentTransaction extends AggregateRoot {
                 .commissionRatePercent(commissionRatePercent)
                 .commissionAmount(commissionAmount)
                 .netAmount(netAmount)
+                .reversesTransactionId(reversesTransactionId)
+                .currency(currency != null ? currency : DEFAULT_CURRENCY)
                 .version(version)
                 .createdAt(createdAt)
                 .updatedAt(updatedAt)
@@ -176,6 +218,42 @@ public class RentTransaction extends AggregateRoot {
         transaction.setId(id);
         transaction.assignTenant(tenantId);
         return transaction;
+    }
+
+    /**
+     * Creates the compensating REVERSAL transaction for {@code original}.
+     * Deliberately does not carry over {@code original}'s external
+     * reference — leaving it only on the original row is what keeps
+     * {@code uk_rent_transactions_tenant_external_reference} (the M-Pesa
+     * duplicate-callback guard) blocking replay of that receipt even after
+     * it's been reversed.
+     */
+    public static RentTransaction reversalOf(
+            RentTransaction original,
+            UUID tenantId,
+            String recordedBy,
+            LocalDateTime occurredAt
+    ) {
+        if (original == null) {
+            throw new RentLedgerStateException("original transaction cannot be null", ErrorCode.RENT_TRANSACTION_ORIGINAL_NULL);
+        }
+
+        RentTransaction reversal = RentTransaction.builder()
+                .ledgerEntryId(original.getLedgerEntryId())
+                .leaseId(original.getLeaseId())
+                .type(RentTransactionType.REVERSAL)
+                .amount(original.getAmount())
+                .externalReference(null)
+                .source(RentTransactionSource.ADMIN_ADJUSTMENT)
+                .recordedBy(recordedBy)
+                .occurredAt(occurredAt)
+                .reversesTransactionId(original.getId())
+                .currency(original.getCurrency())
+                .build();
+
+        reversal.setId(UUID.randomUUID());
+        reversal.assignTenant(tenantId);
+        return reversal;
     }
 
     public void applyCommission(BigDecimal commissionRatePercent, BigDecimal commissionAmount, BigDecimal netAmount) {
@@ -206,12 +284,21 @@ public class RentTransaction extends AggregateRoot {
      * entry's balance and is applied through applyTransaction with
      * subtractive logic. The dedicated resolveOverpaymentWithRefund path
      * is used when an OVERPAID entry's exact excess is being resolved.
+     *
+     * DEPOSIT deliberately returns false: a security deposit is not rent
+     * revenue and must not count toward amountPaid, or a lease's opening
+     * rent charge could show as PAID/OVERPAID purely from deposit money
+     * that was never actually rent. A DEPOSIT row still gets posted (see
+     * RentLedgerApplicationService#postDeposit) as an audit/receipt entry
+     * in the transaction history, but applyTransaction rejects it — the
+     * held-deposit lifecycle (paid, refunded, forfeited) lives entirely in
+     * the deposit module's own Deposit aggregate, which is the actual
+     * system of record.
      */
     public boolean reducesBalanceOwed() {
         return type == RentTransactionType.PAYMENT
                 || type == RentTransactionType.WAIVER
                 || type == RentTransactionType.CREDIT_APPLIED
-                || type == RentTransactionType.DEPOSIT
                 || type == RentTransactionType.REFUND;
     }
 }

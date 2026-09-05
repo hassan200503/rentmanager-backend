@@ -30,7 +30,7 @@ public class SubscriptionExpiryScheduler {
      * collections arrive via the C2B/Ratiba callbacks, this only advances
      * state (period ended -> grace, grace/renewal ended -> COMMISSION).
      */
-    @Scheduled(cron = "0 0 1 * * *")
+    @Scheduled(cron = "0 0 1 * * *", zone = "Africa/Nairobi")
     public void sweepSubscriptions() {
         sweepService.enterGraceForExpiredSubscriptions();
         sweepService.revertNonRenewingSubscriptions();
@@ -47,7 +47,7 @@ public class SubscriptionExpiryScheduler {
      * paid-but-unconfirmed request activates premium instead of being
      * charged twice.)
      */
-    @Scheduled(cron = "0 5 * * * *")
+    @Scheduled(cron = "0 5 * * * *", zone = "Africa/Nairobi")
     public void sweepStalePaymentRequests() {
         sweepService.expireStalePaymentRequests();
     }

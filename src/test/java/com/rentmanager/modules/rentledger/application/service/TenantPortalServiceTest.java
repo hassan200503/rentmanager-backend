@@ -15,10 +15,19 @@ import com.rentmanager.modules.rentledger.application.autopay.AutoPayService;
 import com.rentmanager.modules.rentledger.domain.exception.RentLedgerStateException;
 import com.rentmanager.modules.rentledger.domain.model.RentPaymentRequest;
 import com.rentmanager.modules.rentledger.domain.model.RentLedgerEntry;
+import com.rentmanager.modules.rentledger.domain.model.RentTransaction;
+import com.rentmanager.modules.rentledger.domain.enums.RentTransactionType;
+import com.rentmanager.modules.rentledger.domain.enums.RentTransactionSource;
 import com.rentmanager.modules.rentledger.domain.repository.RentLedgerEntryRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentPaymentRequestRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentTransactionRepository;
+import com.rentmanager.modules.rentledger.api.dto.response.TenantDashboardResponse.PaymentHistoryItem;
+import com.rentmanager.modules.rentledger.api.dto.response.TenantPaymentHistoryResponse;
+import com.rentmanager.modules.rentledger.domain.enums.RentLedgerStatus;
 import com.rentmanager.modules.announcement.application.AnnouncementQueryService;
+import com.rentmanager.modules.deposit.domain.enums.DepositStatus;
+import com.rentmanager.modules.deposit.domain.model.Deposit;
+import com.rentmanager.modules.deposit.domain.repository.DepositRepository;
 import com.rentmanager.modules.rentledger.infrastructure.daraja.RentPaymentInitiationService;
 import com.rentmanager.modules.review.application.ReviewCommandService;
 import com.rentmanager.modules.review.application.RenterReviewQueryService;
@@ -38,6 +47,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -51,12 +61,16 @@ import static org.mockito.Mockito.*;
  * Unit tests for {@code TenantPortalService}.
  *
  * Key findings from the trace phase:
- *   - {@code TenantPortalController} has NO {@code @PreAuthorize} annotations.
- *     Protection is purely identity-based: the controller passes the
- *     authenticated userId to the service, which resolves the renter's
- *     TenantProfile via the chain: userId → User → clerkUserId → TenantProfile.
- *   - Cross-renter isolation is therefore a SERVICE-layer concern, not a
- *     controller RBAC concern.
+ *   - {@code TenantPortalController} now carries a class-level
+ *     {@code @PreAuthorize("hasAuthority('ROLE_TENANT')")} (see
+ *     TenantPortalControllerSecurityTest), but that only proves "some
+ *     renter" is calling — it says nothing about WHICH renter. The
+ *     controller passes the authenticated userId to the service, which
+ *     resolves the caller's own TenantProfile via userId → User →
+ *     clerkUserId → TenantProfile, and every subsequent lookup is scoped to
+ *     that profile/tenant.
+ *   - Cross-renter isolation is therefore still a SERVICE-layer concern, not
+ *     something the controller's RBAC gate can express.
  *
  * Tests verify:
  *   1. Entry ownership check: initiateRentPayment() rejects a ledger entry
@@ -86,6 +100,8 @@ class TenantPortalServiceTest {
     private RenterReviewQueryService renterReviewQueryService;
     private MaintenanceRequestCommandService maintenanceRequestCommandService;
     private MaintenanceRequestRepository maintenanceRequestRepository;
+    private StkPushRateLimiter stkPushRateLimiter;
+    private DepositRepository depositRepository;
 
     private TenantPortalService service;
 
@@ -116,6 +132,8 @@ class TenantPortalServiceTest {
         renterReviewQueryService = mock(RenterReviewQueryService.class);
         maintenanceRequestCommandService = mock(MaintenanceRequestCommandService.class);
         maintenanceRequestRepository = mock(MaintenanceRequestRepository.class);
+        stkPushRateLimiter = mock(StkPushRateLimiter.class);
+        depositRepository = mock(DepositRepository.class);
 
         service = new TenantPortalService(
                 userRepository,
@@ -134,7 +152,9 @@ class TenantPortalServiceTest {
                 renterReviewQueryService,
                 maintenanceRequestCommandService,
                 maintenanceRequestRepository,
-                mock(AnnouncementQueryService.class)
+                mock(AnnouncementQueryService.class),
+                stkPushRateLimiter,
+                depositRepository
         );
 
         renterUser = buildUser(USER_ID, CLERK_USER_ID, LANDLORD_TENANT_ID);
@@ -145,6 +165,8 @@ class TenantPortalServiceTest {
         when(tenantProfileRepository.findByClerkUserId(CLERK_USER_ID))
                 .thenReturn(Optional.of(tenantProfile));
         when(leaseRepository.findAllByTenant(LANDLORD_TENANT_ID))
+                .thenReturn(List.of(activeLease));
+            when(leaseRepository.findAllByTenantAndTenantProfile(LANDLORD_TENANT_ID, tenantProfile.getId()))
                 .thenReturn(List.of(activeLease));
     }
 
@@ -186,6 +208,8 @@ class TenantPortalServiceTest {
             expiredLease.expire(); // no re-approve — it's already active
 
             when(leaseRepository.findAllByTenant(LANDLORD_TENANT_ID))
+                    .thenReturn(List.of(expiredLease));
+                when(leaseRepository.findAllByTenantAndTenantProfile(LANDLORD_TENANT_ID, tenantProfile.getId()))
                     .thenReturn(List.of(expiredLease));
 
             assertThrows(RentLedgerStateException.class,
@@ -254,6 +278,308 @@ class TenantPortalServiceTest {
                     () -> service.initiateRentPayment(USER_ID, entryId, "+254712345678"));
 
             verifyNoInteractions(rentPaymentInitiationService);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // STK push rate limiting -- both initiate entry points must consult the
+    // limiter FIRST, before any repository/Daraja work, and must propagate
+    // its rejection rather than swallow it.
+    // ─────────────────────────────────────────────────────────────────────
+
+    @Nested
+    class StkPushRateLimiting {
+
+        @Test
+        void initiateRentPayment_checksRateLimiterBeforeProceeding() {
+            UUID entryId = UUID.randomUUID();
+            RentLedgerEntry entry = buildDueEntry(entryId, LANDLORD_TENANT_ID, activeLease.getId());
+            when(rentLedgerEntryRepository.findByIdAndTenantId(entryId, LANDLORD_TENANT_ID))
+                    .thenReturn(Optional.of(entry));
+            when(rentPaymentInitiationService.initiate(any(), any(), any()))
+                    .thenReturn(buildDummyPaymentRequest());
+
+            service.initiateRentPayment(USER_ID, entryId, "+254712345678");
+
+            verify(stkPushRateLimiter).checkAndRecord(USER_ID);
+        }
+
+        @Test
+        void initiateRentPayment_rateLimiterRejection_propagatesAndSkipsPaymentInitiation() {
+            UUID entryId = UUID.randomUUID();
+            doThrow(new com.rentmanager.modules.rentledger.domain.exception.StkPushRateLimitedException(
+                    "slow down", 15L))
+                    .when(stkPushRateLimiter).checkAndRecord(USER_ID);
+
+            assertThrows(
+                    com.rentmanager.modules.rentledger.domain.exception.StkPushRateLimitedException.class,
+                    () -> service.initiateRentPayment(USER_ID, entryId, "+254712345678"));
+
+            verifyNoInteractions(userRepository);
+            verifyNoInteractions(rentLedgerEntryRepository);
+            verifyNoInteractions(rentPaymentInitiationService);
+        }
+
+        @Test
+        void initiatePortalPayment_rateLimiterRejection_propagatesAndSkipsPaymentInitiation() {
+            doThrow(new com.rentmanager.modules.rentledger.domain.exception.StkPushRateLimitedException(
+                    "slow down", 15L))
+                    .when(stkPushRateLimiter).checkAndRecord(USER_ID);
+
+            assertThrows(
+                    com.rentmanager.modules.rentledger.domain.exception.StkPushRateLimitedException.class,
+                    () -> service.initiatePortalPayment(USER_ID, new BigDecimal("1000.00"), "+254712345678"));
+
+            verifyNoInteractions(userRepository);
+            verifyNoInteractions(leaseRepository);
+            verifyNoInteractions(rentPaymentInitiationService);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Deposit visibility -- renter-facing, read-only. getDeposit() must
+    // never expose a method to refund/forfeit; only DepositController
+    // (OWNER/MANAGER-gated) can mutate a deposit.
+    // ─────────────────────────────────────────────────────────────────────
+
+    @Nested
+    class DepositVisibility {
+
+        @Test
+        void depositExists_returnsItScoped_toRenterActiveLease() {
+            Deposit deposit = Deposit.rehydrate(
+                    UUID.randomUUID(), LANDLORD_TENANT_ID, activeLease.getId(), UUID.randomUUID(),
+                    tenantProfile.getId(), new BigDecimal("15000.00"), new BigDecimal("15000.00"),
+                    BigDecimal.ZERO, DepositStatus.HELD, java.time.LocalDateTime.now(), null, "KES"
+            );
+            when(depositRepository.findByLeaseIdAndTenantId(activeLease.getId(), LANDLORD_TENANT_ID))
+                    .thenReturn(Optional.of(deposit));
+
+            var response = service.getDeposit(USER_ID);
+
+            assertEquals("HELD", response.status());
+            assertEquals(new BigDecimal("15000.00"), response.amountPaid());
+        }
+
+        @Test
+        void noDepositForLease_returnsNull_notAnException() {
+            when(depositRepository.findByLeaseIdAndTenantId(activeLease.getId(), LANDLORD_TENANT_ID))
+                    .thenReturn(Optional.empty());
+
+            assertNull(service.getDeposit(USER_ID));
+        }
+
+        /**
+         * Regression guard for the deployment blocker (2026-09-03). Every
+         * renter endpoint used to require an ACTIVE lease, and
+         * LeaseActionScheduler expires leases automatically at 01:30 — so on
+         * the night a tenancy ended, the renter lost their deposit record.
+         * That is precisely when they need it: the deposit is refunded after
+         * move-out, and this page is where they watch that happen. The lease
+         * page even promises it in copy.
+         */
+        @Test
+        void depositStaysVisibleAfterTheLeaseHasExpired() {
+            Lease expired = buildActiveLease(LANDLORD_TENANT_ID, tenantProfile.getId());
+            expired.expire();
+            when(leaseRepository.findAllByTenantAndTenantProfile(LANDLORD_TENANT_ID, tenantProfile.getId()))
+                    .thenReturn(List.of(expired));
+
+            Deposit deposit = Deposit.rehydrate(
+                    UUID.randomUUID(), LANDLORD_TENANT_ID, expired.getId(), UUID.randomUUID(),
+                    tenantProfile.getId(), new BigDecimal("15000.00"), new BigDecimal("15000.00"),
+                    new BigDecimal("15000.00"), DepositStatus.REFUNDED, java.time.LocalDateTime.now(),
+                    java.time.LocalDateTime.now(), "KES"
+            );
+            when(depositRepository.findByLeaseIdAndTenantId(expired.getId(), LANDLORD_TENANT_ID))
+                    .thenReturn(Optional.of(deposit));
+
+            var response = service.getDeposit(USER_ID);
+
+            assertEquals("REFUNDED", response.status());
+        }
+    }
+
+    private Unit mockUnitForDashboard() {
+        Unit unit = mock(Unit.class);
+        when(unit.getPropertyId()).thenReturn(UUID.randomUUID());
+        when(unit.getUnitNumber()).thenReturn("HWSW");
+        when(unit.getLabel()).thenReturn("Bright");
+        return unit;
+    }
+
+    private com.rentmanager.modules.property.domain.model.Property mockPropertyForDashboard() {
+        var property = mock(com.rentmanager.modules.property.domain.model.Property.class);
+        when(property.getName()).thenReturn("Green Land Apartments");
+        return property;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Next due date: projected from the charge scheduler's own rule when no
+    // future-dated entry has been posted yet.
+    // ─────────────────────────────────────────────────────────────────────
+
+    @Nested
+    class NextDueProjection {
+
+        /**
+         * Every domain mock is built BEFORE any when(...) chain opens —
+         * constructing a mock inside an open stubbing throws
+         * UnfinishedStubbingException (see this repo's test conventions).
+         */
+        private void dashboardFixtures(Lease lease, List<RentLedgerEntry> entries) {
+            Unit unit = mockUnitForDashboard();
+            var property = mockPropertyForDashboard();
+
+            when(leaseRepository.findAllByTenantAndTenantProfile(LANDLORD_TENANT_ID, tenantProfile.getId()))
+                    .thenReturn(List.of(lease));
+            when(unitRepository.findByIdAndTenantId(lease.getUnitId(), LANDLORD_TENANT_ID))
+                    .thenReturn(Optional.of(unit));
+            when(propertyRepository.findByIdAndTenantId(any(), eq(LANDLORD_TENANT_ID)))
+                    .thenReturn(Optional.of(property));
+            when(rentLedgerEntryRepository.findByLease(LANDLORD_TENANT_ID, lease.getId()))
+                    .thenReturn(entries);
+            when(rentTransactionRepository.findByLease(LANDLORD_TENANT_ID, lease.getId()))
+                    .thenReturn(List.of());
+        }
+
+        private RentLedgerEntry postedEntry(LocalDate periodStart, RentLedgerStatus status) {
+            RentLedgerEntry entry = mock(RentLedgerEntry.class);
+            when(entry.getBillingPeriodStart()).thenReturn(periodStart);
+            when(entry.getDueDate()).thenReturn(periodStart);
+            when(entry.getStatus()).thenReturn(status);
+            when(entry.getBalanceOwed()).thenReturn(new BigDecimal("1.00"));
+            when(entry.getAmountDue()).thenReturn(new BigDecimal("1.00"));
+            return entry;
+        }
+
+        /**
+         * The reported symptom: every charge posted so far is dated in the
+         * past (the scheduler never posts ahead), so the "next due" filter
+         * matched nothing and the dashboard read "Not scheduled" — for every
+         * renter, for most of every month.
+         */
+        @Test
+        void projectsTheNextCalendarMonthWhenEveryPostedChargeIsInThePast() {
+            List<RentLedgerEntry> entries = List.of(
+                    postedEntry(LocalDate.of(2026, 8, 1), RentLedgerStatus.OVERDUE),
+                    postedEntry(LocalDate.of(2026, 9, 1), RentLedgerStatus.OVERDUE));
+            dashboardFixtures(activeLease, entries);
+
+            var dashboard = service.getDashboard(USER_ID);
+
+            // September was the last period posted, so October is next, due
+            // on the 1st — exactly what RentChargeScheduler will post.
+            assertEquals(LocalDate.of(2026, 10, 1), dashboard.nextDueDate());
+            assertEquals(0, dashboard.nextDueAmount().compareTo(activeLease.getRentAmount()));
+        }
+
+        @Test
+        void aRealFutureDatedEntryStillWinsOverTheProjection() {
+            LocalDate future = LocalDate.now().plusMonths(1).withDayOfMonth(1);
+            RentLedgerEntry upcoming = postedEntry(future, RentLedgerStatus.DUE);
+            dashboardFixtures(activeLease, List.of(upcoming));
+
+            var dashboard = service.getDashboard(USER_ID);
+
+            assertEquals(future, dashboard.nextDueDate());
+            // Amount comes from the real entry, not the lease's rent figure.
+            assertEquals(0, dashboard.nextDueAmount().compareTo(new BigDecimal("1.00")));
+        }
+
+        @Test
+        void projectsFromTheLeaseStartWhenNothingHasBeenPostedYet() {
+            dashboardFixtures(activeLease, List.of());
+
+            var dashboard = service.getDashboard(USER_ID);
+
+            assertEquals(
+                    java.time.YearMonth.from(activeLease.getStartDate()).plusMonths(1).atDay(1),
+                    dashboard.nextDueDate());
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Lease lifecycle: read access survives the end of a tenancy, but
+    // anything that moves money does not.
+    // ─────────────────────────────────────────────────────────────────────
+
+    @Nested
+    class EndedTenancyAccess {
+
+        private Lease expiredOnly() {
+            Lease expired = buildActiveLease(LANDLORD_TENANT_ID, tenantProfile.getId());
+            expired.expire();
+            when(leaseRepository.findAllByTenantAndTenantProfile(LANDLORD_TENANT_ID, tenantProfile.getId()))
+                    .thenReturn(List.of(expired));
+            return expired;
+        }
+
+        @Test
+        void paymentHistoryStaysReadableAfterTheLeaseEnds() {
+            Lease expired = expiredOnly();
+            when(rentTransactionRepository.findByLease(LANDLORD_TENANT_ID, expired.getId()))
+                    .thenReturn(List.of());
+
+            TenantPaymentHistoryResponse response = service.getPaymentHistory(USER_ID, 0, 20);
+
+            assertNotNull(response);
+            assertEquals(0, response.totalElements());
+        }
+
+        @Test
+        void theLeaseItselfStaysReadableAfterItEnds() {
+            expiredOnly();
+
+            // Reaching the mapping at all is the assertion: before the fix
+            // this threw RentLedgerStateException before touching any of it.
+            assertThrows(RentLedgerStateException.class, () -> service.getLease(USER_ID),
+                    "unit/property lookups are unstubbed here, so it must fail LATER than the lease lookup");
+        }
+
+        /**
+         * The other half of the fix: read access widened, but collecting
+         * rent against a tenancy that has ended must still fail closed.
+         */
+        @Test
+        void payingRentIsStillRefusedOnceTheLeaseHasEnded() {
+            expiredOnly();
+
+            assertThrows(RentLedgerStateException.class,
+                    () -> service.initiatePortalPayment(USER_ID, new BigDecimal("1000"), "+254712345678"));
+        }
+
+        /**
+         * The dashboard must not promise a renter another rent charge once
+         * their tenancy is over.
+         */
+        @Test
+        void noNextDueDateIsProjectedForAnEndedTenancy() {
+            Lease expired = expiredOnly();
+            Unit unit = mockUnitForDashboard();
+            var property = mockPropertyForDashboard();
+
+            when(unitRepository.findByIdAndTenantId(expired.getUnitId(), LANDLORD_TENANT_ID))
+                    .thenReturn(Optional.of(unit));
+            when(propertyRepository.findByIdAndTenantId(any(), eq(LANDLORD_TENANT_ID)))
+                    .thenReturn(Optional.of(property));
+            when(rentLedgerEntryRepository.findByLease(LANDLORD_TENANT_ID, expired.getId()))
+                    .thenReturn(List.of());
+            when(rentTransactionRepository.findByLease(LANDLORD_TENANT_ID, expired.getId()))
+                    .thenReturn(List.of());
+
+            var dashboard = service.getDashboard(USER_ID);
+
+            assertNull(dashboard.nextDueDate());
+            assertEquals(0, dashboard.nextDueAmount().compareTo(BigDecimal.ZERO));
+        }
+
+        @Test
+        void aRenterWithNoLeaseAtAllStillGetsAClearFailure() {
+            when(leaseRepository.findAllByTenantAndTenantProfile(LANDLORD_TENANT_ID, tenantProfile.getId()))
+                    .thenReturn(List.of());
+
+            assertThrows(RentLedgerStateException.class, () -> service.getPaymentHistory(USER_ID, 0, 20));
         }
     }
 
@@ -328,6 +654,8 @@ class TenantPortalServiceTest {
                     .thenReturn(Optional.of(renterBProfile));
             when(leaseRepository.findAllByTenant(LANDLORD_TENANT_ID))
                     .thenReturn(List.of(activeLease, renterBLease));
+                when(leaseRepository.findAllByTenantAndTenantProfile(LANDLORD_TENANT_ID, tenantProfile.getId()))
+                    .thenReturn(List.of(activeLease, renterBLease));
 
             // Renter A's entry (linked to Renter A's lease)
             UUID renterAEntryId = UUID.randomUUID();
@@ -374,6 +702,8 @@ class TenantPortalServiceTest {
             expiredLease.expire();
             when(leaseRepository.findAllByTenant(LANDLORD_TENANT_ID))
                     .thenReturn(List.of(expiredLease));
+                when(leaseRepository.findAllByTenantAndTenantProfile(LANDLORD_TENANT_ID, tenantProfile.getId()))
+                    .thenReturn(List.of(expiredLease));
             when(reviewQueryService.getRenterReview(LANDLORD_TENANT_ID, tenantProfile.getId()))
                     .thenReturn(null);
 
@@ -388,6 +718,8 @@ class TenantPortalServiceTest {
         void submitReview_renterWithNoVerifiableLease_throws() {
             when(leaseRepository.findAllByTenant(LANDLORD_TENANT_ID))
                     .thenReturn(List.of());
+                when(leaseRepository.findAllByTenantAndTenantProfile(LANDLORD_TENANT_ID, tenantProfile.getId()))
+                    .thenReturn(List.of());
 
             assertThrows(RentLedgerStateException.class,
                     () -> service.submitReview(USER_ID, 5, "nope"));
@@ -400,6 +732,76 @@ class TenantPortalServiceTest {
                     .thenReturn(null);
 
             assertNull(service.getMyReview(USER_ID));
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Payment history: status and billing period come from the ledger
+    // entry, not the transaction — regression guard for a real defect a
+    // renter reported (2026-09-03): toPaymentHistoryItem() used to set
+    // `status` to txn.getType().name(), so every row's Status column showed
+    // "Rent Charge" / "Payment" instead of PAID/OVERDUE/DUE, and
+    // billingPeriodStart/End were hardcoded to "", so the Period column
+    // always read "— – —".
+    // ─────────────────────────────────────────────────────────────────────
+
+    @Nested
+    class PaymentHistoryStatusAndBillingPeriod {
+
+        @Test
+        void statusComesFromTheLinkedLedgerEntry_notTheTransactionType() {
+            UUID entryId = UUID.randomUUID();
+            RentLedgerEntry entry = mock(RentLedgerEntry.class);
+            when(entry.getId()).thenReturn(entryId);
+            when(entry.getStatus()).thenReturn(RentLedgerStatus.OVERDUE);
+            when(entry.getBillingPeriodStart()).thenReturn(LocalDate.of(2026, 9, 1));
+            when(entry.getBillingPeriodEnd()).thenReturn(LocalDate.of(2026, 9, 30));
+
+            RentTransaction charge = RentTransaction.create(
+                    LANDLORD_TENANT_ID, entryId, activeLease.getId(), RentTransactionType.RENT_CHARGE,
+                    new BigDecimal("20000.00"), null, RentTransactionSource.SYSTEM,
+                    "SYSTEM", LocalDateTime.now()
+            );
+
+            when(rentTransactionRepository.findByLease(LANDLORD_TENANT_ID, activeLease.getId()))
+                    .thenReturn(List.of(charge));
+            when(rentLedgerEntryRepository.findAllByTenantAndIdIn(LANDLORD_TENANT_ID, List.of(entryId)))
+                    .thenReturn(List.of(entry));
+
+            TenantPaymentHistoryResponse response = service.getPaymentHistory(USER_ID, 0, 20);
+
+            assertEquals(1, response.content().size());
+            PaymentHistoryItem item = response.content().get(0);
+            // The bug: this used to equal "RENT_CHARGE" (txn.getType().name()).
+            assertEquals("OVERDUE", item.status());
+            assertEquals("2026-09-01", item.billingPeriodStart());
+            assertEquals("2026-09-30", item.billingPeriodEnd());
+        }
+
+        @Test
+        void aTransactionWhoseLedgerEntryCannotBeFound_fallsBackRatherThanThrowing() {
+            // Defensive path: findAllByTenantAndIdIn() returns no match for
+            // this transaction's ledgerEntryId (should not happen given the
+            // domain's non-null constraint, but must degrade safely rather
+            // than NPE on a renter's history page if it ever did).
+            UUID entryId = UUID.randomUUID();
+            RentTransaction payment = RentTransaction.create(
+                    LANDLORD_TENANT_ID, entryId, activeLease.getId(), RentTransactionType.PAYMENT,
+                    new BigDecimal("20000.00"), "MPESA-1", RentTransactionSource.MPESA,
+                    "system", LocalDateTime.now()
+            );
+
+            when(rentTransactionRepository.findByLease(LANDLORD_TENANT_ID, activeLease.getId()))
+                    .thenReturn(List.of(payment));
+            when(rentLedgerEntryRepository.findAllByTenantAndIdIn(LANDLORD_TENANT_ID, List.of(entryId)))
+                    .thenReturn(List.of());
+
+            TenantPaymentHistoryResponse response = service.getPaymentHistory(USER_ID, 0, 20);
+
+            PaymentHistoryItem item = response.content().get(0);
+            assertEquals("PAYMENT", item.status());
+            assertEquals("", item.billingPeriodStart());
+            assertEquals("", item.billingPeriodEnd());
         }
     }
 
@@ -460,6 +862,8 @@ class TenantPortalServiceTest {
     @Test
     void submitMaintenanceRequest_renterWithNoActiveLease_throws() {
         when(leaseRepository.findAllByTenant(LANDLORD_TENANT_ID))
+                .thenReturn(List.of());
+            when(leaseRepository.findAllByTenantAndTenantProfile(LANDLORD_TENANT_ID, tenantProfile.getId()))
                 .thenReturn(List.of());
 
         assertThrows(RentLedgerStateException.class,

@@ -17,6 +17,8 @@ import java.util.UUID;
  */
 public class RentPaymentRequest extends AggregateRoot {
 
+    private static final String DEFAULT_CURRENCY = "KES";
+
     private UUID leaseId;
     private UUID rentLedgerEntryId;
     private BigDecimal amount;
@@ -24,6 +26,7 @@ public class RentPaymentRequest extends AggregateRoot {
     private RentPaymentRequestStatus status;
     private String mpesaReceiptNumber;
     private Instant createdAt;
+    private String currency;
     private Long version;
 
     protected RentPaymentRequest() {
@@ -33,11 +36,27 @@ public class RentPaymentRequest extends AggregateRoot {
     // FACTORY
     // -------------------------------------------------------
 
+    /**
+     * Shorter overload defaulting {@code currency} to {@link #DEFAULT_CURRENCY}
+     * — see the currency-explicit overload below, used by the real STK-push
+     * initiation call site with the currency of the RentLedgerEntry being
+     * paid toward.
+     */
     public static RentPaymentRequest create(
             UUID tenantId,
             UUID leaseId,
             UUID rentLedgerEntryId,
             BigDecimal amount
+    ) {
+        return create(tenantId, leaseId, rentLedgerEntryId, amount, DEFAULT_CURRENCY);
+    }
+
+    public static RentPaymentRequest create(
+            UUID tenantId,
+            UUID leaseId,
+            UUID rentLedgerEntryId,
+            BigDecimal amount,
+            String currency
     ) {
         if (tenantId == null) throw new IllegalArgumentException("tenantId is required");
         if (leaseId == null) throw new IllegalArgumentException("leaseId is required");
@@ -53,6 +72,7 @@ public class RentPaymentRequest extends AggregateRoot {
         request.amount = amount;
         request.status = RentPaymentRequestStatus.PENDING;
         request.createdAt = Instant.now();
+        request.currency = currency != null ? currency : DEFAULT_CURRENCY;
         request.version = null; // unpersisted; Hibernate assigns on first insert
 
         return request;
@@ -95,6 +115,7 @@ public class RentPaymentRequest extends AggregateRoot {
     public RentPaymentRequestStatus getStatus() { return status; }
     public String getMpesaReceiptNumber() { return mpesaReceiptNumber; }
     public Instant getCreatedAt() { return createdAt; }
+    public String getCurrency() { return currency; }
     public Long getVersion() { return version; }
 
     // -------------------------------------------------------
@@ -111,6 +132,7 @@ public class RentPaymentRequest extends AggregateRoot {
             RentPaymentRequestStatus status,
             String mpesaReceiptNumber,
             Instant createdAt,
+            String currency,
             Long version
     ) {
         RentPaymentRequest request = new RentPaymentRequest();
@@ -123,6 +145,7 @@ public class RentPaymentRequest extends AggregateRoot {
         request.status = status;
         request.mpesaReceiptNumber = mpesaReceiptNumber;
         request.createdAt = createdAt;
+        request.currency = currency != null ? currency : DEFAULT_CURRENCY;
         request.version = version;
         return request;
     }

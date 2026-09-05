@@ -65,6 +65,17 @@ public interface UnitRepository {
 
     Page<Unit> findByPropertyIdAndOccupancyStatus(UUID propertyId, UnitOccupancyStatus occupancyStatus, Pageable pageable);
 
+    /**
+     * Occupied and total unit counts per property, for one landlord.
+     *
+     * <p>The only truthful source of a per-property occupancy figure.
+     * {@code Property.unitCount} is a dimension the landlord typed in, and
+     * {@code PropertyOccupancyRollupListener} computes these numbers only to
+     * derive an enum and then discards them.
+     */
+    java.util.List<com.rentmanager.modules.unit.application.query.projection.PropertyUnitCounts>
+            countUnitsByProperty(UUID tenantId);
+
     long countByTenantId(UUID tenantId);
     long countByTenantIdAndOccupancyStatus(UUID tenantId, UnitOccupancyStatus occupancyStatus);
 
@@ -78,7 +89,18 @@ public interface UnitRepository {
     // ACTIVE. Deliberate defense-in-depth — do not simplify to a single
     // check (see handoff doc §4).
     // =========================
-    Page<Unit> findPubliclyVisibleVacantUnits(String keyword, Pageable pageable);
+    /**
+     * Public renter search. Every filter is null-tolerant — a null means "no
+     * constraint" — so one method serves both an unfiltered browse and a
+     * fully specified search.
+     */
+    Page<Unit> findPubliclyVisibleVacantUnits(
+            String keyword,
+            String city,
+            java.math.BigDecimal minRent,
+            java.math.BigDecimal maxRent,
+            com.rentmanager.modules.property.domain.enums.PropertyType propertyType,
+            Pageable pageable);
     Page<Unit> findPubliclyVisibleVacantUnitsByProperty(UUID propertyId, Pageable pageable);
     Optional<Unit> findPubliclyVisibleVacantUnitById(UUID unitId);
     Optional<Unit> findPubliclyVisibleLongestVacantUnit();

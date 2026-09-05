@@ -4,11 +4,16 @@ import com.rentmanager.modules.rentledger.domain.enums.DisbursementStatus;
 import com.rentmanager.modules.rentledger.domain.enums.RentTransactionSource;
 import com.rentmanager.modules.rentledger.domain.enums.RentTransactionType;
 import com.rentmanager.modules.rentledger.domain.exception.RentLedgerStateException;
+import com.rentmanager.modules.audit.application.service.FinancialAuditService;
 import com.rentmanager.modules.rentledger.domain.model.Disbursement;
+import com.rentmanager.modules.rentledger.domain.model.RentLedgerEntry;
 import com.rentmanager.modules.rentledger.domain.repository.DisbursementRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentLedgerEntryRepository;
 import com.rentmanager.modules.rentledger.infrastructure.daraja.DarajaB2CService;
+import com.rentmanager.modules.tenant.domain.model.Tenant;
+import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaException;
+import com.rentmanager.shared.observability.BusinessMetrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -49,6 +54,8 @@ class B2CDisbursementServiceTest {
     private RentLedgerEntryRepository rentLedgerEntryRepository;
     private RentLedgerApplicationService rentLedgerApplicationService;
     private DarajaB2CService darajaB2CService;
+    private TenantRepository tenantRepository;
+    private DisbursementEntitlementService entitlementService;
 
     private B2CDisbursementService service;
 
@@ -71,11 +78,43 @@ class B2CDisbursementServiceTest {
         rentLedgerApplicationService = mock(RentLedgerApplicationService.class);
         darajaB2CService = mock(DarajaB2CService.class);
 
+        tenantRepository = mock(TenantRepository.class);
+        entitlementService = mock(DisbursementEntitlementService.class);
+
+        // The landlord's registered payout number is now the only possible
+        // destination — the caller no longer supplies one.
+        Tenant landlord = mock(Tenant.class);
+        when(landlord.getPayoutPhoneNumber()).thenReturn(PHONE);
+        when(landlord.getName()).thenReturn(NAME);
+        when(tenantRepository.findById(TENANT_ID)).thenReturn(Optional.of(landlord));
+        when(entitlementService.settleableAmount(TENANT_ID, ENTRY_ID))
+                .thenReturn(new BigDecimal("1000000"));
+
+        // The charge is read under a PESSIMISTIC_WRITE lock before entitlement
+        // is computed, so this has to resolve for initiation to proceed.
+        RentLedgerEntry lockedEntry = mock(RentLedgerEntry.class);
+        when(rentLedgerEntryRepository.findByIdAndTenantIdForUpdate(any(), any()))
+                .thenReturn(Optional.of(lockedEntry));
+
+        // A real transaction service so initiation runs the same two-bean
+        // path as production, lock read included.
+        DisbursementTransactionService transactionService = new DisbursementTransactionService(
+                disbursementRepository,
+                rentLedgerEntryRepository,
+                tenantRepository,
+                entitlementService,
+                mock(FinancialAuditService.class),
+                mock(BusinessMetrics.class)
+        );
+
         service = new B2CDisbursementService(
                 disbursementRepository,
                 rentLedgerEntryRepository,
                 rentLedgerApplicationService,
-                darajaB2CService
+                darajaB2CService,
+                mock(FinancialAuditService.class),
+                mock(BusinessMetrics.class),
+                transactionService
         );
 
         // By default, save() returns its argument unchanged
@@ -115,7 +154,7 @@ class B2CDisbursementServiceTest {
                     });
 
             service.initiateDisbursement(TENANT_ID, LEASE_ID, ENTRY_ID, AMOUNT,
-                    PHONE, NAME, COMMAND_ID, REMARKS);
+                    COMMAND_ID, REMARKS);
 
             InOrder inOrder = inOrder(disbursementRepository, darajaB2CService);
 
@@ -160,7 +199,7 @@ class B2CDisbursementServiceTest {
 
             assertThrows(RentLedgerStateException.class, () ->
                     service.initiateDisbursement(TENANT_ID, LEASE_ID, ENTRY_ID, AMOUNT,
-                            PHONE, NAME, COMMAND_ID, REMARKS));
+                            COMMAND_ID, REMARKS));
 
             // Two saves: INITIATED first, then FAILED
             assertEquals(2, savedStatuses.size());
@@ -174,7 +213,7 @@ class B2CDisbursementServiceTest {
                     .thenReturn(OCID);
 
             Disbursement result = service.initiateDisbursement(TENANT_ID, LEASE_ID, ENTRY_ID,
-                    AMOUNT, PHONE, NAME, COMMAND_ID, REMARKS);
+                    AMOUNT, COMMAND_ID, REMARKS);
 
             assertEquals(DisbursementStatus.PENDING, result.getStatus());
             assertEquals(OCID, result.getMpesaOriginatorConversationId());

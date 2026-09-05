@@ -5,6 +5,8 @@ import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.rentledger.api.dto.response.UnmatchedPaymentResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.UnmatchedPaymentResponse.SuggestedUnit;
 import com.rentmanager.modules.rentledger.domain.enums.RentTransactionSource;
+import com.rentmanager.modules.audit.application.service.FinancialAuditService;
+import com.rentmanager.shared.observability.BusinessMetrics;
 import com.rentmanager.modules.rentledger.domain.enums.RentTransactionType;
 import com.rentmanager.modules.rentledger.domain.model.UnmatchedPayment;
 import com.rentmanager.modules.rentledger.domain.repository.RentLedgerEntryRepository;
@@ -36,6 +38,8 @@ public class UnmatchedPaymentService {
     private final TenantProfileRepository tenantProfileRepository;
     private final RentLedgerEntryRepository rentLedgerEntryRepository;
     private final RentLedgerApplicationService rentLedgerApplicationService;
+    private final FinancialAuditService financialAuditService;
+    private final BusinessMetrics metrics;
 
     @Transactional(readOnly = true)
     public List<UnmatchedPaymentResponse> getUnmatchedPayments(UUID tenantId) {
@@ -97,6 +101,20 @@ public class UnmatchedPaymentService {
 
         payment.resolve(unitId, resolvedBy);
         unmatchedPaymentRepository.save(payment);
+
+        // Crediting a renter's payment to the wrong lease is the most
+        // ordinary fraud in property management, and until now this decision
+        // left exactly the same trace as a correct one: none. Both the
+        // receipt and the lease it was applied to are recorded, because the
+        // question afterwards is never "was it matched" but "who decided it
+        // belonged here".
+        metrics.unmatchedPaymentResolved();
+        financialAuditService.unmatchedPaymentResolved(
+                tenantId,
+                payment.getMpesaReceiptNumber() != null
+                        ? payment.getMpesaReceiptNumber() : payment.getTransactionId(),
+                ledgerEntryId,
+                String.valueOf(payment.getAmount()));
 
         log.info("Unmatched payment resolved. transactionId={} unitId={} resolvedBy={}",
                 transactionId, unitId, resolvedBy);

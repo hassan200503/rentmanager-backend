@@ -9,6 +9,8 @@ import java.util.UUID;
 
 public class Disbursement extends AggregateRoot {
 
+    private static final String DEFAULT_CURRENCY = "KES";
+
     private UUID leaseId;
     private UUID ledgerEntryId;
     private BigDecimal amount;
@@ -24,9 +26,15 @@ public class Disbursement extends AggregateRoot {
     private boolean requiresManualAttention;
     private Instant createdAt;
     private Instant updatedAt;
+    private String currency;
 
     private Disbursement() {}
 
+    /**
+     * Shorter overload defaulting {@code currency} to {@link #DEFAULT_CURRENCY}
+     * — see the currency-explicit overload below, used by real disbursement
+     * call sites with the landlord's tenant.currency.
+     */
     public static Disbursement create(
             UUID tenantId,
             UUID leaseId,
@@ -35,6 +43,19 @@ public class Disbursement extends AggregateRoot {
             String recipientPhone,
             String recipientName,
             String commandId
+    ) {
+        return create(tenantId, leaseId, ledgerEntryId, amount, recipientPhone, recipientName, commandId, DEFAULT_CURRENCY);
+    }
+
+    public static Disbursement create(
+            UUID tenantId,
+            UUID leaseId,
+            UUID ledgerEntryId,
+            BigDecimal amount,
+            String recipientPhone,
+            String recipientName,
+            String commandId,
+            String currency
     ) {
         Disbursement d = new Disbursement();
         d.setId(UUID.randomUUID());
@@ -50,6 +71,7 @@ public class Disbursement extends AggregateRoot {
         d.requiresManualAttention = false;
         d.createdAt = Instant.now();
         d.updatedAt = Instant.now();
+        d.currency = currency != null ? currency : DEFAULT_CURRENCY;
         return d;
     }
 
@@ -87,6 +109,7 @@ public class Disbursement extends AggregateRoot {
             String mpesaOriginatorConversationId, String failureReason,
             int retryCount, boolean requiresManualAttention,
             Instant createdAt, Instant updatedAt,
+            String currency,
             Long version
     ) {
         Disbursement d = new Disbursement();
@@ -107,6 +130,7 @@ public class Disbursement extends AggregateRoot {
         d.requiresManualAttention = requiresManualAttention;
         d.createdAt = createdAt;
         d.updatedAt = updatedAt;
+        d.currency = currency != null ? currency : DEFAULT_CURRENCY;
         d.setVersion(version);
         return d;
     }
@@ -126,4 +150,5 @@ public class Disbursement extends AggregateRoot {
     public boolean isRequiresManualAttention() { return requiresManualAttention; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
+    public String getCurrency() { return currency; }
 }

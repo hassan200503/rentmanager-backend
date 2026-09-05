@@ -1,5 +1,9 @@
 package com.rentmanager.modules.rentledger.application.scheduler;
 
+import com.rentmanager.modules.tenant.domain.model.Tenant;
+import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
+import com.rentmanager.modules.audit.application.service.FinancialAuditService;
+import com.rentmanager.shared.observability.BusinessMetrics;
 import com.rentmanager.modules.platformsettings.application.service.PlatformSettingsService;
 import com.rentmanager.modules.platformsettings.domain.model.PlatformSettings;
 import com.rentmanager.modules.rentledger.domain.enums.DisbursementStatus;
@@ -33,11 +37,18 @@ class DisbursementRetrySweepServiceTest {
     private DarajaB2CService darajaB2CService;
     @Mock
     private PlatformSettingsService platformSettingsService;
+    @Mock
+    private TenantRepository tenantRepository;
+    @Mock
+    private FinancialAuditService financialAuditService;
+    @Mock
+    private BusinessMetrics metrics;
 
     private DisbursementRetrySweepService sweepService;
 
     private final UUID disbursementId = UUID.randomUUID();
     private final BigDecimal amount = new BigDecimal("5000.00");
+    private static final String REGISTERED_PAYOUT_PHONE = "+254712345678";
 
     private Disbursement failedDisbursement;
 
@@ -46,15 +57,26 @@ class DisbursementRetrySweepServiceTest {
         lenient().when(platformSettingsService.getEffectiveSettings())
                 .thenReturn(PlatformSettings.defaults("test"));
         sweepService = new DisbursementRetrySweepService(
-                disbursementRepository, darajaB2CService, platformSettingsService);
+                disbursementRepository, darajaB2CService, platformSettingsService,
+                tenantRepository, financialAuditService, metrics);
+
+        // A retry now re-checks that the row's recipient is still the
+        // landlord's registered payout number, so these fixtures have to
+        // supply a landlord whose number matches. That is the real
+        // precondition for a legitimate retry, not test scaffolding — a row
+        // pointing anywhere else is refused, which is what
+        // DisbursementRetryGuardTest covers.
+        Tenant landlord = org.mockito.Mockito.mock(Tenant.class);
+        lenient().when(landlord.getPayoutPhoneNumber()).thenReturn(REGISTERED_PAYOUT_PHONE);
+        lenient().when(tenantRepository.findById(any())).thenReturn(Optional.of(landlord));
 
         failedDisbursement = Disbursement.rehydrate(
                 disbursementId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-                amount, "+254712345678", "Test Landlord",
+                amount, REGISTERED_PAYOUT_PHONE, "Test Landlord",
                 "BusinessPayment", DisbursementStatus.FAILED,
                 null, "CONV_FAIL", "OCID_FAIL",
                 "Queue timeout", 1, false,
-                Instant.now().minusSeconds(3600), Instant.now(), 0L
+                Instant.now().minusSeconds(3600), Instant.now(), "KES", 0L
         );
     }
 
@@ -66,7 +88,7 @@ class DisbursementRetrySweepServiceTest {
             when(disbursementRepository.findById(disbursementId))
                     .thenReturn(Optional.of(failedDisbursement));
             when(darajaB2CService.initiateB2C(
-                    eq(amount), eq("+254712345678"), eq("Test Landlord"),
+                    eq(amount), eq(REGISTERED_PAYOUT_PHONE), eq("Test Landlord"),
                     anyString(), eq("BusinessPayment")
             )).thenReturn("OCID_RETRY");
             when(disbursementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -82,11 +104,11 @@ class DisbursementRetrySweepServiceTest {
         void flagsForManualAttentionWhenRetriesExhausted() {
             Disbursement exhausted = Disbursement.rehydrate(
                     disbursementId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-                    amount, "+254712345678", "Test Landlord",
+                    amount, REGISTERED_PAYOUT_PHONE, "Test Landlord",
                     "BusinessPayment", DisbursementStatus.FAILED,
                     null, "CONV_FAIL", "OCID_FAIL",
                     "Queue timeout", 3, false,
-                    Instant.now().minusSeconds(3600), Instant.now(), 0L
+                    Instant.now().minusSeconds(3600), Instant.now(), "KES", 0L
             );
             when(disbursementRepository.findById(disbursementId))
                     .thenReturn(Optional.of(exhausted));
@@ -104,11 +126,11 @@ class DisbursementRetrySweepServiceTest {
         void skipsWhenNotFailed() {
             Disbursement pending = Disbursement.rehydrate(
                     disbursementId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-                    amount, "+254712345678", "Test Landlord",
+                    amount, REGISTERED_PAYOUT_PHONE, "Test Landlord",
                     "BusinessPayment", DisbursementStatus.PENDING,
                     null, "CONV", "OCID",
                     null, 0, false,
-                    Instant.now(), Instant.now(), 0L
+                    Instant.now(), Instant.now(), "KES", 0L
             );
             when(disbursementRepository.findById(disbursementId))
                     .thenReturn(Optional.of(pending));
@@ -151,11 +173,11 @@ class DisbursementRetrySweepServiceTest {
         void respectsRetryCapOfThree() {
             Disbursement atCap = Disbursement.rehydrate(
                     disbursementId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-                    amount, "+254712345678", "Test Landlord",
+                    amount, REGISTERED_PAYOUT_PHONE, "Test Landlord",
                     "BusinessPayment", DisbursementStatus.FAILED,
                     null, "CONV_FAIL", "OCID_FAIL",
                     "Network error", 2, false,
-                    Instant.now().minusSeconds(3600), Instant.now(), 0L
+                    Instant.now().minusSeconds(3600), Instant.now(), "KES", 0L
             );
             when(disbursementRepository.findById(disbursementId))
                     .thenReturn(Optional.of(atCap));

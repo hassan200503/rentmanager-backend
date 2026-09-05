@@ -54,4 +54,45 @@ public class AuditLog {
         this.userAgent = userAgent;
         this.createdAt = Instant.now();
     }
+
+    /**
+     * Rebuilds a persisted row. Separate from the public constructor because
+     * that one stamps a fresh id and createdAt, which would silently rewrite
+     * history on every read.
+     */
+    public static AuditLog rehydrate(
+            UUID id, UUID tenantId, String action, String actorId, String actorType,
+            String entityType, String entityId, String correlationId, String status,
+            String metadata, String ipAddress, String userAgent, Instant createdAt) {
+
+        AuditLog log = new AuditLog();
+        log.id = id;
+        log.tenantId = tenantId;
+        log.action = action;
+        log.actorId = actorId;
+        log.actorType = actorType;
+        log.entityType = entityType;
+        log.entityId = entityId;
+        log.correlationId = correlationId;
+        log.status = status;
+        log.metadata = metadata;
+        log.ipAddress = ipAddress;
+        log.userAgent = userAgent;
+        log.createdAt = createdAt;
+        return log;
+    }
+
+    public UUID getId() { return id; }
+    public UUID getTenantId() { return tenantId; }
+    public String getAction() { return action; }
+    public String getActorId() { return actorId; }
+    public String getActorType() { return actorType; }
+    public String getEntityType() { return entityType; }
+    public String getEntityId() { return entityId; }
+    public String getCorrelationId() { return correlationId; }
+    public String getStatus() { return status; }
+    public String getMetadata() { return metadata; }
+    public String getIpAddress() { return ipAddress; }
+    public String getUserAgent() { return userAgent; }
+    public Instant getCreatedAt() { return createdAt; }
 }

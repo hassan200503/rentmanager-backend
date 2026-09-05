@@ -16,6 +16,8 @@ public interface DepositRepository {
 
     Optional<Deposit> findByLeaseId(UUID leaseId);
 
+    Optional<Deposit> findByLeaseIdAndTenantId(UUID leaseId, UUID tenantId);
+
     List<Deposit> findByTenantProfileId(UUID tenantProfileId);
 
     void delete(Deposit deposit);

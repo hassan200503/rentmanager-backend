@@ -175,6 +175,7 @@ Tenant acme = Tenant.create("ADM-TEST-" + UUID.randomUUID(), "Acme Apartments", 
         entry.setAmountPaid(new BigDecimal("20000.00"));
         entry.setStatus(RentLedgerStatus.PAID);
         entry.setProrated(false);
+        entry.setCurrency("KES");
         rentLedgerEntryJpaRepository.save(entry);
 
         RentTransactionJpaEntity txn = new RentTransactionJpaEntity();
@@ -189,6 +190,7 @@ Tenant acme = Tenant.create("ADM-TEST-" + UUID.randomUUID(), "Acme Apartments", 
         txn.setCommissionRatePercent(new BigDecimal("3.00"));
         txn.setCommissionAmount(new BigDecimal("600.00"));
         txn.setNetAmount(new BigDecimal("19400.00"));
+        txn.setCurrency("KES");
         rentTransactionJpaRepository.save(txn);
 
         RentPaymentRequestJpaEntity pr = new RentPaymentRequestJpaEntity();
@@ -198,10 +200,11 @@ Tenant acme = Tenant.create("ADM-TEST-" + UUID.randomUUID(), "Acme Apartments", 
         pr.setAmount(new BigDecimal("20000.00"));
         pr.setStatus(RentPaymentRequestStatus.PAID);
         pr.setMpesaReceiptNumber("ADM-RCPT-" + SLUG);
+        pr.setCurrency("KES");
         rentPaymentRequestJpaRepository.save(pr);
 
         disbursementRepository.save(Disbursement.create(
-                tenantId, lease.getId(), UUID.randomUUID(),
+                tenantId, lease.getId(), ledgerEntryId,
                 new BigDecimal("19400.00"), "+254700000001", "Acme", "BusinessPayment"));
 
         commissionPolicyRepository.save(CommissionPolicy.create(new BigDecimal("5.00"), Instant.now(), "seed"));

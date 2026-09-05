@@ -7,7 +7,13 @@ import org.springframework.data.domain.Pageable;
 import java.util.UUID;
 
 public interface PublicUnitQueryService {
-    Page<PublicUnitResponse> getVacantUnits(String keyword, Pageable pageable);
+    Page<PublicUnitResponse> getVacantUnits(
+            String keyword,
+            String city,
+            java.math.BigDecimal minRent,
+            java.math.BigDecimal maxRent,
+            com.rentmanager.modules.property.domain.enums.PropertyType propertyType,
+            Pageable pageable);
     Page<PublicUnitResponse> getVacantUnitsByProperty(UUID propertyId, Pageable pageable);
     PublicUnitResponse getVacantUnitById(UUID unitId);
 

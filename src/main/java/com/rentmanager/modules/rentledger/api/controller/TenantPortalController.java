@@ -3,6 +3,7 @@ package com.rentmanager.modules.rentledger.api.controller;
 import com.rentmanager.contract.common.ApiResponse;
 import com.rentmanager.modules.announcement.api.dto.AnnouncementUnreadCountResponse;
 import com.rentmanager.modules.announcement.api.dto.RenterAnnouncementResponse;
+import com.rentmanager.modules.deposit.api.dto.response.DepositResponse;
 import com.rentmanager.modules.maintenance.api.dto.MaintenanceRequestResponse;
 import com.rentmanager.modules.rentledger.api.autopay.dto.AutoPaySettingsResponse;
 import com.rentmanager.modules.rentledger.api.dto.request.InitiatePortalPaymentRequest;
@@ -27,15 +28,29 @@ import com.rentmanager.shared.security.principal.AuthenticatedUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Every method here is renter-only. {@code ROLE_TENANT} is the authority
+ * ClerkJwtAuthenticationConverter grants when the caller has no landlord
+ * tenant binding but does have a TenantProfile (see its resolveAuthorities
+ * javadoc) — a landlord-side user (OWNER/MANAGER/STAFF) never carries it,
+ * even if they also happen to have a stray renter profile under a
+ * different landlord. This was previously enforced only implicitly, by
+ * TenantPortalService.resolveActingProfile failing closed (404) when the
+ * caller has no TenantProfile — correct in outcome, but relied on every
+ * current and future method routing through that one lookup rather than on
+ * an explicit, auditable gate at the boundary.
+ */
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/tenant-portal")
+@PreAuthorize("hasAuthority('ROLE_TENANT')")
 public class TenantPortalController {
 
     private final TenantPortalService tenantPortalService;
@@ -54,6 +69,15 @@ public class TenantPortalController {
     ) {
         TenantLeaseResponse response = tenantPortalService.getLease(user.getUserId());
         return ResponseEntity.ok(ApiResponse.ok("Lease retrieved successfully", response));
+    }
+
+    @GetMapping("/deposit")
+    public ResponseEntity<ApiResponse<DepositResponse>> getDeposit(
+            @AuthenticationPrincipal AuthenticatedUser user
+    ) {
+        DepositResponse response = tenantPortalService.getDeposit(user.getUserId());
+        return ResponseEntity.ok(ApiResponse.ok(
+                response != null ? "Deposit retrieved successfully" : "No deposit on file", response));
     }
 
     @GetMapping("/payments/summary")

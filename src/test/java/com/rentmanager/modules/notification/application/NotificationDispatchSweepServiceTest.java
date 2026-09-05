@@ -7,6 +7,7 @@ import com.rentmanager.modules.notification.domain.repository.NotificationDelive
 import com.rentmanager.modules.notification.email.EmailService;
 import com.rentmanager.modules.notification.sms.SmsService;
 import com.rentmanager.modules.notification.whatsapp.WhatsAppService;
+import com.rentmanager.shared.observability.BusinessMetrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -43,7 +44,7 @@ class NotificationDispatchSweepServiceTest {
         emailService = mock(EmailService.class);
         whatsAppService = mock(WhatsAppService.class);
         dispatchService = new NotificationDispatchService(smsService, emailService, whatsAppService);
-        sweepService = new NotificationDispatchSweepService(deliveryRepository, dispatchService);
+        sweepService = new NotificationDispatchSweepService(deliveryRepository, dispatchService, mock(BusinessMetrics.class));
     }
 
     @Test

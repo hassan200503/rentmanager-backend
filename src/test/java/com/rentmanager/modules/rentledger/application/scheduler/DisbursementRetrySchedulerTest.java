@@ -40,7 +40,7 @@ class DisbursementRetrySchedulerTest {
                 "BusinessPayment", DisbursementStatus.FAILED,
                 null, "CONV", "OCID",
                 "Timeout", 1, false,
-                Instant.now(), Instant.now(), 0L
+                Instant.now(), Instant.now(), "KES", 0L
         );
     }
 
@@ -51,7 +51,7 @@ class DisbursementRetrySchedulerTest {
                 "BusinessPayment", DisbursementStatus.PENDING,
                 null, "CONV", "OCID",
                 null, 0, false,
-                Instant.now().minusSeconds(7200), Instant.now(), 0L
+                Instant.now().minusSeconds(7200), Instant.now(), "KES", 0L
         );
     }
 
@@ -92,7 +92,7 @@ class DisbursementRetrySchedulerTest {
                     "BusinessPayment", DisbursementStatus.FAILED,
                     null, "CONV", "OCID",
                     "Timeout", 1, false,
-                    Instant.now(), Instant.now(), 0L
+                    Instant.now(), Instant.now(), "KES", 0L
             );
             Disbursement bad = Disbursement.rehydrate(
                     badId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
@@ -100,7 +100,7 @@ class DisbursementRetrySchedulerTest {
                     "BusinessPayment", DisbursementStatus.FAILED,
                     null, "CONV", "OCID",
                     "Timeout", 1, false,
-                    Instant.now(), Instant.now(), 0L
+                    Instant.now(), Instant.now(), "KES", 0L
             );
 
             when(disbursementRepository.findByStatusInAndRetryCountLessThan(

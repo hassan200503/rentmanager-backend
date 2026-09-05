@@ -35,33 +35,33 @@ public class MaintenanceRequestRepositoryAdapter implements MaintenanceRequestRe
 
     @Override
     public List<MaintenanceRequest> findAllByTenantId(UUID tenantId) {
-        return jpaRepository.findAllByTenantId(tenantId).stream().map(mapper::toDomain).toList();
+        return jpaRepository.findAllByTenantIdOrderByCreatedAtDesc(tenantId).stream().map(mapper::toDomain).toList();
     }
 
     @Override
     public List<MaintenanceRequest> findByTenantIdAndUnitId(UUID tenantId, UUID unitId) {
-        return jpaRepository.findByTenantIdAndUnitId(tenantId, unitId).stream().map(mapper::toDomain).toList();
+        return jpaRepository.findByTenantIdAndUnitIdOrderByCreatedAtDesc(tenantId, unitId).stream().map(mapper::toDomain).toList();
     }
 
     @Override
     public List<MaintenanceRequest> findByTenantIdAndTenantProfileId(UUID tenantId, UUID tenantProfileId) {
-        return jpaRepository.findByTenantIdAndTenantProfileId(tenantId, tenantProfileId).stream().map(mapper::toDomain).toList();
+        return jpaRepository.findByTenantIdAndTenantProfileIdOrderByCreatedAtDesc(tenantId, tenantProfileId).stream().map(mapper::toDomain).toList();
     }
 
     @Override
     public List<MaintenanceRequest> findByTenantIdAndStatus(UUID tenantId, MaintenanceRequestStatus status) {
-        return jpaRepository.findByTenantIdAndStatus(tenantId, status).stream().map(mapper::toDomain).toList();
+        return jpaRepository.findByTenantIdAndStatusOrderByCreatedAtDesc(tenantId, status).stream().map(mapper::toDomain).toList();
     }
 
     @Override
     public List<MaintenanceRequest> findByTenantIdAndPriority(UUID tenantId, MaintenancePriority priority) {
-        return jpaRepository.findByTenantIdAndPriority(tenantId, priority).stream().map(mapper::toDomain).toList();
+        return jpaRepository.findByTenantIdAndPriorityOrderByCreatedAtDesc(tenantId, priority).stream().map(mapper::toDomain).toList();
     }
 
     @Override
     public List<MaintenanceRequest> findByTenantIdAndPriorityAndStatus(
             UUID tenantId, MaintenancePriority priority, MaintenanceRequestStatus status) {
-        return jpaRepository.findByTenantIdAndPriorityAndStatus(tenantId, priority, status)
+        return jpaRepository.findByTenantIdAndPriorityAndStatusOrderByCreatedAtDesc(tenantId, priority, status)
                 .stream().map(mapper::toDomain).toList();
     }
 

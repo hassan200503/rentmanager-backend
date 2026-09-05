@@ -220,6 +220,17 @@ class RentTransactionTest {
             assertThat(tx.increasesBalanceOwed()).isFalse();
             assertThat(tx.reducesBalanceOwed()).isFalse();
         }
+
+        @Test
+        void depositIsExcludedFromBothHelpers() {
+            // Deliberate: a security deposit is not rent revenue and must never count
+            // toward amountPaid — see reducesBalanceOwed()'s javadoc. It's posted as an
+            // audit-only RentTransaction (RentLedgerApplicationService#postDeposit);
+            // the deposit module's own Deposit aggregate is the real system of record.
+            RentTransaction tx = validTransaction(RentTransactionType.DEPOSIT, BigDecimal.TEN);
+            assertThat(tx.increasesBalanceOwed()).isFalse();
+            assertThat(tx.reducesBalanceOwed()).isFalse();
+        }
     }
 
     @Nested
@@ -234,7 +245,7 @@ class RentTransactionTest {
             RentTransaction tx = RentTransaction.rehydrate(
                     id, tenantId, ledgerEntryId, leaseId, RentTransactionType.PAYMENT,
                     new BigDecimal("250.00"), "MPESA-REF-1", RentTransactionSource.MPESA,
-                    "admin-1", occurredAt, null, null, null, 3L, createdAt, updatedAt
+                    "admin-1", occurredAt, null, null, null, null, "KES", 3L, createdAt, updatedAt
             );
 
             assertThat(tx.getId()).isEqualTo(id);

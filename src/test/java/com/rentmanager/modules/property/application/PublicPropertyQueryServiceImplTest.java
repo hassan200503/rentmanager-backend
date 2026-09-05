@@ -2,8 +2,10 @@ package com.rentmanager.modules.property.application;
 
 import com.rentmanager.modules.property.application.dto.response.PublicPropertyResponse;
 import com.rentmanager.modules.property.application.mapper.PropertyMapper;
+import com.rentmanager.modules.property.application.port.PublicVacancyPort;
 import com.rentmanager.modules.property.application.query.service.PublicPropertyQueryServiceImpl;
 import com.rentmanager.modules.property.domain.enums.PropertyStatus;
+import com.rentmanager.modules.property.domain.enums.PropertyType;
 import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.domain.repository.PropertyMediaRepository;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
@@ -13,7 +15,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -25,6 +29,10 @@ import static org.mockito.Mockito.*;
  * mock(Class) construction, no @Mock/@InjectMocks/@Nested, no shared
  * @BeforeEach stubbing — each test creates its own mocks and stubs so
  * Mockito strict stubbing never trips over cross-test reuse.
+ *
+ * <p>Selection now starts from {@link PublicVacancyPort}: a property is only
+ * public here when it has a matching vacant unit (2026-09-03 fix for the
+ * "Available Properties" page listing fully-occupied properties).
  */
 class PublicPropertyQueryServiceImplTest {
 
@@ -33,12 +41,14 @@ class PublicPropertyQueryServiceImplTest {
     private PublicPropertyQueryServiceImpl buildService(
             PropertyRepository propertyRepository,
             PropertyMediaRepository propertyMediaRepository,
-            PropertyMapper propertyMapper
+            PropertyMapper propertyMapper,
+            PublicVacancyPort publicVacancyPort
     ) {
         return new PublicPropertyQueryServiceImpl(
                 propertyRepository,
                 propertyMediaRepository,
-                propertyMapper
+                propertyMapper,
+                publicVacancyPort
         );
     }
 
@@ -47,159 +57,123 @@ class PublicPropertyQueryServiceImplTest {
     // =====================================================
 
     @Test
-    void shouldOnlyQueryActiveProperties_whenNoFilters() {
+    void shouldReturnEmptyPage_whenNoPropertyHasVacancy() {
         PropertyRepository propertyRepository = mock(PropertyRepository.class);
         PropertyMediaRepository propertyMediaRepository = mock(PropertyMediaRepository.class);
         PropertyMapper propertyMapper = mock(PropertyMapper.class);
+        PublicVacancyPort publicVacancyPort = mock(PublicVacancyPort.class);
         PublicPropertyQueryServiceImpl service = buildService(
-                propertyRepository, propertyMediaRepository, propertyMapper
+                propertyRepository, propertyMediaRepository, propertyMapper, publicVacancyPort
         );
 
         Pageable pageable = mock(Pageable.class);
-        Page<Property> emptyPage = new PageImpl<>(List.of());
 
-        when(propertyRepository.findByStatus(PropertyStatus.ACTIVE, pageable))
-                .thenReturn(emptyPage);
-        when(propertyMediaRepository.findAllByPropertyIdIn(anyList()))
-                .thenReturn(List.of());
+        when(publicVacancyPort.findPropertyIdsWithVacancy(
+                null, null, null, null, null, pageable
+        )).thenReturn(new PageImpl<>(List.of()));
 
-        service.getProperties(null, null, pageable);
+        Page<PublicPropertyResponse> result =
+                service.getProperties(null, null, null, null, null, pageable);
 
-        // The unscoped findAll must never be called by the public path.
-        verify(propertyRepository, never()).findAll(any(Pageable.class));
-        verify(propertyRepository).findByStatus(PropertyStatus.ACTIVE, pageable);
-        verify(propertyRepository, never()).searchByStatusAndLocation(
-                any(), any(), any(), any()
+        assertTrue(result.getContent().isEmpty());
+        // No point loading properties, media or vacancy summaries for an
+        // empty id set — and an empty IN () would be a Postgres syntax error.
+        verify(propertyRepository, never()).findAllByIdInAndStatus(anyList(), any());
+        verify(publicVacancyPort, never()).summariseVacancy(anyList());
+    }
+
+    @Test
+    void shouldPassEveryFilterThroughToTheVacancyPort() {
+        PropertyRepository propertyRepository = mock(PropertyRepository.class);
+        PropertyMediaRepository propertyMediaRepository = mock(PropertyMediaRepository.class);
+        PropertyMapper propertyMapper = mock(PropertyMapper.class);
+        PublicVacancyPort publicVacancyPort = mock(PublicVacancyPort.class);
+        PublicPropertyQueryServiceImpl service = buildService(
+                propertyRepository, propertyMediaRepository, propertyMapper, publicVacancyPort
+        );
+
+        Pageable pageable = mock(Pageable.class);
+        BigDecimal min = new BigDecimal("10000");
+        BigDecimal max = new BigDecimal("50000");
+
+        when(publicVacancyPort.findPropertyIdsWithVacancy(
+                "green", "Nairobi", min, max, PropertyType.APARTMENT, pageable
+        )).thenReturn(new PageImpl<>(List.of()));
+
+        service.getProperties("green", "Nairobi", min, max, PropertyType.APARTMENT, pageable);
+
+        verify(publicVacancyPort).findPropertyIdsWithVacancy(
+                "green", "Nairobi", min, max, PropertyType.APARTMENT, pageable
         );
     }
 
     @Test
-    void shouldOnlyQueryActiveProperties_whenKeywordProvided() {
+    void shouldAttachVacancySummaryAndImages_toEachMatchingProperty() {
         PropertyRepository propertyRepository = mock(PropertyRepository.class);
         PropertyMediaRepository propertyMediaRepository = mock(PropertyMediaRepository.class);
         PropertyMapper propertyMapper = mock(PropertyMapper.class);
+        PublicVacancyPort publicVacancyPort = mock(PublicVacancyPort.class);
         PublicPropertyQueryServiceImpl service = buildService(
-                propertyRepository, propertyMediaRepository, propertyMapper
+                propertyRepository, propertyMediaRepository, propertyMapper, publicVacancyPort
         );
 
         Pageable pageable = mock(Pageable.class);
-        Page<Property> emptyPage = new PageImpl<>(List.of());
+        Property property = mock(Property.class);
+        when(property.getId()).thenReturn(PROPERTY_ID);
 
-        when(propertyRepository.searchByStatusAndLocation(
-                "green", "", PropertyStatus.ACTIVE, pageable
-        )).thenReturn(emptyPage);
-        when(propertyMediaRepository.findAllByPropertyIdIn(anyList()))
+        PublicPropertyResponse mapped = PublicPropertyResponse.builder()
+                .propertyId(PROPERTY_ID)
+                .name("Green Heights")
+                .build();
+
+        when(publicVacancyPort.findPropertyIdsWithVacancy(
+                null, null, null, null, null, pageable
+        )).thenReturn(new PageImpl<>(List.of(PROPERTY_ID)));
+        when(propertyRepository.findAllByIdInAndStatus(List.of(PROPERTY_ID), PropertyStatus.ACTIVE))
+                .thenReturn(List.of(property));
+        when(propertyMediaRepository.findAllByPropertyIdIn(List.of(PROPERTY_ID)))
                 .thenReturn(List.of());
+        when(propertyMapper.toPublicResponse(property)).thenReturn(mapped);
+        when(publicVacancyPort.summariseVacancy(List.of(PROPERTY_ID)))
+                .thenReturn(Map.of(PROPERTY_ID,
+                        new PublicVacancyPort.VacancySummary(2, new BigDecimal("15000"), new BigDecimal("22000"))));
 
-        service.getProperties("green", null, pageable);
+        Page<PublicPropertyResponse> result =
+                service.getProperties(null, null, null, null, null, pageable);
 
-        // The unscoped search must never be called by the public path.
-        verify(propertyRepository, never()).search(anyString(), any(Pageable.class));
-        verify(propertyRepository).searchByStatusAndLocation(
-                "green", "", PropertyStatus.ACTIVE, pageable
-        );
+        assertEquals(1, result.getContent().size());
+        PublicPropertyResponse response = result.getContent().get(0);
+        assertEquals(2, response.getAvailableUnits());
+        assertEquals(new BigDecimal("15000"), response.getMinRent());
+        assertEquals(new BigDecimal("22000"), response.getMaxRent());
     }
 
     @Test
-    void shouldSearchByLocation_whenLocationProvided() {
+    void shouldDropAPropertyThatStoppedBeingActive_betweenTheTwoQueries() {
+        // The vacancy port selected this id, but the ACTIVE-scoped bulk load
+        // no longer returns it — must be filtered, not surfaced as a null card.
         PropertyRepository propertyRepository = mock(PropertyRepository.class);
         PropertyMediaRepository propertyMediaRepository = mock(PropertyMediaRepository.class);
         PropertyMapper propertyMapper = mock(PropertyMapper.class);
+        PublicVacancyPort publicVacancyPort = mock(PublicVacancyPort.class);
         PublicPropertyQueryServiceImpl service = buildService(
-                propertyRepository, propertyMediaRepository, propertyMapper
+                propertyRepository, propertyMediaRepository, propertyMapper, publicVacancyPort
         );
 
         Pageable pageable = mock(Pageable.class);
-        Page<Property> emptyPage = new PageImpl<>(List.of());
 
-        when(propertyRepository.searchByStatusAndLocation(
-                "", "Nairobi", PropertyStatus.ACTIVE, pageable
-        )).thenReturn(emptyPage);
-        when(propertyMediaRepository.findAllByPropertyIdIn(anyList()))
+        when(publicVacancyPort.findPropertyIdsWithVacancy(
+                null, null, null, null, null, pageable
+        )).thenReturn(new PageImpl<>(List.of(PROPERTY_ID)));
+        when(propertyRepository.findAllByIdInAndStatus(List.of(PROPERTY_ID), PropertyStatus.ACTIVE))
                 .thenReturn(List.of());
-
-        service.getProperties(null, "Nairobi", pageable);
-
-        verify(propertyRepository).searchByStatusAndLocation(
-                "", "Nairobi", PropertyStatus.ACTIVE, pageable
-        );
-        // A location-only search must not fall through to the unscoped list.
-        verify(propertyRepository, never()).findByStatus(any(), any(Pageable.class));
-    }
-
-    @Test
-    void shouldCombineKeywordAndLocation_whenBothProvided() {
-        PropertyRepository propertyRepository = mock(PropertyRepository.class);
-        PropertyMediaRepository propertyMediaRepository = mock(PropertyMediaRepository.class);
-        PropertyMapper propertyMapper = mock(PropertyMapper.class);
-        PublicPropertyQueryServiceImpl service = buildService(
-                propertyRepository, propertyMediaRepository, propertyMapper
-        );
-
-        Pageable pageable = mock(Pageable.class);
-        Page<Property> emptyPage = new PageImpl<>(List.of());
-
-        when(propertyRepository.searchByStatusAndLocation(
-                "green", "Mombasa", PropertyStatus.ACTIVE, pageable
-        )).thenReturn(emptyPage);
-        when(propertyMediaRepository.findAllByPropertyIdIn(anyList()))
+        when(propertyMediaRepository.findAllByPropertyIdIn(List.of(PROPERTY_ID)))
                 .thenReturn(List.of());
+        when(publicVacancyPort.summariseVacancy(List.of(PROPERTY_ID)))
+                .thenReturn(Map.of());
 
-        service.getProperties("green", "Mombasa", pageable);
-
-        verify(propertyRepository).searchByStatusAndLocation(
-                "green", "Mombasa", PropertyStatus.ACTIVE, pageable
-        );
-    }
-
-    @Test
-    void shouldNormalizeBlankFiltersToEmptyString() {
-        PropertyRepository propertyRepository = mock(PropertyRepository.class);
-        PropertyMediaRepository propertyMediaRepository = mock(PropertyMediaRepository.class);
-        PropertyMapper propertyMapper = mock(PropertyMapper.class);
-        PublicPropertyQueryServiceImpl service = buildService(
-                propertyRepository, propertyMediaRepository, propertyMapper
-        );
-
-        Pageable pageable = mock(Pageable.class);
-        Page<Property> emptyPage = new PageImpl<>(List.of());
-
-        when(propertyRepository.searchByStatusAndLocation(
-                "", "Nairobi", PropertyStatus.ACTIVE, pageable
-        )).thenReturn(emptyPage);
-        when(propertyMediaRepository.findAllByPropertyIdIn(anyList()))
-                .thenReturn(List.of());
-
-        // Whitespace keyword + untrimmed location must be trimmed/nulled.
-        service.getProperties("   ", "  Nairobi  ", pageable);
-
-        verify(propertyRepository).searchByStatusAndLocation(
-                "", "Nairobi", PropertyStatus.ACTIVE, pageable
-        );
-    }
-
-    @Test
-    void shouldExcludeNonActiveProperty_fromPublicListing() {
-        // Simulates a DRAFT/INACTIVE/UNDER_MAINTENANCE/ARCHIVED property:
-        // the ACTIVE-scoped repository call simply never returns it, so the
-        // resulting page is empty. This asserts the service doesn't do any
-        // additional in-memory filtering that could mask a broken query.
-        PropertyRepository propertyRepository = mock(PropertyRepository.class);
-        PropertyMediaRepository propertyMediaRepository = mock(PropertyMediaRepository.class);
-        PropertyMapper propertyMapper = mock(PropertyMapper.class);
-        PublicPropertyQueryServiceImpl service = buildService(
-                propertyRepository, propertyMediaRepository, propertyMapper
-        );
-
-        Pageable pageable = mock(Pageable.class);
-        Page<Property> emptyPage = new PageImpl<>(List.of());
-
-        when(propertyRepository.findByStatus(PropertyStatus.ACTIVE, pageable))
-                .thenReturn(emptyPage);
-        when(propertyMediaRepository.findAllByPropertyIdIn(anyList()))
-                .thenReturn(List.of());
-
-        Page<PublicPropertyResponse> result = service.getProperties(null, null, pageable);
+        Page<PublicPropertyResponse> result =
+                service.getProperties(null, null, null, null, null, pageable);
 
         assertTrue(result.getContent().isEmpty());
     }
@@ -213,8 +187,9 @@ class PublicPropertyQueryServiceImplTest {
         PropertyRepository propertyRepository = mock(PropertyRepository.class);
         PropertyMediaRepository propertyMediaRepository = mock(PropertyMediaRepository.class);
         PropertyMapper propertyMapper = mock(PropertyMapper.class);
+        PublicVacancyPort publicVacancyPort = mock(PublicVacancyPort.class);
         PublicPropertyQueryServiceImpl service = buildService(
-                propertyRepository, propertyMediaRepository, propertyMapper
+                propertyRepository, propertyMediaRepository, propertyMapper, publicVacancyPort
         );
 
         Property property = mock(Property.class);
@@ -242,8 +217,9 @@ class PublicPropertyQueryServiceImplTest {
         PropertyRepository propertyRepository = mock(PropertyRepository.class);
         PropertyMediaRepository propertyMediaRepository = mock(PropertyMediaRepository.class);
         PropertyMapper propertyMapper = mock(PropertyMapper.class);
+        PublicVacancyPort publicVacancyPort = mock(PublicVacancyPort.class);
         PublicPropertyQueryServiceImpl service = buildService(
-                propertyRepository, propertyMediaRepository, propertyMapper
+                propertyRepository, propertyMediaRepository, propertyMapper, publicVacancyPort
         );
 
         when(propertyRepository.findByIdAndStatus(PROPERTY_ID, PropertyStatus.ACTIVE))
@@ -263,8 +239,9 @@ class PublicPropertyQueryServiceImplTest {
         PropertyRepository propertyRepository = mock(PropertyRepository.class);
         PropertyMediaRepository propertyMediaRepository = mock(PropertyMediaRepository.class);
         PropertyMapper propertyMapper = mock(PropertyMapper.class);
+        PublicVacancyPort publicVacancyPort = mock(PublicVacancyPort.class);
         PublicPropertyQueryServiceImpl service = buildService(
-                propertyRepository, propertyMediaRepository, propertyMapper
+                propertyRepository, propertyMediaRepository, propertyMapper, publicVacancyPort
         );
 
         when(propertyRepository.findByIdAndStatus(PROPERTY_ID, PropertyStatus.ACTIVE))

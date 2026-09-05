@@ -7,6 +7,7 @@ import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.rentledger.application.service.RentLedgerApplicationService;
 import com.rentmanager.modules.rentledger.domain.model.RentLedgerEntry;
+import com.rentmanager.modules.support.MinimalTenantChainFixture;
 import com.rentmanager.modules.support.MockTenantAuthentication;
 import com.rentmanager.modules.support.TestSecurityConfig;
 import jakarta.persistence.EntityManager;
@@ -93,11 +94,18 @@ class RentLedgerQueryControllerApiTest {
      */
     @BeforeEach
     void setUp() {
+        entityManager.createNativeQuery("INSERT INTO tenants (id, tenant_code, name) VALUES (?1, ?2, 'Test Landlord')")
+                .setParameter(1, TENANT_A).setParameter(2, "TEN-" + TENANT_A).executeUpdate();
+
+        UUID propertyId = MinimalTenantChainFixture.persistProperty(entityManager, TENANT_A);
+        UUID unitId = MinimalTenantChainFixture.persistUnit(entityManager, TENANT_A, propertyId);
+        UUID tenantProfileId = MinimalTenantChainFixture.persistTenantProfile(entityManager, TENANT_A);
+
         Lease lease = Lease.create(
                 TENANT_A,
-                UUID.randomUUID(),        // propertyId
-                UUID.randomUUID(),        // unitId
-                UUID.randomUUID(),        // tenantProfileId
+                propertyId,
+                unitId,
+                tenantProfileId,
                 "LSE-API-" + UUID.randomUUID(),
                 LeaseType.FIXED_TERM,
                 BillingCycle.MONTHLY,

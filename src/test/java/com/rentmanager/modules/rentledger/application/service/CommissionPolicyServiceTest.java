@@ -2,6 +2,7 @@ package com.rentmanager.modules.rentledger.application.service;
 
 import com.rentmanager.modules.rentledger.domain.model.CommissionPolicy;
 import com.rentmanager.modules.rentledger.domain.repository.CommissionPolicyRepository;
+import com.rentmanager.modules.audit.application.service.FinancialAuditService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,8 @@ class CommissionPolicyServiceTest {
 
     @Mock
     private CommissionPolicyRepository commissionPolicyRepository;
+    @Mock
+    private FinancialAuditService financialAuditService;
 
     private CommissionPolicyService service;
 
@@ -31,7 +34,7 @@ class CommissionPolicyServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CommissionPolicyService(commissionPolicyRepository);
+        service = new CommissionPolicyService(commissionPolicyRepository, financialAuditService);
     }
 
     @Nested

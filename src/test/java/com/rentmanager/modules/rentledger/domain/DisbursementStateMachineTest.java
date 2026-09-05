@@ -187,6 +187,7 @@ class DisbursementStateMachineTest {
                 status, txnId, convId, ocId,
                 failureReason, 0, false,
                 now, later,
+                "KES",
                 0L
         );
 
@@ -218,6 +219,7 @@ class DisbursementStateMachineTest {
                 null, "CONV-FAIL", "OCID-FAIL",
                 "Queue timeout", 1, false,
                 Instant.now(), Instant.now(),
+                "KES",
                 0L
         );
 

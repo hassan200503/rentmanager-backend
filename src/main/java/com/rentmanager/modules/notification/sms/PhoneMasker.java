@@ -10,7 +10,7 @@ package com.rentmanager.modules.notification.sms;
  * Extracted here so there is exactly one masking implementation for both
  * providers to share, rather than two copies that can silently drift.
  */
-final class PhoneMasker {
+public final class PhoneMasker {
 
     private PhoneMasker() {
         // utility class — not instantiable
@@ -22,7 +22,7 @@ final class PhoneMasker {
      * throwing, since this is a logging helper and must never be the
      * reason an SMS send path fails.
      */
-    static String mask(String phone) {
+    public static String mask(String phone) {
         if (phone == null || phone.length() < 4) {
             return "****";
         }

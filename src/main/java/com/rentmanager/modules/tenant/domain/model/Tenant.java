@@ -2,6 +2,7 @@ package com.rentmanager.modules.tenant.domain.model;
 
 import com.rentmanager.domain.base.BaseEntity;
 import com.rentmanager.modules.tenant.domain.enums.BillingMode;
+import com.rentmanager.modules.tenant.domain.enums.CollectionMode;
 import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;
 import com.rentmanager.modules.tenant.domain.enums.TenantStatus;
 import com.rentmanager.modules.tenant.domain.enums.TenantType;
@@ -72,9 +73,6 @@ public class Tenant extends BaseEntity {
  @Column(name = "type", nullable = false, length = 50)
  private TenantType type;
 
- @Column(name = "commission_rate", nullable = false, precision = 5, scale = 4)
- private BigDecimal commissionRate;
-
  @Enumerated(EnumType.STRING)
  @Column(name = "subscription_status", nullable = false, length = 50)
  private SubscriptionStatus subscriptionStatus;
@@ -100,6 +98,17 @@ public class Tenant extends BaseEntity {
  @Enumerated(EnumType.STRING)
  @Column(name = "billing_mode", nullable = false, length = 50)
  private BillingMode billingMode;
+
+ // Does the platform ever hold this landlord's rent? Separate from
+ // billingMode on purpose: a landlord can be charged a percentage fee
+ // without the platform touching a shilling of their rent - the fee is
+ // invoiced to them rather than deducted from a renter's payment.
+ //
+ // DIRECT is the default and the only mode that needs no CBK licence.
+ // See CollectionMode and V89.
+ @Enumerated(EnumType.STRING)
+ @Column(name = "collection_mode", nullable = false, length = 20)
+ private CollectionMode collectionMode;
 
  // Active premium plan state. Only meaningful while billingMode ==
  // PREMIUM_MONTHLY; retained after a revert for record/audit.
@@ -194,13 +203,13 @@ public class Tenant extends BaseEntity {
   this.status = TenantStatus.PENDING;
   this.subscriptionStatus = SubscriptionStatus.TRIAL;
   this.billingMode = BillingMode.COMMISSION;
+  // Never PLATFORM_CUSTODY by default - that is unlicensed aggregation.
+  this.collectionMode = CollectionMode.DIRECT;
   this.planAutoRenew = true;
 
   this.active = false;
 
   this.onboardingCompleted = false;
-
-  this.commissionRate = new BigDecimal("0.0500"); // 5% default
 
   this.darajaCredentials = DarajaCredentials.unconfigured();
  }
@@ -395,7 +404,6 @@ public class Tenant extends BaseEntity {
          boolean active,
          boolean onboardingCompleted,
          String clerkOrgId,
-         BigDecimal commissionRate,
          DarajaCredentials darajaCredentials,
            String address,
            String payoutPhoneNumber,
@@ -434,13 +442,14 @@ UUID subscriptionPlanId,
     tenant.active = active;
     tenant.onboardingCompleted = onboardingCompleted;
     tenant.clerkOrgId = clerkOrgId;
-    tenant.commissionRate = commissionRate;
     tenant.darajaCredentials = darajaCredentials != null ? darajaCredentials : DarajaCredentials.unconfigured();
     tenant.address = address;
     tenant.payoutPhoneNumber = payoutPhoneNumber;
     tenant.emergencyContactPhone = emergencyContactPhone;
     tenant.emergencyContact24h = emergencyContact24h;
     tenant.billingMode = billingMode != null ? billingMode : BillingMode.COMMISSION;
+    // Rehydration must never silently upgrade a landlord into custody.
+    tenant.collectionMode = CollectionMode.DIRECT;
     tenant.subscriptionPlanId = subscriptionPlanId;
     tenant.planStartDate = planStartDate;
     tenant.planEndDate = planEndDate;
@@ -492,6 +501,23 @@ UUID subscriptionPlanId,
 
  public boolean isPremiumBilling() {
   return BillingMode.PREMIUM_MONTHLY.equals(this.billingMode);
+ }
+
+ /**
+  * True when rent must be signed with this landlord's OWN Daraja
+  * credentials and settles directly to them, with no commission deducted
+  * and no B2C disbursement.
+  *
+  * <p>Null-safe to DIRECT. A landlord whose mode could not be read must
+  * never be treated as custodial: that would route their rent through the
+  * platform, which is the arrangement that needs a licence.
+  */
+ public boolean collectsDirectly() {
+  return this.collectionMode == null || this.collectionMode == CollectionMode.DIRECT;
+ }
+
+ public CollectionMode getCollectionMode() {
+  return this.collectionMode == null ? CollectionMode.DIRECT : this.collectionMode;
  }
 
  /**
@@ -715,13 +741,4 @@ UUID subscriptionPlanId,
   }
 
   public String getPayoutPhoneNumber() { return payoutPhoneNumber; }
-
-  public void updateCommissionRate(BigDecimal commissionRate) {
-  if (commissionRate == null
-          || commissionRate.compareTo(BigDecimal.ZERO) < 0
-          || commissionRate.compareTo(BigDecimal.ONE) > 0) {
-   throw new IllegalArgumentException("Commission rate must be between 0 and 1");
-  }
-  this.commissionRate = commissionRate;
- }
 }

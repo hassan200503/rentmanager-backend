@@ -11,6 +11,7 @@ import com.rentmanager.modules.rentledger.domain.model.RentLedgerEntry;
 import com.rentmanager.modules.rentledger.domain.repository.RentLedgerEntryRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentTransactionRepository;
 import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
+import com.rentmanager.modules.support.MinimalTenantChainFixture;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -66,13 +67,14 @@ class RentLedgerApplicationServiceIntegrationTest extends AbstractPostgresIntegr
      */
     @BeforeEach
     void setUp() {
-        tenantId = UUID.randomUUID();
+        MinimalTenantChainFixture.Chain chain = MinimalTenantChainFixture.persistFullChain(entityManager);
+        tenantId = chain.tenantId();
 
         Lease lease = Lease.create(
                 tenantId,
-                UUID.randomUUID(),        // propertyId
-                UUID.randomUUID(),        // unitId
-                UUID.randomUUID(),        // tenantProfileId
+                chain.propertyId(),        // propertyId
+                chain.unitId(),        // unitId
+                chain.tenantProfileId(),        // tenantProfileId
                 "LSE-IT-" + UUID.randomUUID(),
                 LeaseType.FIXED_TERM,
                 BillingCycle.MONTHLY,
@@ -150,11 +152,12 @@ class RentLedgerApplicationServiceIntegrationTest extends AbstractPostgresIntegr
 
         @BeforeEach
         void setUpMidMonthLease() {
-            midMonthTenantId = UUID.randomUUID();
+            MinimalTenantChainFixture.Chain chain = MinimalTenantChainFixture.persistFullChain(entityManager);
+            midMonthTenantId = chain.tenantId();
 
             Lease lease = Lease.create(
                     midMonthTenantId,
-                    UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                    chain.propertyId(), chain.unitId(), chain.tenantProfileId(),
                     "LSE-IT-MIDMONTH-" + UUID.randomUUID(),
                     LeaseType.FIXED_TERM,
                     BillingCycle.MONTHLY,

@@ -2,6 +2,7 @@ package com.rentmanager.shared.exception;
 
 import com.rentmanager.contract.common.ApiResponse;
 import com.rentmanager.modules.rentledger.domain.exception.RentLedgerEntryNotFoundException;
+import com.rentmanager.modules.rentledger.domain.exception.StkPushRateLimitedException;
 import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaException;
 import com.rentmanager.shared.error.ErrorTrackingService;
 import com.rentmanager.shared.security.context.TenantContextNotBoundException;
@@ -158,6 +159,30 @@ public class GlobalExceptionHandler {
 
 
 
+
+    // =========================================================
+    // RATE LIMITED (STK PUSH)
+    // =========================================================
+    @ExceptionHandler(StkPushRateLimitedException.class)
+    public ResponseEntity<ApiResponse<Object>> handleStkPushRateLimited(
+            StkPushRateLimitedException ex,
+            HttpServletRequest request
+    ) {
+
+        errorTrackingService.capture(
+                ex,
+                "BUSINESS",
+                "RATE_LIMITED",
+                resolveModule(request),
+                request,
+                Map.of("type", "StkPushRateLimitedException")
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()))
+                .body(ApiResponse.fail(ex.getMessage(), "RATE_LIMITED"));
+    }
 
     // =========================================================
     // VALIDATION

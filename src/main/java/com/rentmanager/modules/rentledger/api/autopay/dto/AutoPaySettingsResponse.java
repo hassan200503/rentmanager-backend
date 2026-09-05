@@ -14,7 +14,8 @@ public record AutoPaySettingsResponse(
         String mpesaPhone,
         LocalDate lastAutoPayDate,
         int consecutiveFailures,
-        LocalDateTime lastAttemptAt
+        LocalDateTime lastAttemptAt,
+        String lastFailureReason
 ) {
     public static AutoPaySettingsResponse from(AutoPaySettings settings) {
         return new AutoPaySettingsResponse(
@@ -25,7 +26,8 @@ public record AutoPaySettingsResponse(
                 settings.getMpesaPhone(),
                 settings.getLastAutoPayDate(),
                 settings.getConsecutiveFailures(),
-                settings.getLastAttemptAt()
+                settings.getLastAttemptAt(),
+                settings.getLastFailureReason()
         );
     }
 }

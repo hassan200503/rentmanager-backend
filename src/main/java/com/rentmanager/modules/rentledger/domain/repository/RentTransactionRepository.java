@@ -24,9 +24,14 @@ public interface RentTransactionRepository {
      */
     Optional<RentTransaction> findByExternalReference(UUID tenantId, String externalReference);
 
+    /**
+     * Idempotency check before posting a REVERSAL — at most one reversal per
+     * original transaction, backstopped by
+     * {@code uk_rent_transactions_reverses_transaction_id}.
+     */
+    Optional<RentTransaction> findByReversesTransactionId(UUID tenantId, UUID transactionId);
+
     List<RentTransaction> findAllByTenant(UUID tenantId);
 
     long countByTenantId(UUID tenantId);
-
-    void deleteById(UUID id);
 }

@@ -163,6 +163,21 @@ class RentLedgerEntryTest {
         }
 
         @Test
+        void rejectsDepositType() {
+            // A deposit is not rent revenue and must never move amountPaid —
+            // see RentTransaction.reducesBalanceOwed()'s javadoc.
+            RentTransaction deposit = RentTransaction.create(
+                    tenantId, entry.getId(), leaseId, RentTransactionType.DEPOSIT,
+                    BigDecimal.TEN, null, RentTransactionSource.MPESA, "SYSTEM", occurredAt
+            );
+
+            assertThatThrownBy(() -> entry.applyTransaction("corr", deposit))
+                    .isInstanceOf(RentLedgerStateException.class)
+                    .extracting(ex -> ((RentLedgerStateException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.RENT_LEDGER_ENTRY_UNSUPPORTED_TRANSACTION_TYPE);
+        }
+
+        @Test
         void rejectsMismatchedLedgerEntryId() {
             RentTransaction foreignTx = RentTransaction.create(
                     tenantId, UUID.randomUUID(), leaseId, RentTransactionType.PAYMENT,
@@ -390,6 +405,238 @@ class RentLedgerEntryTest {
             entry.applyTransaction("corr", paymentOf(new BigDecimal("1200.00")));
             assertThat(entry.getBalanceOwed()).isEqualByComparingTo("0.00");
             assertThat(entry.getExcessAmount()).isEqualByComparingTo("200.00");
+        }
+    }
+
+    @Nested
+    class ReverseTransaction {
+
+        @Test
+        void reversingAPaymentSubtractsItBackOutAndRecomputesStatus() {
+            RentTransaction payment = paymentOf(new BigDecimal("400.00"));
+            entry.applyTransaction("corr", payment);
+            entry.pullDomainEvents();
+
+            RentTransaction reversal = RentTransaction.reversalOf(payment, tenantId, "admin-1", occurredAt);
+            entry.reverseTransaction(payment, reversal);
+
+            assertThat(entry.getAmountPaid()).isEqualByComparingTo("0.00");
+            assertThat(entry.getStatus()).isEqualTo(RentLedgerStatus.DUE);
+        }
+
+        @Test
+        void reversingARefundAddsItBackIn() {
+            RentTransaction overpay = paymentOf(new BigDecimal("1200.00"));
+            entry.applyTransaction("corr", overpay);
+            entry.pullDomainEvents();
+            RentTransaction refund = RentTransaction.create(
+                    tenantId, entry.getId(), leaseId, RentTransactionType.REFUND,
+                    new BigDecimal("200.00"), null, RentTransactionSource.CASH, "admin-1", occurredAt
+            );
+            entry.resolveOverpaymentWithRefund(refund);
+            assertThat(entry.getAmountPaid()).isEqualByComparingTo("1000.00");
+
+            RentTransaction reversal = RentTransaction.reversalOf(refund, tenantId, "admin-1", occurredAt);
+            entry.reverseTransaction(refund, reversal);
+
+            assertThat(entry.getAmountPaid()).isEqualByComparingTo("1200.00");
+        }
+
+        @Test
+        void amountPaidNeverGoesNegative() {
+            // amountPaid=400 after the payment, then a $300 REFUND lands
+            // (REFUND is allowed regardless of status) bringing it down to
+            // 100 — below the $400 payment being reversed.
+            RentTransaction payment = paymentOf(new BigDecimal("400.00"));
+            entry.applyTransaction("corr", payment);
+            entry.pullDomainEvents();
+            RentTransaction refund = RentTransaction.create(
+                    tenantId, entry.getId(), leaseId, RentTransactionType.REFUND,
+                    new BigDecimal("300.00"), null, RentTransactionSource.CASH, "admin-1", occurredAt
+            );
+            entry.applyTransaction("corr", refund);
+            entry.pullDomainEvents();
+            assertThat(entry.getAmountPaid()).isEqualByComparingTo("100.00");
+
+            RentTransaction reversal = RentTransaction.reversalOf(payment, tenantId, "admin-1", occurredAt);
+            entry.reverseTransaction(payment, reversal);
+
+            assertThat(entry.getAmountPaid()).isEqualByComparingTo("0.00");
+        }
+
+        @Test
+        void rejectsReversingRentCharge() {
+            RentTransaction charge = RentTransaction.create(
+                    tenantId, entry.getId(), leaseId, RentTransactionType.RENT_CHARGE,
+                    BigDecimal.TEN, null, RentTransactionSource.SYSTEM, "SYSTEM", occurredAt
+            );
+            RentTransaction reversal = RentTransaction.reversalOf(charge, tenantId, "admin-1", occurredAt);
+
+            assertThatThrownBy(() -> entry.reverseTransaction(charge, reversal))
+                    .isInstanceOf(RentLedgerStateException.class)
+                    .extracting(ex -> ((RentLedgerStateException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.RENT_LEDGER_ENTRY_UNSUPPORTED_TRANSACTION_TYPE);
+        }
+
+        @Test
+        void rejectsReversingAdjustment() {
+            RentTransaction adjustment = RentTransaction.create(
+                    tenantId, entry.getId(), leaseId, RentTransactionType.ADJUSTMENT,
+                    new BigDecimal("200.00"), null, RentTransactionSource.ADMIN_ADJUSTMENT, "admin-1", occurredAt
+            );
+            RentTransaction reversal = RentTransaction.reversalOf(adjustment, tenantId, "admin-1", occurredAt);
+
+            assertThatThrownBy(() -> entry.reverseTransaction(adjustment, reversal))
+                    .isInstanceOf(RentLedgerStateException.class)
+                    .extracting(ex -> ((RentLedgerStateException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.RENT_LEDGER_ENTRY_UNSUPPORTED_TRANSACTION_TYPE);
+        }
+
+        @Test
+        void rejectsReversingDeposit() {
+            // A deposit was never applied to amountPaid in the first place
+            // (see rejectsDepositType above), so there is nothing here to
+            // reverse — refunds/forfeitures go through the deposit module.
+            RentTransaction deposit = RentTransaction.create(
+                    tenantId, entry.getId(), leaseId, RentTransactionType.DEPOSIT,
+                    new BigDecimal("200.00"), null, RentTransactionSource.MPESA, "admin-1", occurredAt
+            );
+            RentTransaction reversal = RentTransaction.reversalOf(deposit, tenantId, "admin-1", occurredAt);
+
+            assertThatThrownBy(() -> entry.reverseTransaction(deposit, reversal))
+                    .isInstanceOf(RentLedgerStateException.class)
+                    .extracting(ex -> ((RentLedgerStateException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.RENT_LEDGER_ENTRY_UNSUPPORTED_TRANSACTION_TYPE);
+        }
+
+        @Test
+        void rejectsMismatchedReversal() {
+            RentTransaction payment = paymentOf(new BigDecimal("400.00"));
+            entry.applyTransaction("corr", payment);
+            entry.pullDomainEvents();
+            RentTransaction unrelatedPayment = paymentOf(new BigDecimal("50.00"));
+            RentTransaction reversalOfSomethingElse =
+                    RentTransaction.reversalOf(unrelatedPayment, tenantId, "admin-1", occurredAt);
+
+            assertThatThrownBy(() -> entry.reverseTransaction(payment, reversalOfSomethingElse))
+                    .isInstanceOf(RentLedgerStateException.class)
+                    .extracting(ex -> ((RentLedgerStateException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.RENT_LEDGER_ENTRY_REVERSAL_MISMATCH);
+        }
+
+        @Test
+        void rejectsReversalOfWrongType() {
+            RentTransaction payment = paymentOf(new BigDecimal("400.00"));
+            entry.applyTransaction("corr", payment);
+            entry.pullDomainEvents();
+            RentTransaction notAReversal = paymentOf(new BigDecimal("10.00"));
+
+            assertThatThrownBy(() -> entry.reverseTransaction(payment, notAReversal))
+                    .isInstanceOf(RentLedgerStateException.class)
+                    .extracting(ex -> ((RentLedgerStateException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.RENT_LEDGER_ENTRY_REVERSAL_MISMATCH);
+        }
+    }
+
+    @Nested
+    class ReplayAmountPaid {
+
+        @Test
+        void emptyListReplaysToZero() {
+            assertThat(RentLedgerEntry.replayAmountPaid(java.util.List.of())).isEqualByComparingTo("0.00");
+        }
+
+        @Test
+        void sumsPaymentWaiverAndCreditAppliedButIgnoresDeposit() {
+            RentTransaction payment = paymentOf(new BigDecimal("400.00"));
+            RentTransaction waiver = RentTransaction.create(
+                    tenantId, entry.getId(), leaseId, RentTransactionType.WAIVER,
+                    new BigDecimal("100.00"), null, RentTransactionSource.ADMIN_ADJUSTMENT, "admin-1", occurredAt
+            );
+            RentTransaction credit = RentTransaction.create(
+                    tenantId, entry.getId(), leaseId, RentTransactionType.CREDIT_APPLIED,
+                    new BigDecimal("50.00"), null, RentTransactionSource.ADMIN_ADJUSTMENT, "admin-1", occurredAt
+            );
+            // DEPOSIT is an audit-only receipt row — never counted toward
+            // amountPaid, so it must not move the replayed total at all.
+            RentTransaction deposit = RentTransaction.create(
+                    tenantId, entry.getId(), leaseId, RentTransactionType.DEPOSIT,
+                    new BigDecimal("25.00"), null, RentTransactionSource.MPESA, "admin-1", occurredAt
+            );
+
+            BigDecimal replayed = RentLedgerEntry.replayAmountPaid(
+                    java.util.List.of(payment, waiver, credit, deposit));
+
+            assertThat(replayed).isEqualByComparingTo("550.00");
+        }
+
+        @Test
+        void subtractsRefund() {
+            RentTransaction payment = paymentOf(new BigDecimal("1200.00"));
+            RentTransaction refund = RentTransaction.create(
+                    tenantId, entry.getId(), leaseId, RentTransactionType.REFUND,
+                    new BigDecimal("200.00"), null, RentTransactionSource.CASH, "admin-1", occurredAt
+            );
+
+            BigDecimal replayed = RentLedgerEntry.replayAmountPaid(java.util.List.of(payment, refund));
+
+            assertThat(replayed).isEqualByComparingTo("1000.00");
+        }
+
+        @Test
+        void ignoresRentChargeAndAdjustment() {
+            RentTransaction charge = RentTransaction.create(
+                    tenantId, entry.getId(), leaseId, RentTransactionType.RENT_CHARGE,
+                    new BigDecimal("1000.00"), null, RentTransactionSource.SYSTEM, "SYSTEM", occurredAt
+            );
+            RentTransaction adjustment = RentTransaction.create(
+                    tenantId, entry.getId(), leaseId, RentTransactionType.ADJUSTMENT,
+                    new BigDecimal("200.00"), null, RentTransactionSource.ADMIN_ADJUSTMENT, "admin-1", occurredAt
+            );
+
+            BigDecimal replayed = RentLedgerEntry.replayAmountPaid(java.util.List.of(charge, adjustment));
+
+            assertThat(replayed).isEqualByComparingTo("0.00");
+        }
+
+        @Test
+        void reversalOfPaymentSubtractsBackOut() {
+            RentTransaction payment = paymentOf(new BigDecimal("400.00"));
+            RentTransaction reversal = RentTransaction.reversalOf(payment, tenantId, "admin-1", occurredAt);
+
+            BigDecimal replayed = RentLedgerEntry.replayAmountPaid(java.util.List.of(payment, reversal));
+
+            assertThat(replayed).isEqualByComparingTo("0.00");
+        }
+
+        @Test
+        void reversalOfRefundAddsBackIn() {
+            RentTransaction payment = paymentOf(new BigDecimal("1200.00"));
+            RentTransaction refund = RentTransaction.create(
+                    tenantId, entry.getId(), leaseId, RentTransactionType.REFUND,
+                    new BigDecimal("200.00"), null, RentTransactionSource.CASH, "admin-1", occurredAt
+            );
+            RentTransaction reversalOfRefund = RentTransaction.reversalOf(refund, tenantId, "admin-1", occurredAt);
+
+            BigDecimal replayed = RentLedgerEntry.replayAmountPaid(java.util.List.of(payment, refund, reversalOfRefund));
+
+            assertThat(replayed).isEqualByComparingTo("1200.00");
+        }
+
+        @Test
+        void canReplayToANegativeTotalRatherThanClampingIt() {
+            // A pathological/corrupted log — replayAmountPaid surfaces this
+            // rather than hiding it the way the live incremental methods'
+            // floor-at-zero clamp would.
+            RentTransaction payment = paymentOf(new BigDecimal("100.00"));
+            RentTransaction refund = RentTransaction.create(
+                    tenantId, entry.getId(), leaseId, RentTransactionType.REFUND,
+                    new BigDecimal("300.00"), null, RentTransactionSource.CASH, "admin-1", occurredAt
+            );
+
+            BigDecimal replayed = RentLedgerEntry.replayAmountPaid(java.util.List.of(payment, refund));
+
+            assertThat(replayed).isEqualByComparingTo("-200.00");
         }
     }
 }

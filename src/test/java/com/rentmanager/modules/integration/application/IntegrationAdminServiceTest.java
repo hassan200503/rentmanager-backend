@@ -25,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -335,5 +336,104 @@ class IntegrationAdminServiceTest {
         assertThat(result.ok()).isFalse();
         assertThat(result.message()).isEqualTo("Test connection crashed");
         assertThat(config.getStatus()).isEqualTo(IntegrationStatus.ERROR);
+    }
+
+    @Test
+    void test_requiredTargetMissing_returnsRecipientRequiredAndNeverInvokesTester() {
+        String provider = ProviderCatalog.AFRICASTALKING;
+        IntegrationConfig config = configWith(provider, IntegrationEnvironment.DEVELOPMENT,
+                "{\"username\":\"sandbox\",\"api_key\":\"key\"}");
+        when(repository.find(provider, IntegrationEnvironment.DEVELOPMENT)).thenReturn(Optional.of(config));
+        ProviderTester tester = mock(ProviderTester.class);
+        when(testerRegistry.get(provider)).thenReturn(tester);
+
+        IntegrationDtos.TestConnectionView result =
+                service.test(provider, IntegrationEnvironment.DEVELOPMENT, null, "owner-1", "ip");
+
+        assertThat(result.ok()).isFalse();
+        assertThat(result.message()).isEqualTo("Recipient required");
+        assertThat(result.error()).isEqualTo("Type a phone number to receive the test SMS.");
+        assertThat(config.getStatus()).isEqualTo(IntegrationStatus.ERROR);
+        assertThat(config.getLastError()).isEqualTo("Type a phone number to receive the test SMS.");
+        verify(tester, never()).test(any(), any(), any());
+        verify(testerRegistry, never()).get(provider);
+    }
+
+    @Test
+    void test_optionalTargetMissing_allowsCredentialOnlyCheckThroughToTester() {
+        String provider = ProviderCatalog.WHATSAPP;
+        IntegrationConfig config = configWith(provider, IntegrationEnvironment.DEVELOPMENT,
+                "{\"access_token\":\"tok\",\"phone_number_id\":\"1\"}");
+        when(repository.find(provider, IntegrationEnvironment.DEVELOPMENT)).thenReturn(Optional.of(config));
+        when(registry.resolveSaved(provider, IntegrationEnvironment.DEVELOPMENT)).thenReturn(Map.of());
+        ProviderTester tester = mock(ProviderTester.class);
+        when(tester.test(any(), isNull(), isNull()))
+                .thenReturn(ProviderTester.TestResult.success("Token is valid — phone number reachable"));
+        when(testerRegistry.get(provider)).thenReturn(tester);
+
+        IntegrationDtos.TestConnectionView result =
+                service.test(provider, IntegrationEnvironment.DEVELOPMENT, null, "owner-1", "ip");
+
+        assertThat(result.ok()).isTrue();
+        assertThat(result.message()).contains("Token is valid");
+        verify(tester).test(any(), isNull(), isNull());
+    }
+
+    @Test
+    void list_exposesTestTargetMetadataFromProviderCatalog() {
+        when(repository.find(anyString(), any(IntegrationEnvironment.class))).thenReturn(Optional.empty());
+
+        List<IntegrationDtos.ProviderView> views = service.list();
+
+        IntegrationDtos.ProviderView at = views.stream()
+                .filter(v -> v.providerKey().equals(ProviderCatalog.AFRICASTALKING)).findFirst().orElseThrow();
+        assertThat(at.testTarget()).isNotNull();
+        assertThat(at.testTarget().kind()).isEqualTo("PHONE");
+        assertThat(at.testTarget().required()).isTrue();
+
+        IntegrationDtos.ProviderView email = views.stream()
+                .filter(v -> v.providerKey().equals(ProviderCatalog.EMAIL)).findFirst().orElseThrow();
+        assertThat(email.testTarget()).isNotNull();
+        assertThat(email.testTarget().kind()).isEqualTo("EMAIL");
+
+        IntegrationDtos.ProviderView daraja = views.stream()
+                .filter(v -> v.providerKey().equals(ProviderCatalog.DARAJA)).findFirst().orElseThrow();
+        assertThat(daraja.testTarget()).isNull();
+    }
+
+    @Test
+    void rollToProduction_activatesOnlyVerifiedProvidersAndReportsSkips() {
+        when(repository.find(anyString(), any(IntegrationEnvironment.class)))
+                .thenAnswer(inv -> {
+                    String key = inv.getArgument(0);
+                    if (key.equals(ProviderCatalog.WHATSAPP)) {
+                        IntegrationConfig cfg = configWith(ProviderCatalog.WHATSAPP,
+                                IntegrationEnvironment.PRODUCTION, "{\"access_token\":\"tok\"}");
+                        cfg.markVerified("owner-1");
+                        return Optional.of(cfg);
+                    }
+                    if (key.equals(ProviderCatalog.EMAIL)) {
+                        return Optional.of(configWith(ProviderCatalog.EMAIL,
+                                IntegrationEnvironment.PRODUCTION, "{\"host\":\"smtp\"}"));
+                    }
+                    return Optional.empty();
+                });
+
+        IntegrationDtos.RolloutView result = service.rollToProduction("owner-1", "10.0.0.1");
+
+        assertThat(result.targetEnvironment()).isEqualTo("PRODUCTION");
+        assertThat(result.activated()).containsExactly(ProviderCatalog.WHATSAPP);
+        assertThat(result.skipped())
+                .extracting(IntegrationDtos.RolloutSkipView::providerKey)
+                .contains(ProviderCatalog.EMAIL, ProviderCatalog.DARAJA);
+        assertThat(result.skipped())
+                .extracting(IntegrationDtos.RolloutSkipView::reason)
+                .anyMatch(r -> r != null && r.contains("verified"));
+
+        verify(repository).deactivateAll(ProviderCatalog.WHATSAPP, IntegrationEnvironment.PRODUCTION);
+        ArgumentCaptor<IntegrationConfig> savedCaptor = ArgumentCaptor.forClass(IntegrationConfig.class);
+        verify(repository).save(savedCaptor.capture());
+        assertThat(savedCaptor.getValue().isActive()).isTrue();
+        verify(registry).invalidate(ProviderCatalog.WHATSAPP);
     }
 }

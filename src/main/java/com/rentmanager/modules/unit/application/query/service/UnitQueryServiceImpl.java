@@ -68,5 +68,22 @@ public class UnitQueryServiceImpl implements UnitQueryService {
         return new UnitSummaryResponse(total, vacant, occupied, reserved);
     }
 
+    /**
+     * One grouped query for the whole portfolio, not one per property — the
+     * dashboard renders every property at once, and the hook this feeds
+     * replaced five list queries, one of them unpaginated.
+     */
+    @Override
+    public java.util.List<com.rentmanager.modules.unit.application.dto.response.PropertyOccupancyResponse>
+            getOccupancyByProperty(UUID tenantId) {
+        return unitRepository.countUnitsByProperty(tenantId).stream()
+                .map(c -> new com.rentmanager.modules.unit.application.dto.response.PropertyOccupancyResponse(
+                        c.propertyId(),
+                        c.totalUnits(),
+                        c.occupiedUnits(),
+                        c.occupancyPercent()))
+                .toList();
+    }
+
 
 }

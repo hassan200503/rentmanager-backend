@@ -57,7 +57,7 @@ public class RentOverdueScheduler {
     private final LeaseRepository leaseRepository;
     private final RentLedgerApplicationService rentLedgerApplicationService;
 
-    @Scheduled(cron = "0 30 2 * * *") // 2:30 AM daily — after the charge-posting sweep
+    @Scheduled(cron = "0 30 2 * * *", zone = "Africa/Nairobi") // 2:30 AM daily — after the charge-posting sweep
     public void runDaily() {
         List<RentLedgerEntry> candidates = rentLedgerEntryRepository.findAllByStatusInAndDueDateLessThanEqual(
                 List.of(RentLedgerStatus.DUE, RentLedgerStatus.PARTIALLY_PAID),

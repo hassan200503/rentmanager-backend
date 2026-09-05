@@ -1,6 +1,9 @@
 package com.rentmanager.modules.rentledger.api.controller;
 
 import com.rentmanager.contract.common.ApiResponse;
+import com.rentmanager.modules.rentledger.api.dto.response.RentLedgerSummaryResponse;
+import com.rentmanager.modules.rentledger.application.dto.RentLedgerSummary;
+import com.rentmanager.modules.rentledger.application.service.RentLedgerSummaryService;
 import com.rentmanager.modules.rentledger.api.dto.response.RentLedgerEntryResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.RentTransactionResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.RentTransactionSummaryResponse;
@@ -47,6 +50,34 @@ import java.util.UUID;
 public class RentLedgerQueryController {
 
     private final RentLedgerQueryService rentLedgerQueryService;
+    private final RentLedgerSummaryService rentLedgerSummaryService;
+
+    /**
+     * The landlord dashboard's financial figures: collected this month, total
+     * outstanding, and the overdue slice with its entry count.
+     *
+     * <p>Readable by STAFF as well as OWNER and MANAGER, matching the rest of
+     * this controller — a caretaker who records payments needs to see what is
+     * still owed. Nothing here exposes an individual renter's details, only
+     * portfolio totals.
+     *
+     * <p>Every figure is aggregated in the database and scoped to the caller's
+     * tenant from the verified JWT. This endpoint exists because the dashboard
+     * had six financial cards built from a hard-coded array — including a
+     * green "+12%" beside "KES 0" — and no aggregate anywhere to wire them to.
+     */
+    @GetMapping("/summary")
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
+    public ResponseEntity<ApiResponse<RentLedgerSummaryResponse>> getSummary(
+            @AuthenticationPrincipal AuthenticatedUser user
+    ) {
+        RentLedgerSummary summary =
+                rentLedgerSummaryService.getSummary(requireTenantId(user));
+
+        return ResponseEntity.ok(ApiResponse.ok(
+                "Rent ledger summary retrieved",
+                RentLedgerSummaryResponse.from(summary)));
+    }
 
     @GetMapping("/entries/{entryId}")
     @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")

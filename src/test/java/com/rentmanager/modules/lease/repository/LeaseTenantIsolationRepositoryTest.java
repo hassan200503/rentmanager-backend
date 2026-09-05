@@ -3,10 +3,11 @@ package com.rentmanager.modules.lease.repository;
 import com.rentmanager.modules.lease.domain.enums.*;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
+import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
+import com.rentmanager.modules.support.MinimalTenantChainFixture;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -15,9 +16,8 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest
 @Transactional
-class LeaseTenantIsolationRepositoryTest {
+class LeaseTenantIsolationRepositoryTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
     private LeaseRepository leaseRepository;
@@ -28,8 +28,8 @@ class LeaseTenantIsolationRepositoryTest {
     @Test
     void shouldIsolateLeasesStrictlyPerTenant() {
 
-        UUID tenantA = UUID.randomUUID();
-        UUID tenantB = UUID.randomUUID();
+        UUID tenantA = MinimalTenantChainFixture.persistTenant(entityManager);
+        UUID tenantB = MinimalTenantChainFixture.persistTenant(entityManager);
 
         Lease leaseA1 = createLease(tenantA, "LS-A1");
         Lease leaseA2 = createLease(tenantA, "LS-A2");
@@ -59,8 +59,8 @@ class LeaseTenantIsolationRepositoryTest {
     @Test
     void shouldNeverLeakActiveLeasesAcrossTenants() {
 
-        UUID tenantA = UUID.randomUUID();
-        UUID tenantB = UUID.randomUUID();
+        UUID tenantA = MinimalTenantChainFixture.persistTenant(entityManager);
+        UUID tenantB = MinimalTenantChainFixture.persistTenant(entityManager);
 
         Lease activeA = createLease(tenantA, "LS-A1");
         Lease activeB = createLease(tenantB, "LS-B1");
@@ -92,10 +92,11 @@ class LeaseTenantIsolationRepositoryTest {
     @Test
     void shouldPreventCrossTenantUnitConflicts() {
 
-        UUID tenantA = UUID.randomUUID();
-        UUID tenantB = UUID.randomUUID();
+        UUID tenantA = MinimalTenantChainFixture.persistTenant(entityManager);
+        UUID tenantB = MinimalTenantChainFixture.persistTenant(entityManager);
 
-        UUID sharedUnit = UUID.randomUUID();
+        UUID sharedUnit = MinimalTenantChainFixture.persistUnit(
+                entityManager, tenantA, MinimalTenantChainFixture.persistProperty(entityManager, tenantA));
 
         Lease leaseA = createLease(tenantA, "LS-A1", sharedUnit);
         Lease leaseB = createLease(tenantB, "LS-B1", sharedUnit);
@@ -127,16 +128,21 @@ class LeaseTenantIsolationRepositoryTest {
     }
 
     private Lease createLease(UUID tenantId, String leaseNumber) {
-        return createLease(tenantId, leaseNumber, UUID.randomUUID());
+        UUID propertyId = MinimalTenantChainFixture.persistProperty(entityManager, tenantId);
+        UUID unitId = MinimalTenantChainFixture.persistUnit(entityManager, tenantId, propertyId);
+        return createLease(tenantId, leaseNumber, unitId);
     }
 
     private Lease createLease(UUID tenantId, String leaseNumber, UUID unitId) {
 
+        UUID propertyId = MinimalTenantChainFixture.persistProperty(entityManager, tenantId);
+        UUID tenantProfileId = MinimalTenantChainFixture.persistTenantProfile(entityManager, tenantId);
+
         return Lease.create(
                 tenantId,
-                UUID.randomUUID(),
+                propertyId,
                 unitId,
-                UUID.randomUUID(),
+                tenantProfileId,
                 leaseNumber,
                 LeaseType.FIXED_TERM,
                 BillingCycle.MONTHLY,

@@ -5,6 +5,7 @@ import com.rentmanager.modules.rentledger.domain.model.RentPaymentRequest;
 import com.rentmanager.modules.rentledger.domain.repository.RentPaymentRequestRepository;
 import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
 import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -44,13 +45,79 @@ class RentPaymentRequestMigrationIntegrationTest extends AbstractPostgresIntegra
     private static final String CHECKOUT_ID = "ws_CO_" + UUID.randomUUID();
 
     /**
+     * Inserts the tenants row this whole test class's shared tenantId needs
+     * — rent_ledger_entries.tenant_id (and everything under it) now carries
+     * a real foreign key (V72-V75), so every placeholder chain below must
+     * resolve to it.
+     */
+    @BeforeEach
+    void createTenant() {
+        entityManager.createNativeQuery("""
+                INSERT INTO tenants (id, tenant_code, name)
+                VALUES (?1, ?2, 'Test Landlord')
+                """)
+                .setParameter(1, tenantId)
+                .setParameter(2, "TEN-" + tenantId)
+                .executeUpdate();
+        entityManager.flush();
+    }
+
+    /**
      * Creates a minimal RentPaymentRequest in PENDING state with a random
      * rentLedgerEntryId that satisfies the FK constraint by first inserting
-     * a placeholder rent_ledger_entry row via JDBC (bypassing the domain
-     * model's full constructor to keep these tests focused on the request
-     * table's own constraints).
+     * a placeholder property/unit/tenant_profile/lease/rent_ledger_entry
+     * chain via JDBC (bypassing the domain model's full constructors to
+     * keep these tests focused on the request table's own constraints).
      */
     private UUID createMinimalLedgerEntry() {
+        UUID propertyId = UUID.randomUUID();
+        entityManager.createNativeQuery("""
+                INSERT INTO properties (id, tenant_id, reference_code, name, status, created_at, premises_type)
+                VALUES (?1, ?2, ?3, 'Test Property', 'ACTIVE', NOW(), 'RESIDENTIAL')
+                """)
+                .setParameter(1, propertyId)
+                .setParameter(2, tenantId)
+                .setParameter(3, "PROP-" + propertyId)
+                .executeUpdate();
+
+        UUID unitId = UUID.randomUUID();
+        entityManager.createNativeQuery("""
+                INSERT INTO units (id, unit_number, tenant_id, property_id, status, occupancy_status)
+                VALUES (?1, ?2, ?3, ?4, 'ACTIVE', 'VACANT')
+                """)
+                .setParameter(1, unitId)
+                .setParameter(2, "U-" + unitId)
+                .setParameter(3, tenantId)
+                .setParameter(4, propertyId)
+                .executeUpdate();
+
+        UUID tenantProfileId = UUID.randomUUID();
+        entityManager.createNativeQuery("""
+                INSERT INTO tenant_profile (id, tenant_id, clerk_user_id, full_name, email, phone)
+                VALUES (?1, ?2, ?3, 'Test Renter', 'renter@test.local', '+254711111111')
+                """)
+                .setParameter(1, tenantProfileId)
+                .setParameter(2, tenantId)
+                .setParameter(3, "clerk-" + tenantProfileId)
+                .executeUpdate();
+
+        UUID leaseId = UUID.randomUUID();
+        entityManager.createNativeQuery("""
+                INSERT INTO leases
+                    (id, tenant_id, property_id, unit_id, tenant_profile_id, lease_number,
+                     lease_type, billing_cycle, status, start_date, end_date, rent_amount, deposit_amount)
+                VALUES
+                    (?1, ?2, ?3, ?4, ?5, ?6, 'FIXED_TERM', 'MONTHLY', 'ACTIVE',
+                     '2026-01-01', '2026-12-31', 1000.00, 1000.00)
+                """)
+                .setParameter(1, leaseId)
+                .setParameter(2, tenantId)
+                .setParameter(3, propertyId)
+                .setParameter(4, unitId)
+                .setParameter(5, tenantProfileId)
+                .setParameter(6, "LSE-" + leaseId)
+                .executeUpdate();
+
         UUID id = UUID.randomUUID();
         entityManager.createNativeQuery("""
                 INSERT INTO rent_ledger_entries
@@ -64,9 +131,9 @@ class RentPaymentRequestMigrationIntegrationTest extends AbstractPostgresIntegra
                 """)
                 .setParameter(1, id)
                 .setParameter(2, tenantId)
-                .setParameter(3, UUID.randomUUID())
-                .setParameter(4, UUID.randomUUID())
-                .setParameter(5, UUID.randomUUID())
+                .setParameter(3, leaseId)
+                .setParameter(4, unitId)
+                .setParameter(5, tenantProfileId)
                 .executeUpdate();
         entityManager.flush();
         return id;

@@ -73,6 +73,13 @@ public class DisbursementRepositoryAdapter implements DisbursementRepository {
                 .toList();
     }
 
+    @Override
+    public List<Disbursement> findByLedgerEntryId(UUID tenantId, UUID ledgerEntryId) {
+        return jpaRepository.findByTenantIdAndLedgerEntryId(tenantId, ledgerEntryId).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
     private DisbursementJpaEntity toEntity(Disbursement d) {
         return DisbursementJpaEntity.builder()
                 .id(d.getId())
@@ -93,6 +100,7 @@ public class DisbursementRepositoryAdapter implements DisbursementRepository {
                 .requiresManualAttention(d.isRequiresManualAttention())
                 .createdAt(d.getCreatedAt())
                 .updatedAt(d.getUpdatedAt())
+                .currency(d.getCurrency())
                 .build();
     }
 
@@ -105,6 +113,7 @@ public class DisbursementRepositoryAdapter implements DisbursementRepository {
                 e.getMpesaOriginatorConversationId(), e.getFailureReason(),
                 e.getRetryCount(), e.isRequiresManualAttention(),
                 e.getCreatedAt(), e.getUpdatedAt(),
+                e.getCurrency(),
                 e.getVersion()
         );
     }

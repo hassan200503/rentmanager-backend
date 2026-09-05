@@ -6,15 +6,24 @@ import com.rentmanager.modules.property.application.dto.response.PropertyMediaRe
 import com.rentmanager.modules.property.application.query.service.PropertyMediaQueryService;
 import com.rentmanager.shared.security.principal.AuthenticatedUser;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Previously carried no {@code @PreAuthorize} — see
+ * {@code UnitMediaController}'s Javadoc for the full reasoning. Gated to
+ * OWNER/MANAGER/STAFF, matching {@code UnitQueryController}'s read gate: a
+ * caretaker viewing property photos is uncontroversial even where writing is
+ * not.
+ */
 @RestController
 @RequiredArgsConstructor
 @RequestMapping(PropertyRoutes.BASE)
+@PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
 public class PropertyMediaQueryController {
 
     private final PropertyMediaQueryService propertyMediaQueryService;
