@@ -19,6 +19,8 @@ public interface RentTransactionJpaRepository extends JpaRepository<RentTransact
 
     Optional<RentTransactionJpaEntity> findByTenantIdAndExternalReference(UUID tenantId, String externalReference);
 
+    Optional<RentTransactionJpaEntity> findByTenantIdAndReversesTransactionId(UUID tenantId, UUID reversesTransactionId);
+
     Page<RentTransactionJpaEntity> findByTenantIdOrderByOccurredAtDesc(UUID tenantId, Pageable pageable);
 
     long countByTenantId(UUID tenantId);

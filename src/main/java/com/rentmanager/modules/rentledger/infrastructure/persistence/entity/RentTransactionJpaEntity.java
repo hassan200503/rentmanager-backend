@@ -54,4 +54,10 @@ public class RentTransactionJpaEntity extends BaseTenantEntity {
 
     @Column(name = "net_amount", precision = 19, scale = 2)
     private BigDecimal netAmount;
+
+    @Column(name = "reverses_transaction_id")
+    private UUID reversesTransactionId;
+
+    @Column(name = "currency", nullable = false, length = 3)
+    private String currency;
 }

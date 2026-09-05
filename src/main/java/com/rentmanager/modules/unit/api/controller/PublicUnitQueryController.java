@@ -24,14 +24,30 @@ public class PublicUnitQueryController {
     private final UnitReservationSummaryQueryService unitReservationSummaryQueryService;
     private final ReviewPublicQueryService reviewPublicQueryService;
 
+    /**
+     * Public renter search.
+     *
+     * <p>Until now this took only a free-text {@code keyword} matched against
+     * unit number and description — so there was no way to search by where a
+     * place is, or what it costs. Location and budget are the first two
+     * questions a renter asks.
+     *
+     * <p>Every parameter is optional; omitting all of them browses everything
+     * publicly visible.
+     */
     @GetMapping
     public ResponseEntity<ApiResponse<Page<PublicUnitResponse>>> getVacantUnits(
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String city,
+            @RequestParam(required = false) java.math.BigDecimal minRent,
+            @RequestParam(required = false) java.math.BigDecimal maxRent,
+            @RequestParam(required = false) com.rentmanager.modules.property.domain.enums.PropertyType propertyType,
             Pageable pageable
     ) {
         return ResponseEntity.ok(ApiResponse.ok(
                 "Vacant units retrieved successfully",
-                publicUnitQueryService.getVacantUnits(keyword, pageable)
+                publicUnitQueryService.getVacantUnits(
+                        keyword, city, minRent, maxRent, propertyType, pageable)
         ));
     }
 

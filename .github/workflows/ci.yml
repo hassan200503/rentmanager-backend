@@ -1,0 +1,68 @@
+name: CI
+
+# Runs the full suite on every push and pull request.
+#
+# Until this existed, 1,342 tests ran only when a person remembered to type
+# `mvn test`. Every guard in the money paths — the derived payout destination,
+# the entitlement cap, the retry recipient check, the RBAC gates, the
+# append-only triggers — was protected by tests nothing obliged anyone to run.
+# For a system that moves rent, a regression reaching production because a
+# commit skipped the suite is exactly the failure tests exist to prevent.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # A newer push supersedes an in-flight run on the same ref. The suite takes
+  # several minutes; queuing stale runs helps nobody.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    # The suite includes Testcontainers integration tests that start real
+    # PostgreSQL 16 containers, plus a full Flyway migration run. Generous but
+    # bounded — a hung container should fail the build, not run forever.
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+          # Caches ~/.m2 keyed on pom.xml.
+          cache: maven
+
+      # Docker is preinstalled on ubuntu-latest, which is what Testcontainers
+      # needs. Asserted rather than assumed: without it the integration tests
+      # fail late and confusingly, and the cause is worth naming up front.
+      - name: Verify Docker is available for Testcontainers
+        run: docker version
+
+      - name: Run the full suite
+        env:
+          # Container reuse is a local developer convenience (~/.testcontainers
+          # properties) and does nothing on a fresh runner. Disabled explicitly
+          # so the behaviour is the same every run rather than depending on
+          # whether a daemon happened to be present.
+          TESTCONTAINERS_REUSE_ENABLE: "false"
+        run: mvn --batch-mode --no-transfer-progress test
+
+      # Surefire XML is far easier to read than scrolling the log when
+      # something fails, and it survives the run.
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+          retention-days: 7
+          if-no-files-found: warn

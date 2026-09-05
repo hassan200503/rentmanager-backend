@@ -63,6 +63,12 @@ public class DepositRepositoryAdapter implements DepositRepository {
     }
 
     @Override
+    public Optional<Deposit> findByLeaseIdAndTenantId(UUID leaseId, UUID tenantId) {
+        return jpaRepository.findByLeaseIdAndTenantId(leaseId, tenantId)
+                .map(this::toDomain);
+    }
+
+    @Override
     public List<Deposit> findByTenantProfileId(UUID tenantProfileId) {
         return jpaRepository.findByTenantProfileId(tenantProfileId)
                 .stream()
@@ -94,7 +100,8 @@ public class DepositRepositoryAdapter implements DepositRepository {
                 e.getAmountRefunded(),
                 e.getStatus(),
                 e.getPaidAt(),
-                e.getRefundedAt()
+                e.getRefundedAt(),
+                e.getCurrency()
         );
     }
 
@@ -119,6 +126,7 @@ public class DepositRepositoryAdapter implements DepositRepository {
         e.setStatus(d.getStatus());
         e.setPaidAt(d.getPaidAt());
         e.setRefundedAt(d.getRefundedAt());
+        e.setCurrency(d.getCurrency());
 
         return e;
     }

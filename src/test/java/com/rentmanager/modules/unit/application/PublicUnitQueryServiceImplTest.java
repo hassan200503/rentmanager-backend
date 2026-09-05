@@ -72,19 +72,19 @@ class PublicUnitQueryServiceImplTest {
         Pageable pageable = mock(Pageable.class);
         Page<Unit> emptyPage = new PageImpl<>(List.of());
 
-        when(unitRepository.findPubliclyVisibleVacantUnits(null, pageable))
+        when(unitRepository.findPubliclyVisibleVacantUnits(null, null, null, null, null, pageable))
                 .thenReturn(emptyPage);
 
         when(unitMediaRepository.findAllByUnitIdIn(anyList()))
                 .thenReturn(List.of());
 
-        service.getVacantUnits(null, pageable);
+        service.getVacantUnits(null, null, null, null, null, pageable);
 
         // The old occupancy-only methods must never be called by the
         // public path anymore.
         verify(unitRepository, never()).findByOccupancyStatus(any(), any());
         verify(unitRepository, never()).searchPublic(anyString(), any(), any());
-        verify(unitRepository).findPubliclyVisibleVacantUnits(null, pageable);
+        verify(unitRepository).findPubliclyVisibleVacantUnits(null, null, null, null, null, pageable);
     }
 
     @Test
@@ -95,10 +95,10 @@ class PublicUnitQueryServiceImplTest {
         Pageable pageable = mock(Pageable.class);
         Page<Unit> emptyPage = new PageImpl<>(List.of());
 
-        when(unitRepository.findPubliclyVisibleVacantUnits(null, pageable))
+        when(unitRepository.findPubliclyVisibleVacantUnits(null, null, null, null, null, pageable))
                 .thenReturn(emptyPage);
 
-        Page<PublicUnitResponse> result = service.getVacantUnits(null, pageable);
+        Page<PublicUnitResponse> result = service.getVacantUnits(null, null, null, null, null, pageable);
 
         assertTrue(result.getContent().isEmpty());
     }

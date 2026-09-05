@@ -1,5 +1,13 @@
 package com.rentmanager.modules.rentledger.infrastructure.persistence;
 
+import com.rentmanager.modules.lease.domain.enums.BillingCycle;
+import com.rentmanager.modules.lease.domain.enums.LeaseStatus;
+import com.rentmanager.modules.lease.domain.enums.LeaseType;
+import com.rentmanager.modules.lease.domain.model.Lease;
+import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
+import com.rentmanager.modules.property.domain.enums.PropertyType;
+import com.rentmanager.modules.property.domain.model.Property;
+import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.modules.rentledger.domain.enums.RentLedgerStatus;
 import com.rentmanager.modules.rentledger.domain.enums.RentTransactionSource;
 import com.rentmanager.modules.rentledger.domain.enums.RentTransactionType;
@@ -8,7 +16,15 @@ import com.rentmanager.modules.rentledger.domain.model.RentTransaction;
 import com.rentmanager.modules.rentledger.domain.repository.RentLedgerEntryRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentTransactionRepository;
 import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
+import com.rentmanager.modules.tenant.domain.enums.TenantType;
+import com.rentmanager.modules.tenant.domain.model.Tenant;
+import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
+import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
+import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
+import com.rentmanager.modules.unit.domain.model.Unit;
+import com.rentmanager.modules.unit.domain.repository.UnitRepository;
 import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -101,11 +117,63 @@ class RentLedgerPersistenceIntegrationTest extends AbstractPostgresIntegrationTe
     private RentTransactionRepository rentTransactionRepository;
     @Autowired
     private EntityManager entityManager;
+    @Autowired
+    private TenantRepository tenantRepository;
+    @Autowired
+    private PropertyRepository propertyRepository;
+    @Autowired
+    private UnitRepository unitRepository;
+    @Autowired
+    private TenantProfileRepository tenantProfileRepository;
+    @Autowired
+    private LeaseRepository leaseRepository;
 
-    private final UUID tenantId = UUID.randomUUID();
-    private final UUID leaseId = UUID.randomUUID();
-    private final UUID unitId = UUID.randomUUID();
-    private final UUID tenantProfileId = UUID.randomUUID();
+    // Populated in setUp() by actually persisting a tenant/property/unit/
+    // tenant_profile/lease chain — rent_ledger_entries.tenant_id/unit_id/
+    // tenant_profile_id and rent_transactions.ledger_entry_id all carry real
+    // foreign keys now (V72-V75), so a fabricated random UUID here would
+    // fail every insert in this class.
+    private UUID tenantId;
+    private UUID leaseId;
+    private UUID unitId;
+    private UUID tenantProfileId;
+
+    @BeforeEach
+    @Transactional
+    void setUpTenantChain() {
+        String suffix = UUID.randomUUID().toString();
+        Tenant tenant = tenantRepository.save(Tenant.create(
+                "TEN-" + suffix, "Test Landlord", "landlord-" + suffix,
+                "landlord@test.local", "+254700000000", TenantType.STANDARD
+        ));
+        tenantId = tenant.getId();
+
+        Property property = propertyRepository.save(Property.create(
+                tenantId, "Test Property", PropertyType.APARTMENT, null, null, null,
+                "Test property", "corr"
+        ));
+
+        Unit unit = unitRepository.save(Unit.create(
+                tenantId, property.getId(), "U-" + UUID.randomUUID(),
+                "Test Unit", null, new BigDecimal("1000.00"), null,
+                "Test unit", "corr"
+        ));
+        unitId = unit.getId();
+
+        TenantProfile profile = tenantProfileRepository.save(TenantProfile.create(
+                tenantId, "clerk-" + UUID.randomUUID(), "Test Renter",
+                "renter@test.local", "+254711111111", "ID12345", "corr"
+        ));
+        tenantProfileId = profile.getId();
+
+        Lease lease = leaseRepository.save(Lease.restore(
+                UUID.randomUUID(), tenantId, property.getId(), unitId, tenantProfileId,
+                "LSE-" + UUID.randomUUID(), LeaseType.FIXED_TERM, BillingCycle.MONTHLY,
+                LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31),
+                new BigDecimal("1000.00"), new BigDecimal("1000.00"), LeaseStatus.ACTIVE
+        ));
+        leaseId = lease.getId();
+    }
 
     private RentLedgerEntry newEntry(LocalDate periodStart) {
         return RentLedgerEntry.create(

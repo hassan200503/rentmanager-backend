@@ -25,6 +25,8 @@ public class RentTransactionPersistenceMapper {
         jpa.setCommissionRatePercent(transaction.getCommissionRatePercent());
         jpa.setCommissionAmount(transaction.getCommissionAmount());
         jpa.setNetAmount(transaction.getNetAmount());
+        jpa.setReversesTransactionId(transaction.getReversesTransactionId());
+        jpa.setCurrency(transaction.getCurrency());
         return jpa;
     }
 
@@ -45,6 +47,8 @@ public class RentTransactionPersistenceMapper {
                 jpa.getCommissionRatePercent(),
                 jpa.getCommissionAmount(),
                 jpa.getNetAmount(),
+                jpa.getReversesTransactionId(),
+                jpa.getCurrency(),
                 jpa.getVersion(),
                 jpa.getCreatedAt(),
                 jpa.getUpdatedAt()

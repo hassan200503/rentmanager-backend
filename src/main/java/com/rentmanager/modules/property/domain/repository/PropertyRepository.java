@@ -71,4 +71,11 @@ public interface PropertyRepository {
     );
 
     Optional<Property> findByIdAndStatus(UUID id, PropertyStatus status);
+
+    /**
+     * Bulk load for the public listings page, which selects ids by vacancy
+     * first and then needs the properties behind them. Status is re-asserted
+     * here so this method is safe to call with ids from any source.
+     */
+    List<Property> findAllByIdInAndStatus(List<UUID> ids, PropertyStatus status);
 }

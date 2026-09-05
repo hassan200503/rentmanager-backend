@@ -3,6 +3,7 @@ package com.rentmanager.modules.property.api.controller;
 import com.rentmanager.contract.common.ApiResponse;
 import com.rentmanager.modules.property.application.dto.response.PublicPropertyResponse;
 import com.rentmanager.modules.property.application.query.service.PublicPropertyQueryService;
+import com.rentmanager.modules.property.domain.enums.PropertyType;
 import com.rentmanager.modules.review.application.ReviewPublicQueryService;
 import com.rentmanager.modules.review.application.dto.response.PublicLandlordReviewsResponse;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +12,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @RestController
@@ -25,12 +27,16 @@ public class PublicPropertyQueryController {
     public ResponseEntity<ApiResponse<Page<PublicPropertyResponse>>> getProperties(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String location,
+            @RequestParam(required = false) BigDecimal minRent,
+            @RequestParam(required = false) BigDecimal maxRent,
+            @RequestParam(required = false) PropertyType propertyType,
             Pageable pageable
     ) {
         return ResponseEntity.ok(
                 ApiResponse.ok(
                         "Properties retrieved successfully",
-                        publicPropertyQueryService.getProperties(keyword, location, pageable)
+                        publicPropertyQueryService.getProperties(
+                                keyword, location, minRent, maxRent, propertyType, pageable)
                 )
         );
     }

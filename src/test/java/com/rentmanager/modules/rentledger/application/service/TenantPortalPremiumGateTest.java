@@ -20,6 +20,7 @@ import com.rentmanager.modules.review.application.RenterReviewQueryService;
 import com.rentmanager.modules.review.application.ReviewQueryService;
 import com.rentmanager.modules.tenant.domain.enums.BillingMode;
 import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;
+import com.rentmanager.modules.tenant.domain.enums.TenantStatus;
 import com.rentmanager.modules.tenant.domain.model.Tenant;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import com.rentmanager.modules.tenant.domain.valueobject.BrandingSettings;
@@ -98,7 +99,8 @@ class TenantPortalPremiumGateTest {
                 mock(ReviewCommandService.class), mock(ReviewQueryService.class),
                 mock(RenterReviewQueryService.class),
                 mock(MaintenanceRequestCommandService.class), mock(MaintenanceRequestRepository.class),
-                mock(AnnouncementQueryService.class));
+                mock(AnnouncementQueryService.class), mock(StkPushRateLimiter.class),
+                mock(com.rentmanager.modules.deposit.domain.repository.DepositRepository.class));
 
         tenantProfile = buildTenantProfile();
         activeLease = buildActiveLease();
@@ -110,6 +112,8 @@ class TenantPortalPremiumGateTest {
         when(tenantProfileRepository.findByClerkUserId(clerkUserId))
                 .thenReturn(Optional.of(tenantProfile));
         when(leaseRepository.findAllByTenant(landlordTenantId)).thenReturn(List.of(activeLease));
+        when(leaseRepository.findAllByTenantAndTenantProfile(landlordTenantId, tenantProfile.getId()))
+                .thenReturn(List.of(activeLease));
         when(unitRepository.findByIdAndTenantId(activeLease.getUnitId(), landlordTenantId))
                 .thenReturn(Optional.of(unit));
         when(propertyRepository.findByIdAndTenantId(unit.getPropertyId(), landlordTenantId))
@@ -128,6 +132,9 @@ class TenantPortalPremiumGateTest {
         assertEquals("#654321", response.landlordSecondaryColor());
         assertEquals("PREMIUM_MONTHLY", response.billingMode());
         assertEquals("ACTIVE", response.subscriptionStatus());
+        // Verified because onboarding was approved (TenantStatus.ACTIVE),
+        // not because they are paying. Premium branding is what the
+        // subscription is evidence of; being checked is not.
         assertTrue(response.landlordVerified());
     }
 
@@ -155,7 +162,29 @@ class TenantPortalPremiumGateTest {
 
         assertNull(response.landlordPrimaryColor());
         assertNull(response.landlordSecondaryColor());
-        assertFalse(response.landlordVerified());
+    }
+
+    /**
+     * This assertion used to live in the test above, which read a lapsed
+     * subscription as un-verifying the landlord. The two are now separate
+     * facts and should be: branding is something you pay for and correctly
+     * stops when you stop paying, while being vetted is something that
+     * happened and does not un-happen when a card is declined.
+     *
+     * <p>Telling a renter their landlord is no longer verified because a
+     * subscription lapsed would be a false statement about the landlord.
+     * Removing approval is what TenantStatus.SUSPENDED is for.
+     */
+    @Test
+    void anApprovedLandlordStaysVerifiedWhenTheirSubscriptionLapses() {
+        Tenant landlord = buildLandlord(
+                BillingMode.PREMIUM_MONTHLY, SubscriptionStatus.LAPSED, null, null,
+                TenantStatus.ACTIVE);
+        when(tenantRepository.findById(landlordTenantId)).thenReturn(Optional.of(landlord));
+
+        TenantLeaseResponse response = service.getLease(userId);
+
+        assertTrue(response.landlordVerified());
     }
 
     @Test
@@ -169,6 +198,47 @@ class TenantPortalPremiumGateTest {
         assertEquals("#123456", response.landlordPrimaryColor());
         assertNull(response.landlordSecondaryColor());
         assertTrue(response.landlordVerified());
+    }
+
+    /**
+     * The behaviour this change exists to end: a landlord could start a free
+     * trial and immediately show a verification badge to every renter,
+     * because the portal read subscription status. Paying is not vetting.
+     */
+    @Test
+    void aTrialingLandlordWhoHasNotBeenApprovedIsNotVerified() {
+        Tenant landlord = buildLandlord(
+                BillingMode.PREMIUM_MONTHLY, SubscriptionStatus.TRIAL, null, null,
+                TenantStatus.PENDING);
+        when(tenantRepository.findById(landlordTenantId)).thenReturn(Optional.of(landlord));
+
+        TenantLeaseResponse response = service.getLease(userId);
+
+        assertFalse(response.landlordVerified());
+        assertEquals("TRIAL", response.subscriptionStatus());
+    }
+
+    @Test
+    void anApprovedLandlordStaysVerifiedEvenWithNoSubscription() {
+        Tenant landlord = buildLandlord(
+                BillingMode.COMMISSION, null, null, null, TenantStatus.ACTIVE);
+        when(tenantRepository.findById(landlordTenantId)).thenReturn(Optional.of(landlord));
+
+        TenantLeaseResponse response = service.getLease(userId);
+
+        assertTrue(response.landlordVerified());
+    }
+
+    @Test
+    void aSuspendedLandlordIsNotVerifiedEvenWhileTheSubscriptionIsActive() {
+        Tenant landlord = buildLandlord(
+                BillingMode.PREMIUM_MONTHLY, SubscriptionStatus.ACTIVE, null, null,
+                TenantStatus.SUSPENDED);
+        when(tenantRepository.findById(landlordTenantId)).thenReturn(Optional.of(landlord));
+
+        TenantLeaseResponse response = service.getLease(userId);
+
+        assertFalse(response.landlordVerified());
     }
 
     @Test
@@ -226,6 +296,28 @@ class TenantPortalPremiumGateTest {
         assertFalse(response.emergencyContact24h());
     }
 
+    /**
+     * Regression guard (2026-09-03): landlordSince used to be
+     * landlord.getCreatedAt() — when the landlord organisation signed up
+     * for RentManager — rendered on the portal as "Renting with this
+     * landlord since {date}", a claim about the RENTER's own tenancy. A
+     * landlord who joined the platform in September but has rented to this
+     * tenant since July would have shown the wrong month for something the
+     * renter can check against their own memory of moving in. It must now
+     * track the active lease's start date instead, which is what "since"
+     * actually describes — and must do so regardless of whatever
+     * getCreatedAt() would have returned, which this test never stubs.
+     */
+    @Test
+    void landlordSinceTracksTheLeaseStartDate_notTheLandlordsSignupDate() {
+        Tenant landlord = buildLandlord(BillingMode.COMMISSION, SubscriptionStatus.TRIAL, null, null);
+        when(tenantRepository.findById(landlordTenantId)).thenReturn(Optional.of(landlord));
+
+        TenantLeaseResponse response = service.getLease(userId);
+
+        assertEquals(activeLease.getStartDate().toString(), response.landlordSince());
+    }
+
     private User buildUser() {
         return User.rehydrate(
                 userId, 0L, clerkUserId, landlordTenantId,
@@ -277,7 +369,19 @@ class TenantPortalPremiumGateTest {
 
     private Tenant buildLandlord(
             BillingMode billingMode, SubscriptionStatus status, String primary, String secondary) {
+        return buildLandlord(billingMode, status, primary, secondary, TenantStatus.ACTIVE);
+    }
+
+    /**
+     * {@code onboardingStatus} is now what drives landlordVerified. It used to
+     * be derived from the subscription, which meant a five-minute-old free
+     * trial displayed a verification badge to renters.
+     */
+    private Tenant buildLandlord(
+            BillingMode billingMode, SubscriptionStatus status, String primary, String secondary,
+            TenantStatus onboardingStatus) {
         Tenant landlord = mock(Tenant.class);
+        when(landlord.getStatus()).thenReturn(onboardingStatus);
         when(landlord.getName()).thenReturn("Test Landlord");
         when(landlord.getPhoneNumber()).thenReturn("+254700000000");
         when(landlord.getEmail()).thenReturn("landlord@test.com");

@@ -19,7 +19,11 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Derived summary of all {@link RentTransaction}s posted against one
@@ -76,6 +80,11 @@ import java.util.UUID;
 @Builder
 public class RentLedgerEntry extends AggregateRoot {
 
+    // Kenya-first default, matching CreateTenantCommandHandler.DEFAULT_CURRENCY
+    // — used when a caller doesn't pass an explicit currency (see the
+    // 3-arg-shorter create() overload below).
+    private static final String DEFAULT_CURRENCY = "KES";
+
     private UUID leaseId;
     private UUID unitId;
     private UUID tenantProfileId;
@@ -86,6 +95,7 @@ public class RentLedgerEntry extends AggregateRoot {
     private BigDecimal amountPaid;
     private RentLedgerStatus status;
     private boolean prorated;
+    private String currency;
     private Long version;
     private Instant createdAt;
     private Instant updatedAt;
@@ -102,6 +112,14 @@ public class RentLedgerEntry extends AggregateRoot {
      * .postCharge(...)), so the two aggregates land atomically without this
      * domain method reaching across aggregate boundaries to construct one.
      */
+    /**
+     * Shorter overload defaulting {@code currency} to {@link #DEFAULT_CURRENCY}
+     * — most callers (including the bulk of this class's own test suite)
+     * don't need to think about currency. Real money-posting call sites
+     * (RentLedgerApplicationService.postCharge/postDeposit) use the
+     * currency-explicit overload below, sourced from the landlord's
+     * tenant.currency.
+     */
     public static RentLedgerEntry create(
             UUID tenantId,
             String correlationId,
@@ -113,6 +131,26 @@ public class RentLedgerEntry extends AggregateRoot {
             LocalDate dueDate,
             BigDecimal amountDue,
             boolean prorated
+    ) {
+        return create(
+                tenantId, correlationId, leaseId, unitId, tenantProfileId,
+                billingPeriodStart, billingPeriodEnd, dueDate, amountDue, prorated,
+                DEFAULT_CURRENCY
+        );
+    }
+
+    public static RentLedgerEntry create(
+            UUID tenantId,
+            String correlationId,
+            UUID leaseId,
+            UUID unitId,
+            UUID tenantProfileId,
+            LocalDate billingPeriodStart,
+            LocalDate billingPeriodEnd,
+            LocalDate dueDate,
+            BigDecimal amountDue,
+            boolean prorated,
+            String currency
     ) {
         if (tenantId == null) {
             throw new RentLedgerStateException("tenantId cannot be null", ErrorCode.RENT_LEDGER_ENTRY_TENANT_NULL);
@@ -152,6 +190,7 @@ public class RentLedgerEntry extends AggregateRoot {
                 .amountPaid(BigDecimal.ZERO.setScale(2))
                 .status(RentLedgerStatus.DUE)
                 .prorated(prorated)
+                .currency(currency != null ? currency : DEFAULT_CURRENCY)
                 .version(0L)
                 .createdAt(now)
                 .updatedAt(now)
@@ -187,6 +226,7 @@ public class RentLedgerEntry extends AggregateRoot {
             BigDecimal amountPaid,
             RentLedgerStatus status,
             boolean prorated,
+            String currency,
             Long version,
             Instant createdAt,
             Instant updatedAt
@@ -202,6 +242,7 @@ public class RentLedgerEntry extends AggregateRoot {
                 .amountPaid(amountPaid)
                 .status(status)
                 .prorated(prorated)
+                .currency(currency != null ? currency : DEFAULT_CURRENCY)
                 .version(version)
                 .createdAt(createdAt)
                 .updatedAt(updatedAt)
@@ -426,43 +467,72 @@ public class RentLedgerEntry extends AggregateRoot {
     }
 
     // ------------------------------------------------------------------
-    // Transaction reversal (delete support)
+    // Transaction reversal
     // ------------------------------------------------------------------
 
     /**
-     * Reverses the effect of a previously-applied transaction when it is
-     * permanently deleted from the system. No domain event is registered
-     * — we are correcting history, not applying new business state.
+     * Applies the compensating effect of {@code reversal} (a REVERSAL
+     * transaction voiding {@code original}) to this entry's amountPaid.
+     * Unlike a hard delete, {@code original} is left in place — the caller
+     * persists both rows, preserving the audit trail and keeping
+     * {@code original}'s external_reference occupying the DB's M-Pesa
+     * duplicate-callback guard so the same receipt can't be replayed after
+     * being reversed. No domain event is registered — we are correcting
+     * history, not applying new business state.
      *
-     * RENT_CHARGE cannot be removed (it is the entry's foundational charge;
-     * delete the entire entry instead). ADJUSTMENT cannot be removed
-     * because the direction (delta sign) is not stored on the transaction
-     * record — only {@code delta.abs()} is persisted.
+     * RENT_CHARGE cannot be reversed this way (it is the entry's
+     * foundational charge). ADJUSTMENT cannot be reversed either, because
+     * the direction (delta sign) is not stored on the transaction record —
+     * only {@code delta.abs()} is persisted, so there is no way to know
+     * which way to move amountDue back.
      */
-    public void removeTransaction(RentTransaction transaction) {
-        requireMatchingLedgerEntry(transaction);
+    public void reverseTransaction(RentTransaction original, RentTransaction reversal) {
+        requireMatchingLedgerEntry(original);
 
-        switch (transaction.getType()) {
+        if (reversal == null || reversal.getType() != RentTransactionType.REVERSAL) {
+            throw new RentLedgerStateException(
+                    "reversal must be a REVERSAL transaction",
+                    ErrorCode.RENT_LEDGER_ENTRY_REVERSAL_MISMATCH
+            );
+        }
+        if (!original.getId().equals(reversal.getReversesTransactionId())) {
+            throw new RentLedgerStateException(
+                    "reversal.reversesTransactionId does not match the original transaction's id",
+                    ErrorCode.RENT_LEDGER_ENTRY_REVERSAL_MISMATCH
+            );
+        }
+
+        switch (original.getType()) {
             case PAYMENT:
             case WAIVER:
             case CREDIT_APPLIED:
-            case DEPOSIT:
-                this.amountPaid = this.amountPaid.subtract(transaction.getAmount());
+                this.amountPaid = this.amountPaid.subtract(original.getAmount());
                 if (this.amountPaid.compareTo(BigDecimal.ZERO) < 0) {
                     this.amountPaid = BigDecimal.ZERO.setScale(2);
                 }
                 break;
             case REFUND:
-                this.amountPaid = this.amountPaid.add(transaction.getAmount());
+                this.amountPaid = this.amountPaid.add(original.getAmount());
                 break;
             case RENT_CHARGE:
                 throw new RentLedgerStateException(
-                        "Cannot remove RENT_CHARGE transaction; delete the entire entry instead",
+                        "Cannot reverse a RENT_CHARGE transaction",
                         ErrorCode.RENT_LEDGER_ENTRY_UNSUPPORTED_TRANSACTION_TYPE
                 );
             case ADJUSTMENT:
                 throw new RentLedgerStateException(
-                        "Cannot remove ADJUSTMENT transaction; direction (signed delta) is not stored",
+                        "Cannot reverse an ADJUSTMENT transaction; direction (signed delta) is not stored",
+                        ErrorCode.RENT_LEDGER_ENTRY_UNSUPPORTED_TRANSACTION_TYPE
+                );
+            case DEPOSIT:
+                throw new RentLedgerStateException(
+                        "Cannot reverse a DEPOSIT transaction here; it never affected amountPaid — " +
+                                "use the deposit module's own refund/forfeit instead",
+                        ErrorCode.RENT_LEDGER_ENTRY_UNSUPPORTED_TRANSACTION_TYPE
+                );
+            case REVERSAL:
+                throw new RentLedgerStateException(
+                        "Cannot reverse a REVERSAL transaction",
                         ErrorCode.RENT_LEDGER_ENTRY_UNSUPPORTED_TRANSACTION_TYPE
                 );
         }
@@ -483,6 +553,57 @@ public class RentLedgerEntry extends AggregateRoot {
     public BigDecimal getBalanceOwed() {
         BigDecimal balance = this.amountDue.subtract(this.amountPaid);
         return balance.compareTo(BigDecimal.ZERO) > 0 ? balance : BigDecimal.ZERO;
+    }
+
+    /**
+     * Recomputes what {@code amountPaid} should be from scratch by replaying
+     * every transaction posted against one entry — used by the daily
+     * reconciliation sweep (RentLedgerReconciliationScheduler) to catch any
+     * entry whose stored, denormalised amountPaid has drifted from its own
+     * transaction log. Deliberately a static, no-instance-state function
+     * (not a method on a live entry) so it can be run against a plain
+     * transaction list without needing to load or mutate the entry itself.
+     *
+     * Mirrors applyTransaction/reverseTransaction's per-type direction
+     * exactly: RENT_CHARGE and ADJUSTMENT never affect amountPaid (they
+     * affect amountDue, which is not reconciled here — ADJUSTMENT's signed
+     * delta isn't persisted, so amountDue can't be replayed from the log at
+     * all). A REVERSAL's direction is the exact inverse of whatever type it
+     * reverses, resolved by looking up that original transaction in the
+     * same list.
+     *
+     * Deliberately does NOT clamp the result at zero the way the live
+     * incremental methods do — a computed negative here is exactly the kind
+     * of drift this sweep exists to surface, not hide.
+     */
+    public static BigDecimal replayAmountPaid(List<RentTransaction> transactions) {
+        Map<UUID, RentTransaction> byId = transactions.stream()
+                .collect(Collectors.toMap(RentTransaction::getId, Function.identity()));
+
+        BigDecimal total = BigDecimal.ZERO;
+        for (RentTransaction tx : transactions) {
+            switch (tx.getType()) {
+                case PAYMENT, WAIVER, CREDIT_APPLIED -> total = total.add(tx.getAmount());
+                case REFUND -> total = total.subtract(tx.getAmount());
+                case REVERSAL -> {
+                    RentTransaction original = byId.get(tx.getReversesTransactionId());
+                    if (original == null) {
+                        continue; // orphaned reversal — shouldn't happen; leave it to the sweep's own mismatch reporting
+                    }
+                    total = switch (original.getType()) {
+                        case PAYMENT, WAIVER, CREDIT_APPLIED -> total.subtract(tx.getAmount());
+                        case REFUND -> total.add(tx.getAmount());
+                        default -> total; // RENT_CHARGE/ADJUSTMENT/DEPOSIT are never reversible — see RentLedgerEntry.reverseTransaction
+                    };
+                }
+                case RENT_CHARGE, ADJUSTMENT, DEPOSIT -> {
+                    // no-op: RENT_CHARGE/ADJUSTMENT affect amountDue, not amountPaid.
+                    // DEPOSIT is an audit-only receipt row — see RentTransaction
+                    // .reducesBalanceOwed()'s javadoc for why it was never applied here.
+                }
+            }
+        }
+        return total.setScale(2, java.math.RoundingMode.HALF_UP);
     }
 
     // ------------------------------------------------------------------

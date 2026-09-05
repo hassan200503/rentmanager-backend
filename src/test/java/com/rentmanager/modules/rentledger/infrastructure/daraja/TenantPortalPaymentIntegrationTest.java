@@ -16,6 +16,7 @@ import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaPropertie
 import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaService;
 import com.rentmanager.modules.reservation.infrastructure.daraja.MpesaCallbackPayload;
 import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
+import com.rentmanager.modules.support.MinimalTenantChainFixture;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,6 +31,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -70,7 +73,7 @@ class TenantPortalPaymentIntegrationTest extends AbstractPostgresIntegrationTest
     @Autowired
     private EntityManager entityManager;
 
-    private final UUID tenantId = UUID.randomUUID();
+    private UUID tenantId;
     private UUID entryId;
     private static final String MPESA_PHONE = "254712345678";
     private static final String CHECKOUT_REQUEST_ID = "ws_CO_" + UUID.randomUUID();
@@ -88,12 +91,29 @@ class TenantPortalPaymentIntegrationTest extends AbstractPostgresIntegrationTest
                 any(), any(), any(), any(), any(), any()
         )).thenReturn(CHECKOUT_REQUEST_ID);
 
+        MinimalTenantChainFixture.Chain chain = MinimalTenantChainFixture.persistFullChain(entityManager);
+        tenantId = chain.tenantId();
+
+        // Since V89 rent is signed with the LANDLORD's own Daraja
+        // credentials (CollectionMode.DIRECT), so a landlord who can be paid
+        // rent is one who has finished M-Pesa setup. Configured through the
+        // domain rather than the fixture's raw SQL because the credentials
+        // are encrypted at rest by DarajaCredentialEncryptionConverter —
+        // seeding ciphertext by hand would be both fragile and untrue to how
+        // they are stored.
+        com.rentmanager.modules.tenant.domain.model.Tenant landlord =
+                entityManager.find(com.rentmanager.modules.tenant.domain.model.Tenant.class, tenantId);
+        landlord.configureDarajaCredentials(
+                "it-consumer-key", "it-consumer-secret", "556677", "it-passkey");
+        entityManager.merge(landlord);
+        entityManager.flush();
+
         UUID leaseId = UUID.randomUUID();
         Lease lease = Lease.create(
                 tenantId,
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                UUID.randomUUID(),
+                chain.propertyId(),
+                chain.unitId(),
+                chain.tenantProfileId(),
                 "LSE-IT-" + UUID.randomUUID(),
                 LeaseType.FIXED_TERM,
                 BillingCycle.MONTHLY,
@@ -138,24 +158,42 @@ class TenantPortalPaymentIntegrationTest extends AbstractPostgresIntegrationTest
         assertThat(reloaded.getStatus()).isEqualTo(RentPaymentRequestStatus.PENDING);
     }
 
+    /**
+     * BEHAVIOUR CHANGE (2026-09-03). This test previously asserted the
+     * opposite — {@code initiateTwiceCreatesTwoRequests} — and passed,
+     * because nothing deduped initiation at all. That was the defect, not
+     * the contract: a renter double-tapping Pay, or reloading and trying
+     * again, could put two live STK prompts on the same ledger entry. Each
+     * needs their PIN, so neither double-charges on its own, but two
+     * completed prompts produce two genuine M-Pesa receipts and therefore a
+     * real overpayment — which the OVERPAID admin flow then has to unwind
+     * by hand. The old test documented the behaviour without asserting any
+     * requirement behind it.
+     *
+     * <p>The guard is time-boxed on purpose; see
+     * {@code RentPaymentInitiationServiceTest.anOldPendingRequestDoesNotBlockANewAttempt}
+     * for the other half — a cancelled prompt must never lock a renter out
+     * of paying, since there is no stale-request sweep to clear it.
+     */
     @Test
     @Transactional
-    void initiateTwiceCreatesTwoRequests() {
+    void initiatingTwiceInQuickSuccessionReusesTheLivePromptInsteadOfSendingASecond() {
         RentPaymentRequest first = rentPaymentInitiationService.initiate(
                 tenantId, entryId, MPESA_PHONE
         );
         entityManager.flush();
-
-        when(darajaService.initiateSTKPush(any(), any(), any(), any(), any(), any()))
-                .thenReturn("ws_CO_second_" + UUID.randomUUID());
 
         RentPaymentRequest second = rentPaymentInitiationService.initiate(
                 tenantId, entryId, MPESA_PHONE
         );
         entityManager.flush();
 
-        assertThat(first.getId()).isNotEqualTo(second.getId());
-        assertThat(first.getMpesaCheckoutRequestId()).isNotEqualTo(second.getMpesaCheckoutRequestId());
+        assertThat(second.getId()).isEqualTo(first.getId());
+        assertThat(second.getMpesaCheckoutRequestId()).isEqualTo(first.getMpesaCheckoutRequestId());
+
+        // The renter's phone must have been prompted exactly once.
+        verify(darajaService, times(1))
+                .initiateSTKPush(any(), any(), any(), any(), any(), any());
     }
 
     @Test

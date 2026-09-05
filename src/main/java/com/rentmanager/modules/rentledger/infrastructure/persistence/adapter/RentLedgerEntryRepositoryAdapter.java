@@ -9,6 +9,7 @@ import com.rentmanager.modules.rentledger.infrastructure.persistence.repository.
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -38,8 +39,22 @@ public class RentLedgerEntryRepositoryAdapter implements RentLedgerEntryReposito
     }
 
     @Override
+    public Optional<RentLedgerEntry> findByIdAndTenantIdForUpdate(UUID id, UUID tenantId) {
+        return jpaRepository.findByIdAndTenantIdForUpdate(id, tenantId).map(mapper::toDomain);
+    }
+
+    @Override
     public List<RentLedgerEntry> findAllByTenant(UUID tenantId) {
         return jpaRepository.findAllByTenantId(tenantId).stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    public List<RentLedgerEntry> findAllByTenantAndIdIn(UUID tenantId, List<UUID> ids) {
+        // An IN () with no values is a syntax error on Postgres.
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return jpaRepository.findAllByTenantIdAndIdIn(tenantId, ids).stream().map(mapper::toDomain).toList();
     }
 
     @Override
@@ -74,6 +89,19 @@ public class RentLedgerEntryRepositoryAdapter implements RentLedgerEntryReposito
             List<RentLedgerStatus> statuses, LocalDate cutoffDate) {
         return jpaRepository.findAllByStatusInAndDueDateLessThanEqual(statuses, cutoffDate)
                 .stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    public List<RentLedgerEntry> findAllByStatusInAndDueDateBetween(
+            List<RentLedgerStatus> statuses, LocalDate fromInclusive, LocalDate toInclusive) {
+        return jpaRepository
+                .findAllByStatusInAndDueDateBetween(statuses, fromInclusive, toInclusive)
+                .stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    public List<RentLedgerEntry> findAllByUpdatedAtAfter(Instant threshold) {
+        return jpaRepository.findAllByUpdatedAtAfter(threshold).stream().map(mapper::toDomain).toList();
     }
 
     @Override

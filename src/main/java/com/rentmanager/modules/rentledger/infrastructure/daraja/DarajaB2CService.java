@@ -1,6 +1,7 @@
 package com.rentmanager.modules.rentledger.infrastructure.daraja;
 
 import com.rentmanager.modules.integration.bridge.PlatformDarajaCredentialsResolver;
+import com.rentmanager.modules.notification.sms.PhoneMasker;
 import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -96,7 +97,7 @@ public class DarajaB2CService {
         }
 
         log.info("B2C initiated. OriginatorConversationID={} Amount={} Recipient={}",
-                originatorConversationId, amount, phone);
+                originatorConversationId, amount, PhoneMasker.mask(phone));
         return originatorConversationId;
     }
 

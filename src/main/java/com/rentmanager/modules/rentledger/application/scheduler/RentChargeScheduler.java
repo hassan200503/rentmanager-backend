@@ -59,7 +59,7 @@ public class RentChargeScheduler {
     private final RentLedgerEntryRepository rentLedgerEntryRepository;
     private final RentLedgerApplicationService rentLedgerApplicationService;
 
-    @Scheduled(cron = "0 0 2 * * *") // 2:00 AM daily — after lease activation (1:00) and expiry (1:30) sweeps
+    @Scheduled(cron = "0 0 2 * * *", zone = "Africa/Nairobi") // 2:00 AM daily — after lease activation (1:00) and expiry (1:30) sweeps
     public void runDaily() {
         List<Lease> leases = leaseRepository.findAllByStatusIn(
                 List.of(LeaseStatus.ACTIVE, LeaseStatus.RENEWED)

@@ -6,10 +6,13 @@ import com.rentmanager.modules.unit.application.dto.request.CreateUnitRequest;
 import com.rentmanager.modules.unit.application.dto.request.UpdateUnitRequest;
 import com.rentmanager.modules.unit.application.dto.response.UnitResponse;
 import com.rentmanager.modules.unit.factory.UnitTestDataFactory;
+import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.util.*;
@@ -24,8 +27,29 @@ class UnitConcurrencyTest extends AbstractPostgresIntegrationTest {
     @Autowired
     private UnitCommandService service;
 
+    @Autowired
+    private EntityManager entityManager;
+
+    @Autowired
+    private TransactionTemplate transactionTemplate;
+
     private final UUID tenantId = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private final UUID propertyId = UUID.fromString("22222222-2222-2222-2222-222222222222");
+
+    @BeforeEach
+    void seedTenantAndProperty() {
+        // units.tenant_id/property_id now carry real foreign keys (V72-V73) —
+        // pin a tenant/property to the fixed UUIDs this test already uses
+        // throughout. UnitIntegrationTest and UnitPerformanceTest reuse the
+        // exact same constants, hence the idempotent ON CONFLICT DO NOTHING.
+        // This test method has no @Transactional (its 20 concurrent worker
+        // threads each need their own independently-committing transaction
+        // via the service layer), so a plain EntityManager write here has no
+        // active transaction to run in — TransactionTemplate opens and
+        // commits one explicitly instead.
+        transactionTemplate.executeWithoutResult(status ->
+                com.rentmanager.modules.support.MinimalTenantChainFixture.ensureTenantAndProperty(entityManager, tenantId, propertyId));
+    }
 
     @Test
     void should_handle_concurrent_unit_creation_without_unique_constraint_breaks() throws Exception {

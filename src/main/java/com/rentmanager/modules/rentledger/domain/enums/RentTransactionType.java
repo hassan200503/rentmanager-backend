@@ -31,5 +31,16 @@ public enum RentTransactionType {
     ADJUSTMENT,
 
     /** Reduces the balance owed. A security deposit payment received via the reservation flow. */
-    DEPOSIT
+    DEPOSIT,
+
+    /**
+     * Voids a previously-posted transaction without deleting it — see
+     * {@code RentTransaction#reversesTransactionId}. Moves the balance the
+     * exact opposite direction of the transaction it reverses (e.g.
+     * reversing a PAYMENT reduces amount_paid back down; reversing a REFUND
+     * increases it back up). Only PAYMENT, WAIVER, CREDIT_APPLIED, DEPOSIT
+     * and REFUND can be reversed this way — RENT_CHARGE and ADJUSTMENT
+     * cannot (see {@code RentLedgerEntry#reverseTransaction} for why).
+     */
+    REVERSAL
 }

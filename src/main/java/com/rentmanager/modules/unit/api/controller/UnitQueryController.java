@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -25,6 +26,28 @@ import java.util.UUID;
  * previously allowed any authenticated user to read any other tenant's unit
  * data by simply setting a header (confirmed cross-tenant IDOR).
  */
+/**
+ * Read side of the landlord unit API.
+ *
+ * <h2>Class-level authorisation</h2>
+ * Every method here reads tenant-owned data and scopes by
+ * {@code TenantContext.getTenantId()}, but none carried a {@code @PreAuthorize}
+ * — while the sibling {@code UnitCommandController} gates all seven of its
+ * methods. The backend's own rule is that a controller touching tenant data
+ * needs both, and only one half was present.
+ *
+ * <p>It was not an active leak: {@code getTenantId()} throws
+ * {@code TenantContextNotBoundException} when nothing is bound, so a renter or
+ * an onboarding user hit a failure rather than another landlord's units. But
+ * they received an error where they should have received a 403, and the
+ * protection rested entirely on that throw — one refactor to
+ * {@code getTenantIdOrNull()} away from returning data.
+ *
+ * <p>STAFF is included, unlike the command controller. A caretaker needs to
+ * see the units they look after; creating and editing them is a different
+ * decision, which is why the write side stops at MANAGER.
+ */
+@PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping(UnitRoutes.BASE)
@@ -103,6 +126,23 @@ public class UnitQueryController {
         return ResponseEntity.ok(
                 ApiResponse.ok("Units retrieved successfully", response)
         );
+    }
+
+    /**
+     * Occupied/total units per property.
+     *
+     * <p>Tenant comes from {@code TenantContext} (the verified JWT), like
+     * every other method on this controller — there is no landlord id in the
+     * path for a caller to substitute.
+     */
+    @GetMapping("/occupancy-by-property")
+    public ResponseEntity<ApiResponse<java.util.List<com.rentmanager.modules.unit.application.dto.response.PropertyOccupancyResponse>>>
+            getOccupancyByProperty() {
+        UUID tenantId = TenantContext.getTenantId();
+
+        return ResponseEntity.ok(ApiResponse.ok(
+                "Property occupancy retrieved successfully",
+                unitQueryService.getOccupancyByProperty(tenantId)));
     }
 
     @GetMapping("/summary")

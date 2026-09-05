@@ -1,5 +1,6 @@
 package com.rentmanager.modules.rentledger.application.service;
 
+import com.rentmanager.modules.deposit.application.service.DepositCommandService;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.rentledger.domain.enums.RentTransactionSource;
@@ -9,6 +10,7 @@ import com.rentmanager.modules.rentledger.domain.model.RentLedgerEntry;
 import com.rentmanager.modules.rentledger.domain.model.RentTransaction;
 import com.rentmanager.modules.rentledger.domain.repository.RentLedgerEntryRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentTransactionRepository;
+import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import com.rentmanager.shared.events.DomainEventPublisher;
 import com.rentmanager.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -53,6 +55,8 @@ public class RentLedgerApplicationService {
     private final RentLedgerEntryRepository rentLedgerEntryRepository;
     private final RentTransactionRepository rentTransactionRepository;
     private final LeaseRepository leaseRepository;
+    private final TenantRepository tenantRepository;
+    private final DepositCommandService depositCommandService;
     private final DomainEventPublisher eventPublisher;
 
     // ------------------------------------------------------------------
@@ -113,6 +117,8 @@ public class RentLedgerApplicationService {
                 ? prorate(lease.getRentAmount(), billingPeriodStart)
                 : lease.getRentAmount();
 
+        String currency = resolveCurrency(tenantId);
+
         RentLedgerEntry entry = RentLedgerEntry.create(
                 tenantId,
                 correlationId,
@@ -123,8 +129,12 @@ public class RentLedgerApplicationService {
                 billingPeriodEnd,
                 dueDate,
                 amountDue,
-                prorated
+                prorated,
+                currency
         );
+        // Drained before the save: save() returns a rehydrated instance with
+        // an empty event list, so the creation event would otherwise be lost.
+        List<com.rentmanager.domain.base.DomainEvent> pending = entry.pullDomainEvents();
         entry = rentLedgerEntryRepository.save(entry);
 
         RentTransaction chargeTransaction = RentTransaction.create(
@@ -136,7 +146,8 @@ public class RentLedgerApplicationService {
                 null, // no external reference — system-posted, not tied to a payment gateway callback
                 RentTransactionSource.SYSTEM,
                 "SYSTEM",
-                billingPeriodStart.atStartOfDay()
+                billingPeriodStart.atStartOfDay(),
+                currency
         );
         rentTransactionRepository.save(chargeTransaction);
 
@@ -145,18 +156,26 @@ public class RentLedgerApplicationService {
         // entry rather than sitting on the old entry permanently.
         autoCreditOverpayment(tenantId, correlationId, leaseId, billingPeriodStart, entry);
 
-        publish(entry);
+        publish(entry, pending);
         return entry;
     }
 
     /**
-     * Posts a DEPOSIT transaction against the first ledger entry for the
-     * given lease. The deposit was already collected via M-Pesa during the
-     * reservation flow; this records it in the rent ledger so the deposit
-     * appears as a "Deposit" row in the transactions dashboard.
+     * Records a security deposit that was already collected (via M-Pesa
+     * during the reservation flow, or by a landlord activating a lease with
+     * a deposit already in hand). Posts a DEPOSIT-type RentTransaction so
+     * the deposit still appears as a "Deposit" row in the transactions
+     * dashboard, and creates the actual held-deposit record via
+     * DepositCommandService — that Deposit aggregate (paid/refunded/
+     * forfeited) is the real system of record for the money, not this
+     * ledger row. The DEPOSIT transaction here is audit-only: it does NOT
+     * affect the entry's amountPaid/status (see RentTransaction
+     * .reducesBalanceOwed()'s javadoc for why a deposit must never be
+     * counted as rent revenue).
      *
      * Idempotent: if a DEPOSIT transaction already exists for this lease
-     * (checked by externalReference), this is a no-op.
+     * (checked by externalReference), this is a no-op. recordAlreadyCollectedDeposit
+     * carries its own, separate idempotency guard.
      */
     @Transactional
     public void postDeposit(
@@ -202,10 +221,12 @@ public class RentLedgerApplicationService {
                     ? prorate(lease.getRentAmount(), billingPeriodStart)
                     : lease.getRentAmount();
 
+            String currency = resolveCurrency(tenantId);
+
             entry = RentLedgerEntry.create(
                     tenantId, correlationId, leaseId, lease.getUnitId(),
                     lease.getTenantProfileId(), billingPeriodStart, billingPeriodEnd,
-                    billingPeriodStart, amountDue, prorated
+                    billingPeriodStart, amountDue, prorated, currency
             );
             entry = rentLedgerEntryRepository.save(entry);
 
@@ -213,7 +234,7 @@ public class RentLedgerApplicationService {
                     tenantId, entry.getId(), leaseId,
                     RentTransactionType.RENT_CHARGE, amountDue,
                     null, RentTransactionSource.SYSTEM, "SYSTEM",
-                    billingPeriodStart.atStartOfDay()
+                    billingPeriodStart.atStartOfDay(), currency
             );
             rentTransactionRepository.save(chargeTransaction);
         } else {
@@ -233,10 +254,9 @@ public class RentLedgerApplicationService {
                 depositRef,
                 source,
                 "SYSTEM",
-                LocalDateTime.now()
+                LocalDateTime.now(),
+                entry.getCurrency()
         );
-
-        entry.applyTransaction(correlationId, depositTransaction);
 
         try {
             rentTransactionRepository.save(depositTransaction);
@@ -245,8 +265,9 @@ public class RentLedgerApplicationService {
             return;
         }
 
-        rentLedgerEntryRepository.save(entry);
-        publish(entry);
+        depositCommandService.recordAlreadyCollectedDeposit(
+                tenantId, leaseId, entry.getUnitId(), entry.getTenantProfileId(), depositAmount, correlationId
+        );
     }
 
     /**
@@ -322,7 +343,8 @@ public class RentLedgerApplicationService {
                 externalReference,
                 source,
                 recordedBy,
-                occurredAt
+                occurredAt,
+                entry.getCurrency()
         );
 
         entry.applyTransaction(correlationId, transaction);
@@ -342,8 +364,9 @@ public class RentLedgerApplicationService {
                     .orElseThrow(() -> entryNotFound(ledgerEntryId));
         }
 
+        List<com.rentmanager.domain.base.DomainEvent> pending = entry.pullDomainEvents();
         entry = rentLedgerEntryRepository.save(entry);
-        publish(entry);
+        publish(entry, pending);
         return entry;
     }
 
@@ -379,14 +402,16 @@ public class RentLedgerApplicationService {
                 null,
                 RentTransactionSource.ADMIN_ADJUSTMENT,
                 recordedBy,
-                occurredAt
+                occurredAt,
+                entry.getCurrency()
         );
 
         entry.applyAdjustment(correlationId, transaction, delta);
 
         rentTransactionRepository.save(transaction);
+        List<com.rentmanager.domain.base.DomainEvent> pending = entry.pullDomainEvents();
         entry = rentLedgerEntryRepository.save(entry);
-        publish(entry);
+        publish(entry, pending);
         return entry;
     }
 
@@ -406,8 +431,9 @@ public class RentLedgerApplicationService {
 
         entry.markOverdue(correlationId, daysOverdue);
 
+        List<com.rentmanager.domain.base.DomainEvent> pending = entry.pullDomainEvents();
         entry = rentLedgerEntryRepository.save(entry);
-        publish(entry);
+        publish(entry, pending);
         return entry;
     }
 
@@ -437,7 +463,8 @@ public class RentLedgerApplicationService {
                 externalReference,
                 source,
                 recordedBy,
-                occurredAt
+                occurredAt,
+                entry.getCurrency()
         );
 
         entry.resolveOverpaymentWithRefund(refundTransaction);
@@ -481,7 +508,8 @@ public class RentLedgerApplicationService {
                 null,
                 RentTransactionSource.ADMIN_ADJUSTMENT,
                 recordedBy,
-                occurredAt
+                occurredAt,
+                targetEntry.getCurrency()
         );
 
         targetEntry.applyTransaction(correlationId, creditTransaction);
@@ -497,35 +525,55 @@ public class RentLedgerApplicationService {
     }
 
     // ------------------------------------------------------------------
-    // Transaction deletion (permanent delete from system)
+    // Transaction reversal (never a hard delete — see RentTransaction's
+    // append-only contract)
     // ------------------------------------------------------------------
 
     /**
-     * Permanently deletes a transaction and recalculates the parent ledger
-     * entry's {@code amountPaid} and {@code status} to reflect the removal.
+     * Voids a transaction by posting a compensating REVERSAL transaction
+     * against it, rather than deleting it. Recalculates the parent ledger
+     * entry's {@code amountPaid} and {@code status} to reflect the reversal.
+     * Both the original and the reversal row remain in the table
+     * afterward, so the original's {@code external_reference} keeps
+     * blocking replay of the same M-Pesa receipt.
      *
-     * RENT_CHARGE transactions cannot be deleted (the entry must remain
-     * intact). ADJUSTMENT transactions cannot be deleted because the
-     * direction (signed delta) is not stored on the transaction record.
+     * RENT_CHARGE transactions cannot be reversed this way (the entry must
+     * remain intact). ADJUSTMENT transactions cannot be reversed because
+     * the direction (signed delta) is not stored on the transaction record.
+     * Idempotent: reversing an already-reversed transaction is a no-op.
      */
     @Transactional
-    public void deleteTransaction(UUID tenantId, UUID transactionId) {
-        RentTransaction transaction = rentTransactionRepository.findByIdAndTenantId(transactionId, tenantId)
+    public void reverseTransaction(UUID tenantId, UUID transactionId, String recordedBy) {
+        RentTransaction original = rentTransactionRepository.findByIdAndTenantId(transactionId, tenantId)
                 .orElseThrow(() -> new RentLedgerStateException(
                         "transaction not found: " + transactionId,
-                        ErrorCode.RESOURCE_NOT_FOUND
+                        ErrorCode.RENT_TRANSACTION_NOT_FOUND
                 ));
+
+        if (rentTransactionRepository.findByReversesTransactionId(tenantId, original.getId()).isPresent()) {
+            log.info("reverseTransaction is a no-op: transactionId={} already has a reversal posted", transactionId);
+            return;
+        }
 
         RentLedgerEntry entry = rentLedgerEntryRepository.findByIdAndTenantId(
-                        transaction.getLedgerEntryId(), tenantId)
+                        original.getLedgerEntryId(), tenantId)
                 .orElseThrow(() -> new RentLedgerStateException(
-                        "rent ledger entry not found: " + transaction.getLedgerEntryId(),
+                        "rent ledger entry not found: " + original.getLedgerEntryId(),
                         ErrorCode.RESOURCE_NOT_FOUND
                 ));
 
-        entry.removeTransaction(transaction);
+        RentTransaction reversal = RentTransaction.reversalOf(original, tenantId, recordedBy, LocalDateTime.now());
 
-        rentTransactionRepository.deleteById(transaction.getId());
+        entry.reverseTransaction(original, reversal);
+
+        try {
+            rentTransactionRepository.save(reversal);
+        } catch (DataIntegrityViolationException e) {
+            log.info("reverseTransaction: uk_rent_transactions_reverses_transaction_id caught a concurrent " +
+                            "duplicate reversal. tenantId={} transactionId={}", tenantId, transactionId);
+            return;
+        }
+
         rentLedgerEntryRepository.save(entry);
     }
 
@@ -569,10 +617,53 @@ public class RentLedgerApplicationService {
         }
     }
 
+    /**
+     * Publishes events drained from the aggregate BEFORE it was saved, plus
+     * anything registered on it since.
+     *
+     * <p>{@code RentLedgerEntryRepositoryAdapter.save()} returns
+     * {@code mapper.toDomain(saved)} — a rehydrated instance whose
+     * {@code AggregateRoot.domainEvents} list is new and empty. So
+     * {@code entry = repository.save(entry); publish(entry);} pulled events
+     * from an object that never had any, and published nothing at all. Every
+     * downstream listener was silently dead: no tax invoice was ever
+     * generated from a rent payment, and no payment notification was ever
+     * sent. The reservation module hit this exact bug and documents it on
+     * {@code UnitReservationTransactionService}; this is the same mistake in
+     * the rent ledger.
+     *
+     * <p>Draining before the save is what makes it correct. Anything the
+     * post-save instance accumulated afterwards is still collected here, so
+     * ordering and completeness both hold.
+     */
+    private void publish(RentLedgerEntry entry, List<com.rentmanager.domain.base.DomainEvent> pending) {
+        List<com.rentmanager.domain.base.DomainEvent> events = new ArrayList<>(pending);
+        events.addAll(entry.pullDomainEvents());
+        if (!events.isEmpty()) {
+            eventPublisher.publishAll(events);
+        }
+    }
+
     private RentLedgerStateException entryNotFound(UUID ledgerEntryId) {
         return new RentLedgerStateException(
                 "rent ledger entry not found: " + ledgerEntryId,
                 ErrorCode.RESOURCE_NOT_FOUND
         );
+    }
+
+    /**
+     * The landlord's configured currency, read once per ledger-entry-creating
+     * call and then carried onto every RentTransaction posted against that
+     * entry (see the currency-explicit RentLedgerEntry/RentTransaction
+     * create() overloads) rather than re-looked-up per transaction — a
+     * ledger entry's currency doesn't change transaction to transaction.
+     * Falls back to "KES" if the tenant has none set, matching
+     * CreateTenantCommandHandler's own default for new tenants.
+     */
+    private String resolveCurrency(UUID tenantId) {
+        return tenantRepository.findById(tenantId)
+                .map(com.rentmanager.modules.tenant.domain.model.Tenant::getCurrency)
+                .filter(currency -> currency != null && !currency.isBlank())
+                .orElse("KES");
     }
 }

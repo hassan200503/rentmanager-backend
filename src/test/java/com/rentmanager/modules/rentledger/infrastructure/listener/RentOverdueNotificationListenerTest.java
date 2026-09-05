@@ -6,6 +6,8 @@ import com.rentmanager.modules.notification.sms.SmsService;
 import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.modules.rentledger.domain.events.RentOverdueDetected;
+import com.rentmanager.modules.rentledger.domain.model.RentLedgerEntry;
+import com.rentmanager.modules.rentledger.domain.repository.RentLedgerEntryRepository;
 import com.rentmanager.modules.tenant.domain.model.Tenant;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
@@ -29,6 +31,7 @@ class RentOverdueNotificationListenerTest {
     private PropertyRepository propertyRepository;
     private TenantRepository tenantRepository;
     private TenantProfileRepository tenantProfileRepository;
+    private RentLedgerEntryRepository rentLedgerEntryRepository;
     private SmsService smsService;
     private RentOverdueNotificationListener listener;
 
@@ -37,6 +40,7 @@ class RentOverdueNotificationListenerTest {
     private final UUID tenantProfileId = UUID.randomUUID();
     private final UUID unitId = UUID.randomUUID();
     private final UUID propertyId = UUID.randomUUID();
+    private final UUID entryId = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
@@ -45,15 +49,17 @@ class RentOverdueNotificationListenerTest {
         propertyRepository = mock(PropertyRepository.class);
         tenantRepository = mock(TenantRepository.class);
         tenantProfileRepository = mock(TenantProfileRepository.class);
+        rentLedgerEntryRepository = mock(RentLedgerEntryRepository.class);
         smsService = mock(SmsService.class);
         listener = new RentOverdueNotificationListener(
                 leaseRepository, unitRepository, propertyRepository,
-                tenantRepository, tenantProfileRepository, smsService);
+                tenantRepository, tenantProfileRepository,
+                rentLedgerEntryRepository, smsService);
     }
 
     @Test
-    void sendsOverdueReminderToTenantAndLandlord() {
-        RentOverdueDetected event = new RentOverdueDetected(tenantId, UUID.randomUUID(), "corr",
+    void notifiesTheLandlordOnly_becauseTheReminderCadenceOwnsRenterMessaging() {
+        RentOverdueDetected event = new RentOverdueDetected(tenantId, entryId, "corr",
                 leaseId, tenantProfileId, 3);
 
         Lease lease = mockLease();
@@ -61,7 +67,9 @@ class RentOverdueNotificationListenerTest {
         Unit unit = mockUnit("A101");
         Property property = mockProperty("X");
         Tenant landlord = mockLandlord("+254700000000");
+        RentLedgerEntry entry = mockEntry(new BigDecimal("15000"));
 
+        when(rentLedgerEntryRepository.findByIdAndTenantId(entryId, tenantId)).thenReturn(Optional.of(entry));
         when(leaseRepository.findByIdAndTenantId(leaseId, tenantId)).thenReturn(Optional.of(lease));
         when(tenantProfileRepository.findById(tenantProfileId)).thenReturn(Optional.of(profile));
         when(unitRepository.findByIdAndTenantId(unitId, tenantId)).thenReturn(Optional.of(unit));
@@ -70,14 +78,20 @@ class RentOverdueNotificationListenerTest {
 
         listener.onRentOverdueDetected(event);
 
-        verify(smsService).sendRentOverdueReminder(eq("+254712345678"), eq("15,000"), eq("3"));
         verify(smsService).sendRentOverdueNotificationToLandlord(
-                eq("+254700000000"), eq("John Doe"), eq("15,000"), eq("A101"), eq("3"));
+                eq("+254700000000"), eq("John Doe"), eq("KSh 15,000.00"), eq("A101"), eq("3"));
+
+        // The renter hears about this from RentReminderService instead, which
+        // deduplicates at the database and records what it said. Sending here
+        // too would contact them twice for one event: Lease.gracePeriodDays is
+        // nullable and treated as zero, so this fires on day +1, exactly where
+        // the cadence's OVERDUE_1 milestone sits.
+        verify(smsService, never()).sendRentOverdueReminder(anyString(), anyString(), anyString());
     }
 
     @Test
-    void doesNotSendToLandlord_whenPhoneIsBlank() {
-        RentOverdueDetected event = new RentOverdueDetected(tenantId, UUID.randomUUID(), "corr",
+    void sendsNothingWhenTheLandlordHasNoPhoneNumber() {
+        RentOverdueDetected event = new RentOverdueDetected(tenantId, entryId, "corr",
                 leaseId, tenantProfileId, 3);
 
         Lease lease = mockLease();
@@ -85,7 +99,9 @@ class RentOverdueNotificationListenerTest {
         Unit unit = mockUnit("A101");
         Property property = mockProperty("X");
         Tenant landlord = mockLandlord("  ");
+        RentLedgerEntry entry = mockEntry(new BigDecimal("15000"));
 
+        when(rentLedgerEntryRepository.findByIdAndTenantId(entryId, tenantId)).thenReturn(Optional.of(entry));
         when(leaseRepository.findByIdAndTenantId(leaseId, tenantId)).thenReturn(Optional.of(lease));
         when(tenantProfileRepository.findById(tenantProfileId)).thenReturn(Optional.of(profile));
         when(unitRepository.findByIdAndTenantId(unitId, tenantId)).thenReturn(Optional.of(unit));
@@ -94,13 +110,13 @@ class RentOverdueNotificationListenerTest {
 
         listener.onRentOverdueDetected(event);
 
-        verify(smsService).sendRentOverdueReminder(anyString(), anyString(), anyString());
         verify(smsService, never()).sendRentOverdueNotificationToLandlord(anyString(), anyString(), anyString(), anyString(), anyString());
+        verify(smsService, never()).sendRentOverdueReminder(anyString(), anyString(), anyString());
     }
 
     @Test
     void swallowsException_whenLeaseNotFound() {
-        RentOverdueDetected event = new RentOverdueDetected(tenantId, UUID.randomUUID(), "corr",
+        RentOverdueDetected event = new RentOverdueDetected(tenantId, entryId, "corr",
                 leaseId, tenantProfileId, 3);
 
         when(leaseRepository.findByIdAndTenantId(leaseId, tenantId)).thenReturn(Optional.empty());
@@ -115,7 +131,6 @@ class RentOverdueNotificationListenerTest {
         when(lease.getId()).thenReturn(leaseId);
         when(lease.getTenantId()).thenReturn(tenantId);
         when(lease.getUnitId()).thenReturn(unitId);
-        when(lease.getRentAmount()).thenReturn(new BigDecimal("15000"));
         return lease;
     }
 
@@ -137,6 +152,13 @@ class RentOverdueNotificationListenerTest {
         Property p = mock(Property.class);
         when(p.getName()).thenReturn(name);
         return p;
+    }
+
+    private RentLedgerEntry mockEntry(java.math.BigDecimal balanceOwed) {
+        RentLedgerEntry entry = mock(RentLedgerEntry.class);
+        when(entry.getBalanceOwed()).thenReturn(balanceOwed);
+        when(entry.getCurrency()).thenReturn("KES");
+        return entry;
     }
 
     private Tenant mockLandlord(String phone) {

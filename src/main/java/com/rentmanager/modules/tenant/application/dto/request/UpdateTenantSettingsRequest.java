@@ -9,9 +9,9 @@ public class UpdateTenantSettingsRequest {
     private String currency;
     private String locale;
 
-    private Boolean emailNotificationsEnabled;
-    private Boolean smsNotificationsEnabled;
-    private Boolean pushNotificationsEnabled;
+    // REMOVED: the three notification booleans. They were accepted, ignored,
+    // and had no column behind them. Accepting a field and discarding it is
+    // worse than rejecting it — the caller believes the setting saved.
 
     private Boolean maintenanceModuleEnabled;
     private Boolean accountingModuleEnabled;

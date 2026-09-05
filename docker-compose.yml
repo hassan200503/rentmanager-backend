@@ -1,4 +1,15 @@
-version: "3.9"
+# Local development dependencies for RentManager.
+#
+# PostgreSQL is the only service the application actually connects to.
+#
+# Redis, Zookeeper and Kafka were previously defined here and were removed:
+# pom.xml declares no Redis, Kafka or Spring Cloud Stream client, and nothing
+# in src/main/java references them. They cost memory and ports and implied a
+# streaming architecture the system does not have. Asynchronous work is done
+# with a transactional outbox (notification_deliveries, announcement_deliveries)
+# drained by @Scheduled sweeps — the right pattern at this scale, and it needs
+# no broker. If a broker is ever genuinely required, add it back together with
+# the dependency and the code that uses it, in the same change.
 
 services:
 
@@ -18,32 +29,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-
-  redis:
-    image: redis:7-alpine
-    container_name: rentmanager-redis
-    ports:
-      - "6379:6379"
-
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.5.0
-    container_name: rentmanager-zookeeper
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-    ports:
-      - "2181:2181"
-
-  kafka:
-    image: confluentinc/cp-kafka:7.5.0
-    container_name: rentmanager-kafka
-    depends_on:
-      - zookeeper
-    environment:
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-    ports:
-      - "9092:9092"
 
 volumes:
   rm_postgres_data:

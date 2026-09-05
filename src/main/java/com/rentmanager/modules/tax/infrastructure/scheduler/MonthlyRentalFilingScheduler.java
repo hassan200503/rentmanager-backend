@@ -8,6 +8,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
@@ -32,9 +33,12 @@ public class MonthlyRentalFilingScheduler {
     private final ResidentialRentPaymentAggregationPort residentialPayments;
     private final MonthlyRentalFilingComputationService computationService;
 
-    @Scheduled(cron = "0 0 4 1 * *") // 04:00 on the 1st of every month
+    @Scheduled(cron = "0 0 4 1 * *", zone = "Africa/Nairobi") // 04:00 on the 1st of every month
     public void computePreviousMonthFilings() {
-        LocalDate today = LocalDate.now();
+        // The cron is pinned to Nairobi and this must agree with it: at 04:00
+        // Nairobi it is still the previous day in UTC, so an unzoned now()
+        // would compute the wrong previous month.
+        LocalDate today = LocalDate.now(ZoneId.of("Africa/Nairobi"));
         LocalDate previousMonthStart = today.minusMonths(1).withDayOfMonth(1);
 
         List<UUID> tenantIds = residentialPayments

@@ -3,9 +3,10 @@ package com.rentmanager.modules.lease.repository;
 import com.rentmanager.modules.lease.domain.enums.*;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
+import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
+import com.rentmanager.modules.support.MinimalTenantChainFixture;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,10 +19,9 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 @Transactional
-class LeaseRepositoryTest {
+class LeaseRepositoryTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
     private LeaseRepository leaseRepository;
@@ -36,10 +36,11 @@ class LeaseRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        tenantId = UUID.randomUUID();
-        propertyId = UUID.randomUUID();
-        unitId = UUID.randomUUID();
-        tenantProfileId = UUID.randomUUID();
+        MinimalTenantChainFixture.Chain chain = MinimalTenantChainFixture.persistFullChain(entityManager);
+        tenantId = chain.tenantId();
+        propertyId = chain.propertyId();
+        unitId = chain.unitId();
+        tenantProfileId = chain.tenantProfileId();
     }
 
     private Lease createLease() {
@@ -79,8 +80,8 @@ class LeaseRepositoryTest {
     @Test
     void shouldIsolateLeasesByTenant() {
 
-        UUID tenantA = UUID.randomUUID();
-        UUID tenantB = UUID.randomUUID();
+        UUID tenantA = MinimalTenantChainFixture.persistTenant(entityManager);
+        UUID tenantB = MinimalTenantChainFixture.persistTenant(entityManager);
 
         Lease leaseA = Lease.create(
                 tenantA, propertyId, unitId, tenantProfileId,
@@ -143,8 +144,8 @@ class LeaseRepositoryTest {
     @Test
     void shouldNeverLeakLeasesAcrossTenantsEvenInMixedDataSet() {
 
-        UUID tenantA = UUID.randomUUID();
-        UUID tenantB = UUID.randomUUID();
+        UUID tenantA = MinimalTenantChainFixture.persistTenant(entityManager);
+        UUID tenantB = MinimalTenantChainFixture.persistTenant(entityManager);
 
         Lease leaseA1 = Lease.create(
                 tenantA, propertyId, unitId, tenantProfileId,
@@ -251,7 +252,7 @@ class LeaseRepositoryTest {
     @Test
     void shouldReturnOnlyActiveLeases() {
 
-        UUID tenantId = UUID.randomUUID();
+        UUID tenantId = MinimalTenantChainFixture.persistTenant(entityManager);
 
         Lease activeLease = Lease.create(
                 tenantId,

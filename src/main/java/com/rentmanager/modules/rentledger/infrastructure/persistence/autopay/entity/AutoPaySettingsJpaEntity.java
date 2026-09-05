@@ -38,4 +38,7 @@ public class AutoPaySettingsJpaEntity extends BaseTenantEntity {
 
     @Column(name = "last_attempt_at")
     private LocalDateTime lastAttemptAt;
+
+    @Column(name = "last_failure_reason", length = 255)
+    private String lastFailureReason;
 }

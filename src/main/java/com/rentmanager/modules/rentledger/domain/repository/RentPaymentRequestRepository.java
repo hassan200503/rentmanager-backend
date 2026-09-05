@@ -25,4 +25,18 @@ public interface RentPaymentRequestRepository {
     Optional<RentPaymentRequest> findByMpesaCheckoutRequestId(String checkoutRequestId);
 
     List<RentPaymentRequest> findByStatusAndCreatedAtBefore(RentPaymentRequestStatus status, Instant cutoff);
+
+    /**
+     * The most recent still-PENDING request against one ledger entry, used to
+     * stop a second STK push being sent while the first is still live.
+     *
+     * <p>Without this, nothing deduped initiation: auto-pay re-sent a prompt
+     * every morning for as long as an entry stayed unpaid, and a renter who
+     * reloaded the payment page could start a second push by hand. Neither
+     * double-charges by itself — each push needs the renter's PIN — but two
+     * completed pushes produce two genuine M-Pesa receipts and therefore a
+     * real overpayment, which is then only recoverable through the OVERPAID
+     * admin resolution rather than prevented.
+     */
+    Optional<RentPaymentRequest> findLatestPendingForEntry(UUID tenantId, UUID rentLedgerEntryId);
 }

@@ -23,6 +23,13 @@ public final class IntegrationDtos {
             String placeholder
     ) {}
 
+    public record TestTargetView(
+            String kind,
+            boolean required,
+            String label,
+            String message
+    ) {}
+
     public record EnvironmentView(
             String environment,
             boolean active,
@@ -42,6 +49,7 @@ public final class IntegrationDtos {
             String category,
             String docsUrl,
             boolean supportsTestConnection,
+            TestTargetView testTarget,
             List<EnvironmentView> environments
     ) {}
 
@@ -66,4 +74,12 @@ public final class IntegrationDtos {
     ) {}
 
     public record ActivateResultView(EnvironmentView environment) {}
+
+    public record RolloutSkipView(String providerKey, String displayName, String reason) {}
+
+    public record RolloutView(
+            String targetEnvironment,
+            List<String> activated,
+            List<RolloutSkipView> skipped
+    ) {}
 }

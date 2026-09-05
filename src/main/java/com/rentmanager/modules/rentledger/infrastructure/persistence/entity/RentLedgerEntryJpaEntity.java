@@ -56,4 +56,7 @@ public class RentLedgerEntryJpaEntity extends BaseTenantEntity {
 
     @Column(name = "prorated", nullable = false)
     private boolean prorated;
+
+    @Column(name = "currency", nullable = false, length = 3)
+    private String currency;
 }

@@ -10,15 +10,25 @@ import com.rentmanager.shared.security.principal.AuthenticatedUser;
 import com.rentmanager.shared.service.MediaUploadService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.UUID;
 
+/**
+ * Previously carried no {@code @PreAuthorize} — same gap as its twin,
+ * {@code UnitMediaController} (see that class's Javadoc for the full
+ * reasoning): tenant scoping is correct one layer down, but any authenticated
+ * role, renters included, could reach every write here for the landlord they
+ * rent from. Gated to OWNER/MANAGER, matching
+ * {@code PropertyCommandController}'s existing property-mutation gate.
+ */
 @RestController
 @RequiredArgsConstructor
 @RequestMapping(PropertyRoutes.BASE)
+@PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER')")
 public class PropertyMediaController {
 
     private final MediaUploadService mediaUploadService;

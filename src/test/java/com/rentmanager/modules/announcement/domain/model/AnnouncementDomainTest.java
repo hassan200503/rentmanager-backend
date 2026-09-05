@@ -140,11 +140,11 @@ class AnnouncementDomainTest {
         assertEquals(AnnouncementDeliveryStatus.FAILED, delivery.getStatus());
         assertEquals(1, delivery.getAttemptCount());
         Instant firstRetry = delivery.getNextAttemptAt();
-        assertEquals(Duration.ofMinutes(1), Duration.between(Instant.now(), firstRetry));
+        assertBackoffIsAbout(Duration.ofMinutes(1), firstRetry);
 
         delivery.recordFailure("smtp down again");
         assertEquals(2, delivery.getAttemptCount());
-        assertEquals(Duration.ofMinutes(15), Duration.between(Instant.now(), delivery.getNextAttemptAt()));
+        assertBackoffIsAbout(Duration.ofMinutes(15), delivery.getNextAttemptAt());
 
         delivery.recordFailure("smtp down thrice");
         assertEquals(3, delivery.getAttemptCount());
@@ -210,5 +210,32 @@ class AnnouncementDomainTest {
                 tenantId, UUID.randomUUID(), UUID.randomUUID(), AnnouncementChannel.SMS);
 
         assertThrows(IllegalStateException.class, delivery::markRead);
+    }
+
+    /**
+     * Asserts a backoff lands about {@code expected} from now.
+     *
+     * <p>These assertions used to compare exactly:
+     * {@code assertEquals(Duration.ofMinutes(1), Duration.between(Instant.now(), retry))}.
+     * {@code recordFailure} computes {@code nextAttemptAt} from its OWN
+     * {@code Instant.now()}, so the test's later {@code Instant.now()} is
+     * already a fraction of a millisecond ahead and the difference is
+     * 1 minute MINUS that gap. It passed only while both calls happened to
+     * land in the same clock tick, and failed the moment they did not —
+     * observed as {@code expected: <PT1M> but was: <PT59.9994773S>}.
+     *
+     * <p>A tolerance is the honest assertion here: the property under test is
+     * "the backoff is a minute, then fifteen", not "two wall-clock reads are
+     * identical". Ten seconds is wide enough that a slow or loaded CI machine
+     * never reddens the build, and far too narrow to let a wrong backoff
+     * tier (1m vs 15m) slip through.
+     */
+    private static void assertBackoffIsAbout(Duration expected, Instant nextAttemptAt) {
+        Duration actual = Duration.between(Instant.now(), nextAttemptAt);
+        Duration slack = Duration.ofSeconds(10);
+        assertTrue(
+                actual.compareTo(expected.minus(slack)) >= 0
+                        && actual.compareTo(expected.plus(slack)) <= 0,
+                () -> "expected a backoff of about " + expected + " but was " + actual);
     }
 }

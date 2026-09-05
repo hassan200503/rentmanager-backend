@@ -21,4 +21,8 @@ public interface RentPaymentRequestJpaRepository extends JpaRepository<RentPayme
     Optional<RentPaymentRequestJpaEntity> findByMpesaCheckoutRequestId(String mpesaCheckoutRequestId);
 
     List<RentPaymentRequestJpaEntity> findByStatusAndCreatedAtBefore(RentPaymentRequestStatus status, Instant cutoff);
+
+    Optional<RentPaymentRequestJpaEntity>
+            findFirstByTenantIdAndRentLedgerEntryIdAndStatusOrderByCreatedAtDesc(
+                    UUID tenantId, UUID rentLedgerEntryId, RentPaymentRequestStatus status);
 }

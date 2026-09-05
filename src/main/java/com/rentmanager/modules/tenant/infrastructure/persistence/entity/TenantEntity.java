@@ -136,10 +136,6 @@ public class TenantEntity extends BaseEntity {
 
 
 
-    @Setter
-    @Column(name = "commission_rate", nullable = false, precision = 5, scale = 4)
-    private BigDecimal commissionRate;
-
     // ----------------------------------------------------------------
     // BILLING MODE (PHASE 1 DUAL REVENUE MODEL)
     // ----------------------------------------------------------------

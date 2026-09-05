@@ -21,4 +21,8 @@ public interface UnitQueryService {
     Page<UnitResponse> search(UUID tenantId, String keyword, Pageable pageable);
 
     UnitSummaryResponse getSummary(UUID tenantId);
+
+    /** Real occupied/total unit counts for every property this landlord owns. */
+    java.util.List<com.rentmanager.modules.unit.application.dto.response.PropertyOccupancyResponse>
+            getOccupancyByProperty(UUID tenantId);
 }

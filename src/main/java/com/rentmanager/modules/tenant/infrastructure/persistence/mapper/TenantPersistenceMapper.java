@@ -63,7 +63,6 @@ public interface TenantPersistenceMapper {
                 entity.isActive(),
                 entity.isOnboardingCompleted(),
                 entity.getClerkOrgId(),
-                entity.getCommissionRate(),
                 darajaCredentials,
                 entity.getAddress(),
                 entity.getPayoutPhoneNumber(),

@@ -52,6 +52,11 @@ public class RentTransactionRepositoryAdapter implements RentTransactionReposito
     }
 
     @Override
+    public Optional<RentTransaction> findByReversesTransactionId(UUID tenantId, UUID transactionId) {
+        return jpaRepository.findByTenantIdAndReversesTransactionId(tenantId, transactionId).map(mapper::toDomain);
+    }
+
+    @Override
     public List<RentTransaction> findAllByTenant(UUID tenantId) {
         return jpaRepository.findByTenantIdOrderByOccurredAtDesc(tenantId, Pageable.unpaged()).stream().map(mapper::toDomain).toList();
     }
@@ -59,10 +64,5 @@ public class RentTransactionRepositoryAdapter implements RentTransactionReposito
     @Override
     public long countByTenantId(UUID tenantId) {
         return jpaRepository.countByTenantId(tenantId);
-    }
-
-    @Override
-    public void deleteById(UUID id) {
-        jpaRepository.deleteById(id);
     }
 }

@@ -150,6 +150,22 @@ public class UnitRepositoryAdapter implements UnitRepository {
                 .map(mapper::toDomain);
     }
 
+    /**
+     * Maps the grouped rows into the projection here rather than in JPQL.
+     * COUNT and SUM come back as Number; converting explicitly avoids relying
+     * on Hibernate to match a constructor against primitive parameters.
+     */
+    @Override
+    public java.util.List<com.rentmanager.modules.unit.application.query.projection.PropertyUnitCounts>
+            countUnitsByProperty(UUID tenantId) {
+        return jpaRepository.countUnitsByPropertyRaw(tenantId).stream()
+                .map(row -> new com.rentmanager.modules.unit.application.query.projection.PropertyUnitCounts(
+                        (UUID) row[0],
+                        row[1] == null ? 0L : ((Number) row[1]).longValue(),
+                        row[2] == null ? 0L : ((Number) row[2]).longValue()))
+                .toList();
+    }
+
     @Override
     public long countByTenantId(UUID tenantId) {
         return jpaRepository.countByTenantId(tenantId);
@@ -177,9 +193,19 @@ public class UnitRepositoryAdapter implements UnitRepository {
     // =====================================================
 
     @Override
-    public Page<Unit> findPubliclyVisibleVacantUnits(String keyword, Pageable pageable) {
+    public Page<Unit> findPubliclyVisibleVacantUnits(
+            String keyword,
+            String city,
+            java.math.BigDecimal minRent,
+            java.math.BigDecimal maxRent,
+            com.rentmanager.modules.property.domain.enums.PropertyType propertyType,
+            Pageable pageable) {
         return jpaRepository.searchPubliclyVisible(
                         keyword,
+                        city,
+                        minRent,
+                        maxRent,
+                        propertyType,
                         UnitOccupancyStatus.VACANT,
                         UnitStatus.ACTIVE,
                         PropertyStatus.ACTIVE,

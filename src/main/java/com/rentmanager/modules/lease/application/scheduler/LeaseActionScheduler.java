@@ -19,12 +19,22 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
 @Slf4j
 @Component
 public class LeaseActionScheduler {
+
+    /**
+     * Both sweeps below run at 01:00/01:30 Nairobi, which is 22:00/22:30 UTC
+     * the PREVIOUS day. A bare now() on a non-Nairobi server therefore
+     * resolves to yesterday, and a lease starting or ending today would be
+     * missed until the following run. ADR-0017 pinned the cron zones; this
+     * is the date arithmetic that has to agree with them.
+     */
+    private static final ZoneId NAIROBI = ZoneId.of("Africa/Nairobi");
 
     private final LeaseRepository leaseRepository;
     private final DomainEventPublisher eventPublisher;
@@ -82,13 +92,13 @@ public class LeaseActionScheduler {
      * Runs daily at 1:00 AM - activates leases whose move-in date has
      * arrived.
      */
-    @Scheduled(cron = "0 0 1 * * *")
+    @Scheduled(cron = "0 0 1 * * *", zone = "Africa/Nairobi")
     public void runDaily() {
 
         List<Lease> leases =
                 leaseRepository.findAllByStatusAndStartDateLessThanEqual(
                         LeaseStatus.PENDING_ACTIVATION,
-                        LocalDate.now()
+                        LocalDate.now(NAIROBI)
                 );
 
         log.info("LeaseActionScheduler: found {} lease(s) pending activation", leases.size());
@@ -160,14 +170,14 @@ public class LeaseActionScheduler {
      * Eligible source statuses are ACTIVE and RENEWED, per this session's
      * decision to treat RENEWED as equivalent to ACTIVE going forward.
      */
-    @Scheduled(cron = "0 30 1 * * *")
+    @Scheduled(cron = "0 30 1 * * *", zone = "Africa/Nairobi")
     public void runDailyExpiry() {
 
         List<Lease> leases =
                 leaseRepository.findAllByStatusInAndLeaseTypeInAndEndDateLessThanEqual(
                         List.of(LeaseStatus.ACTIVE, LeaseStatus.RENEWED),
                         List.of(LeaseType.FIXED_TERM, LeaseType.STANDARD),
-                        LocalDate.now()
+                        LocalDate.now(NAIROBI)
                 );
 
         log.info("LeaseActionScheduler: found {} lease(s) eligible for expiry", leases.size());

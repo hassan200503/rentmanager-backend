@@ -12,6 +12,8 @@ import com.rentmanager.modules.rentledger.domain.model.RentTransaction;
 import com.rentmanager.modules.rentledger.domain.repository.DisbursementRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentPaymentRequestRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentTransactionRepository;
+import com.rentmanager.modules.rentledger.domain.model.UnmatchedPayment;
+import com.rentmanager.modules.rentledger.domain.repository.UnmatchedPaymentRepository;
 import com.rentmanager.modules.tenant.domain.enums.BillingMode;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import jakarta.persistence.EntityManager;
@@ -31,6 +33,7 @@ import java.util.UUID;
 public class RentPaymentCallbackTransactionService {
 
     private final RentPaymentRequestRepository rentPaymentRequestRepository;
+    private final UnmatchedPaymentRepository unmatchedPaymentRepository;
     private final RentLedgerApplicationService rentLedgerApplicationService;
     private final RentTransactionRepository rentTransactionRepository;
     private final CommissionPolicyService commissionPolicyService;
@@ -93,16 +96,36 @@ public class RentPaymentCallbackTransactionService {
                         com.rentmanager.shared.exception.ErrorCode.RESOURCE_NOT_FOUND
                 ));
 
+        // No commission when the platform never received the money. Under
+        // DIRECT collection the rent settled straight into the landlord's own
+        // paybill, so there is nothing here to take a cut of — deducting one
+        // would record a commission that was never actually collected, and
+        // hand the disbursement path a net amount to pay out of a float that
+        // never received it. See CollectionMode and V89.
+        boolean collectsDirectly = collectsDirectly(request.getTenantId());
         boolean premiumBilling = isPremiumMonthly(request.getTenantId());
+
         BigDecimal ratePercent = null;
         BigDecimal commissionAmount = null;
+        // netAmount means "what the platform holds and must pay out". It
+        // drives the B2C disbursement downstream, so it stays NULL whenever
+        // the platform is holding nothing.
         BigDecimal netAmount = null;
 
-        if (premiumBilling) {
-            // Phase 1: PREMIUM_MONTHLY - zero commission line, 100% of the
-            // payment disbursed to the landlord (netAmount = gross), in
-            // exchange for the flat monthly fee. Applies during the grace
-            // window too (features keep working until the revert).
+        if (collectsDirectly) {
+            // DIRECT: the money settled into the landlord's own paybill at
+            // the moment the renter paid. No commission to deduct and — the
+            // load-bearing part — nothing to disburse. Leaving netAmount null
+            // is what stops initiateB2CIfNeeded from trying to pay out money
+            // the platform never received. Setting it to gross here, as the
+            // premium branch does, would attempt a B2C against a float that
+            // has no such funds in it.
+            netAmount = null;
+        } else if (premiumBilling) {
+            // PLATFORM_CUSTODY + PREMIUM_MONTHLY: the platform does hold the
+            // money, takes no commission, and disburses 100% in exchange for
+            // the flat monthly fee. Applies during the grace window too
+            // (features keep working until the revert).
             netAmount = request.getAmount();
         } else if ((ratePercent = commissionPolicyService.getActiveRate(request.getTenantId())) != null) {
             commissionAmount = CommissionPolicyService.computeCommission(request.getAmount(), ratePercent);
@@ -111,8 +134,9 @@ public class RentPaymentCallbackTransactionService {
             rentTransactionRepository.save(transaction);
         }
 
-        log.info("Rent payment applied. requestId={} receipt={} premium={} rate={}% commission={} net={}",
-                request.getId(), mpesaReceiptNumber, premiumBilling, ratePercent, commissionAmount, netAmount);
+        log.info("Rent payment applied. requestId={} receipt={} direct={} premium={} rate={}% commission={} net={}",
+                request.getId(), mpesaReceiptNumber, collectsDirectly, premiumBilling,
+                ratePercent, commissionAmount, netAmount);
 
         return new SuccessfulPaymentResult(
                 request, transaction, ratePercent, commissionAmount, netAmount
@@ -128,6 +152,20 @@ public class RentPaymentCallbackTransactionService {
      * holds (landlord override -&gt; platform default -&gt; null = no
      * commission) - never hardcoded here.
      */
+    /**
+     * True when this landlord's rent settles directly into their own M-Pesa
+     * and never passes through the platform.
+     *
+     * <p>Fails closed toward DIRECT — a landlord we cannot resolve is assumed
+     * NOT to be a custody arrangement, so no commission is taken from money
+     * we may never have held.
+     */
+    private boolean collectsDirectly(UUID tenantId) {
+        return tenantRepository.findById(tenantId)
+                .map(com.rentmanager.modules.tenant.domain.model.Tenant::collectsDirectly)
+                .orElse(true);
+    }
+
     private boolean isPremiumMonthly(UUID tenantId) {
         return tenantRepository.findById(tenantId)
                 .map(tenant -> tenant.getBillingMode() == BillingMode.PREMIUM_MONTHLY)
@@ -207,4 +245,66 @@ public class RentPaymentCallbackTransactionService {
             BigDecimal commissionAmount,
             BigDecimal netAmount
     ) {}
+
+    /**
+     * Records money Safaricom confirmed but the ledger could not accept.
+     *
+     * <p>Runs in its OWN transaction: the caller reaches this only after
+     * {@link #processSuccessfulCallback} threw, which rolled its transaction
+     * back. Writing the parked row inside that rolled-back transaction would
+     * discard it too, which is the failure this method exists to prevent.
+     *
+     * <p><b>Why parking rather than throwing.</b> The renter has already paid.
+     * Letting the exception escape the callback meant three bad things at
+     * once: the payment was recorded nowhere, Safaricom received an error and
+     * retried a callback that could never succeed, and the only trace was a
+     * stack trace in the application log. An unmatched payment is money the
+     * system admits it holds and cannot yet attribute — visible under
+     * GET /rent-ledger/unmatched-payments and resolvable by an owner, with
+     * the resolution audited.
+     *
+     * <p>Deliberately swallows its own failures. If parking itself breaks,
+     * the callback must still return 200: a retry would replay a payment the
+     * ledger already rejected once, and the log line below is then the only
+     * record — which is worse than this method working, and better than a
+     * retry storm.
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public void parkUnappliedPayment(
+            String checkoutRequestId,
+            String mpesaReceiptNumber,
+            java.math.BigDecimal amount,
+            String phoneNumber,
+            String reason
+    ) {
+        try {
+            RentPaymentRequest request = rentPaymentRequestRepository
+                    .findByMpesaCheckoutRequestId(checkoutRequestId)
+                    .orElse(null);
+
+            UUID tenantId = request == null ? null : request.getTenantId();
+
+            UnmatchedPayment unmatched = UnmatchedPayment.create(
+                    tenantId,
+                    mpesaReceiptNumber,
+                    amount,
+                    phoneNumber,
+                    request == null ? null : String.valueOf(request.getRentLedgerEntryId()),
+                    java.time.LocalDateTime.now(),
+                    checkoutRequestId,
+                    mpesaReceiptNumber,
+                    null,
+                    "rent-callback: " + reason
+            );
+            unmatchedPaymentRepository.save(unmatched);
+
+            log.warn("Rent payment could not be applied and was parked for manual resolution. "
+                            + "checkoutRequestId={} receipt={} amount={} tenantId={} reason={}",
+                    checkoutRequestId, mpesaReceiptNumber, amount, tenantId, reason);
+        } catch (Exception e) {
+            log.error("FAILED TO PARK an unapplied rent payment. The renter has paid and the "
+                            + "system has no record of it. checkoutRequestId={} receipt={} amount={}",
+                    checkoutRequestId, mpesaReceiptNumber, amount, e);
+        }
+    }
 }

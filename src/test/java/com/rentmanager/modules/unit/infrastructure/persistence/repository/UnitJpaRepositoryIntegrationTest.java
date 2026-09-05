@@ -11,6 +11,7 @@ import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
 import com.rentmanager.modules.unit.domain.enums.UnitOccupancyStatus;
 import com.rentmanager.modules.unit.domain.enums.UnitStatus;
 import com.rentmanager.modules.unit.infrastructure.persistence.entity.UnitJpaEntity;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -47,9 +48,29 @@ class UnitJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
     @Autowired
     private PropertyJpaRepository propertyJpaRepository;
 
+    @Autowired
+    private EntityManager entityManager;
+
+    // property.tenant_id and unit.tenant_id both carry a real foreign key now
+    // (V72-V73), so every property/unit persisted below needs a real tenants
+    // row — persistProperty() creates one per call and persistUnit() reuses
+    // its parent property's tenant, rather than each generating its own
+    // unrelated random tenantId as before.
+    private UUID persistTenant() {
+        UUID tenantId = UUID.randomUUID();
+        entityManager.createNativeQuery("""
+                INSERT INTO tenants (id, tenant_code, name)
+                VALUES (?1, ?2, 'Test Landlord')
+                """)
+                .setParameter(1, tenantId)
+                .setParameter(2, "TEN-" + tenantId)
+                .executeUpdate();
+        return tenantId;
+    }
+
     private PropertyJpaEntity persistProperty(PropertyStatus status) {
         PropertyJpaEntity property = new PropertyJpaEntity();
-        property.assignTenant(UUID.randomUUID());
+        property.assignTenant(persistTenant());
         property.setReferenceCode("PROP-" + UUID.randomUUID());
         property.setName("Test Property");
         property.setStatus(status);
@@ -62,11 +83,11 @@ class UnitJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
         return propertyJpaRepository.saveAndFlush(property);
     }
 
-    private UnitJpaEntity persistUnit(UUID propertyId, UnitStatus unitStatus, UnitOccupancyStatus occupancyStatus) {
+    private UnitJpaEntity persistUnit(PropertyJpaEntity property, UnitStatus unitStatus, UnitOccupancyStatus occupancyStatus) {
         UnitJpaEntity unit = UnitJpaEntity.builder()
                 .id(UUID.randomUUID())
-                .tenantId(UUID.randomUUID())
-                .propertyId(propertyId)
+                .tenantId(property.getTenantId())
+                .propertyId(property.getId())
                 .unitNumber("U-" + UUID.randomUUID())
                 .label("Test Unit")
                 .status(unitStatus)
@@ -85,10 +106,10 @@ class UnitJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
     @Test
     void shouldReturnUnit_whenUnitActive_andOccupancyVacant_andPropertyActive() {
         PropertyJpaEntity property = persistProperty(PropertyStatus.ACTIVE);
-        persistUnit(property.getId(), UnitStatus.ACTIVE, UnitOccupancyStatus.VACANT);
+        persistUnit(property, UnitStatus.ACTIVE, UnitOccupancyStatus.VACANT);
 
         Page<UnitJpaEntity> result = unitJpaRepository.searchPubliclyVisible(
-                null, UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,
+                null, null, null, null, null, UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,
                 PageRequest.of(0, 10)
         );
 
@@ -98,10 +119,10 @@ class UnitJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
     @Test
     void shouldExcludeUnit_whenUnitIsActiveAndVacant_butParentPropertyIsDraft() {
         PropertyJpaEntity property = persistProperty(PropertyStatus.DRAFT);
-        persistUnit(property.getId(), UnitStatus.ACTIVE, UnitOccupancyStatus.VACANT);
+        persistUnit(property, UnitStatus.ACTIVE, UnitOccupancyStatus.VACANT);
 
         Page<UnitJpaEntity> result = unitJpaRepository.searchPubliclyVisible(
-                null, UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,
+                null, null, null, null, null, UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,
                 PageRequest.of(0, 10)
         );
 
@@ -111,10 +132,10 @@ class UnitJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
     @Test
     void shouldExcludeUnit_whenUnitIsActiveAndVacant_butParentPropertyIsArchived() {
         PropertyJpaEntity property = persistProperty(PropertyStatus.ARCHIVED);
-        persistUnit(property.getId(), UnitStatus.ACTIVE, UnitOccupancyStatus.VACANT);
+        persistUnit(property, UnitStatus.ACTIVE, UnitOccupancyStatus.VACANT);
 
         Page<UnitJpaEntity> result = unitJpaRepository.searchPubliclyVisible(
-                null, UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,
+                null, null, null, null, null, UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,
                 PageRequest.of(0, 10)
         );
 
@@ -124,10 +145,10 @@ class UnitJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
     @Test
     void shouldExcludeUnit_whenPropertyIsActive_butUnitStatusIsInactive() {
         PropertyJpaEntity property = persistProperty(PropertyStatus.ACTIVE);
-        persistUnit(property.getId(), UnitStatus.INACTIVE, UnitOccupancyStatus.VACANT);
+        persistUnit(property, UnitStatus.INACTIVE, UnitOccupancyStatus.VACANT);
 
         Page<UnitJpaEntity> result = unitJpaRepository.searchPubliclyVisible(
-                null, UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,
+                null, null, null, null, null, UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,
                 PageRequest.of(0, 10)
         );
 
@@ -137,10 +158,10 @@ class UnitJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
     @Test
     void shouldExcludeUnit_whenPropertyIsActive_butUnitStatusIsMaintenance() {
         PropertyJpaEntity property = persistProperty(PropertyStatus.ACTIVE);
-        persistUnit(property.getId(), UnitStatus.MAINTENANCE, UnitOccupancyStatus.VACANT);
+        persistUnit(property, UnitStatus.MAINTENANCE, UnitOccupancyStatus.VACANT);
 
         Page<UnitJpaEntity> result = unitJpaRepository.searchPubliclyVisible(
-                null, UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,
+                null, null, null, null, null, UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,
                 PageRequest.of(0, 10)
         );
 
@@ -150,10 +171,10 @@ class UnitJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
     @Test
     void shouldExcludeUnit_whenPropertyIsActive_butUnitStatusIsArchived() {
         PropertyJpaEntity property = persistProperty(PropertyStatus.ACTIVE);
-        persistUnit(property.getId(), UnitStatus.ARCHIVED, UnitOccupancyStatus.VACANT);
+        persistUnit(property, UnitStatus.ARCHIVED, UnitOccupancyStatus.VACANT);
 
         Page<UnitJpaEntity> result = unitJpaRepository.searchPubliclyVisible(
-                null, UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,
+                null, null, null, null, null, UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,
                 PageRequest.of(0, 10)
         );
 
@@ -163,10 +184,10 @@ class UnitJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
     @Test
     void shouldExcludeUnit_whenUnitAndPropertyBothActive_butOccupancyIsOccupied() {
         PropertyJpaEntity property = persistProperty(PropertyStatus.ACTIVE);
-        persistUnit(property.getId(), UnitStatus.ACTIVE, UnitOccupancyStatus.OCCUPIED);
+        persistUnit(property, UnitStatus.ACTIVE, UnitOccupancyStatus.OCCUPIED);
 
         Page<UnitJpaEntity> result = unitJpaRepository.searchPubliclyVisible(
-                null, UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,
+                null, null, null, null, null, UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,
                 PageRequest.of(0, 10)
         );
 
@@ -178,7 +199,7 @@ class UnitJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
         PropertyJpaEntity property = persistProperty(PropertyStatus.ACTIVE);
         UnitJpaEntity unit = UnitJpaEntity.builder()
                 .id(UUID.randomUUID())
-                .tenantId(UUID.randomUUID())
+                .tenantId(property.getTenantId())
                 .propertyId(property.getId())
                 .unitNumber("A-101")
                 .label("Penthouse Suite")
@@ -191,11 +212,11 @@ class UnitJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
         unitJpaRepository.saveAndFlush(unit);
 
         Page<UnitJpaEntity> matching = unitJpaRepository.searchPubliclyVisible(
-                "rooftop", UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,
+                "rooftop", null, null, null, null, UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,
                 PageRequest.of(0, 10)
         );
         Page<UnitJpaEntity> nonMatching = unitJpaRepository.searchPubliclyVisible(
-                "basement", UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,
+                "basement", null, null, null, null, UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,
                 PageRequest.of(0, 10)
         );
 
@@ -210,10 +231,10 @@ class UnitJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
     @Test
     void shouldReturnUnitsForProperty_onlyWhenBothUnitAndPropertyActive() {
         PropertyJpaEntity activeProperty = persistProperty(PropertyStatus.ACTIVE);
-        persistUnit(activeProperty.getId(), UnitStatus.ACTIVE, UnitOccupancyStatus.VACANT);
+        persistUnit(activeProperty, UnitStatus.ACTIVE, UnitOccupancyStatus.VACANT);
 
         PropertyJpaEntity draftProperty = persistProperty(PropertyStatus.DRAFT);
-        persistUnit(draftProperty.getId(), UnitStatus.ACTIVE, UnitOccupancyStatus.VACANT);
+        persistUnit(draftProperty, UnitStatus.ACTIVE, UnitOccupancyStatus.VACANT);
 
         Page<UnitJpaEntity> resultForActive = unitJpaRepository.findPubliclyVisibleByProperty(
                 activeProperty.getId(), UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,
@@ -235,7 +256,7 @@ class UnitJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
     @Test
     void shouldFindUnitById_whenPubliclyVisible() {
         PropertyJpaEntity property = persistProperty(PropertyStatus.ACTIVE);
-        UnitJpaEntity unit = persistUnit(property.getId(), UnitStatus.ACTIVE, UnitOccupancyStatus.VACANT);
+        UnitJpaEntity unit = persistUnit(property, UnitStatus.ACTIVE, UnitOccupancyStatus.VACANT);
 
         Optional<UnitJpaEntity> result = unitJpaRepository.findPubliclyVisibleById(
                 unit.getId(), UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE
@@ -248,7 +269,7 @@ class UnitJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
     @Test
     void shouldNotFindUnitById_whenParentPropertyIsNotActive() {
         PropertyJpaEntity property = persistProperty(PropertyStatus.UNDER_MAINTENANCE);
-        UnitJpaEntity unit = persistUnit(property.getId(), UnitStatus.ACTIVE, UnitOccupancyStatus.VACANT);
+        UnitJpaEntity unit = persistUnit(property, UnitStatus.ACTIVE, UnitOccupancyStatus.VACANT);
 
         Optional<UnitJpaEntity> result = unitJpaRepository.findPubliclyVisibleById(
                 unit.getId(), UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE
@@ -276,7 +297,7 @@ class UnitJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
 
         UnitJpaEntity recentlyVacated = UnitJpaEntity.builder()
                 .id(UUID.randomUUID())
-                .tenantId(UUID.randomUUID())
+                .tenantId(property.getTenantId())
                 .propertyId(property.getId())
                 .unitNumber("U-" + UUID.randomUUID())
                 .status(UnitStatus.ACTIVE)
@@ -288,7 +309,7 @@ class UnitJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
 
         UnitJpaEntity longVacated = UnitJpaEntity.builder()
                 .id(UUID.randomUUID())
-                .tenantId(UUID.randomUUID())
+                .tenantId(property.getTenantId())
                 .propertyId(property.getId())
                 .unitNumber("U-" + UUID.randomUUID())
                 .status(UnitStatus.ACTIVE)
@@ -312,7 +333,7 @@ class UnitJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
         PropertyJpaEntity archivedProperty = persistProperty(PropertyStatus.ARCHIVED);
         UnitJpaEntity longVacatedButArchived = UnitJpaEntity.builder()
                 .id(UUID.randomUUID())
-                .tenantId(UUID.randomUUID())
+                .tenantId(archivedProperty.getTenantId())
                 .propertyId(archivedProperty.getId())
                 .unitNumber("U-" + UUID.randomUUID())
                 .status(UnitStatus.ACTIVE)
@@ -323,7 +344,7 @@ class UnitJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
         unitJpaRepository.saveAndFlush(longVacatedButArchived);
 
         PropertyJpaEntity activeProperty = persistProperty(PropertyStatus.ACTIVE);
-        UnitJpaEntity recentButVisible = persistUnit(activeProperty.getId(), UnitStatus.ACTIVE, UnitOccupancyStatus.VACANT);
+        UnitJpaEntity recentButVisible = persistUnit(activeProperty, UnitStatus.ACTIVE, UnitOccupancyStatus.VACANT);
 
         Page<UnitJpaEntity> result = unitJpaRepository.findLongestVacantPubliclyVisible(
                 UnitOccupancyStatus.VACANT, UnitStatus.ACTIVE, PropertyStatus.ACTIVE,

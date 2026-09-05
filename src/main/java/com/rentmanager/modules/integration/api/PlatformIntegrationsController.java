@@ -121,6 +121,19 @@ public class PlatformIntegrationsController {
                         httpRequest.getRemoteAddr())));
     }
 
+    @PostMapping("/roll-to-production")
+    @PreAuthorize("hasAuthority('ROLE_PLATFORM_OWNER')")
+    public ResponseEntity<ApiResponse<IntegrationDtos.RolloutView>> rollToProduction(
+            Authentication authentication,
+            HttpServletRequest httpRequest
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                "Production rollout attempted",
+                integrationAdminService.rollToProduction(
+                        resolveActor(authentication),
+                        httpRequest.getRemoteAddr())));
+    }
+
     private String resolveActor(Authentication authentication) {
         if (authentication != null && authentication.getPrincipal() instanceof com.rentmanager.shared.security.principal.AuthenticatedUser user) {
             return user.getUserId() != null ? user.getUserId().toString() : user.getEmail();

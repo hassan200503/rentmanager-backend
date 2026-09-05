@@ -135,6 +135,31 @@ public class User extends BaseEntity {
         this.role = role;
     }
 
+    /**
+     * Records the email address carried by a later Clerk token.
+     *
+     * <p>A user provisioned from a token with no {@code email} claim is
+     * stamped with the {@code unknown@clerk.user} placeholder. Nothing used
+     * to correct that, so the placeholder was permanent — and because it is
+     * a non-blank string it passes every {@code != null && !isBlank()} guard
+     * in the notification code, which then posts to a mailbox that does not
+     * exist. A null would have been skipped visibly; the placeholder failed
+     * silently.
+     *
+     * @return true when the stored address actually changed
+     */
+    public boolean updateEmailIfChanged(String email) {
+        if (email == null || email.isBlank()) {
+            return false;
+        }
+        String incoming = email.trim();
+        if (incoming.equalsIgnoreCase(this.email)) {
+            return false;
+        }
+        this.email = incoming;
+        return true;
+    }
+
     public boolean hasRole(UserRole candidate) {
         return this.role == candidate;
     }

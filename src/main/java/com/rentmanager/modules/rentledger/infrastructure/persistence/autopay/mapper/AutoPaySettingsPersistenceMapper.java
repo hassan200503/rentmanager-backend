@@ -21,6 +21,7 @@ public class AutoPaySettingsPersistenceMapper {
         jpa.setLastAutoPayDate(settings.getLastAutoPayDate());
         jpa.setConsecutiveFailures(settings.getConsecutiveFailures());
         jpa.setLastAttemptAt(settings.getLastAttemptAt());
+        jpa.setLastFailureReason(settings.getLastFailureReason());
         return jpa;
     }
 
@@ -37,6 +38,7 @@ public class AutoPaySettingsPersistenceMapper {
                 jpa.getLastAutoPayDate(),
                 jpa.getConsecutiveFailures(),
                 jpa.getLastAttemptAt(),
+                jpa.getLastFailureReason(),
                 jpa.getVersion()
         );
     }

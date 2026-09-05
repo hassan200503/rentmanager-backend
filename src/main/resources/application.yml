@@ -3,7 +3,7 @@ spring:
     name: rentmanager-backend
 
   profiles:
-    active: dev
+    active: ${SPRING_PROFILES_ACTIVE:prod}
 
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/rentmanager}
@@ -52,6 +52,11 @@ server:
     include-message: never
     include-stacktrace: never
     include-binding-errors: never
+
+  # Finish in-flight requests instead of severing them mid-transaction on
+  # deploy. Without this a rolling restart can kill a thread between the
+  # M-Pesa callback writing a ledger row and the disbursement being created.
+  shutdown: graceful
 
 application:
   security:
@@ -147,3 +152,86 @@ app:
     drain-delay-ms: ${ANNOUNCEMENT_DRAIN_DELAY_MS:2000}
     whatsapp-template-name: ${ANNOUNCEMENT_WHATSAPP_TEMPLATE_NAME:announcement_utility_v1}
     whatsapp-max-chars: ${ANNOUNCEMENT_WHATSAPP_MAX_CHARS:500}
+# ── Lifecycle ─────────────────────────────────────────────────────────────
+spring.lifecycle:
+  # Long enough for a Daraja call in flight to finish, short enough that a
+  # deploy is not held hostage by one stuck request.
+  timeout-per-shutdown-phase: 30s
+
+# ── Operations ────────────────────────────────────────────────────────────
+#
+# Only health and metrics are exposed, and only over the management port.
+# The default actuator surface includes /env, /configprops, /heapdump and
+# /threaddump — all of which leak configuration or memory contents, and all
+# of which SecurityConfig would have to be trusted to block one path at a
+# time. Not exposing them is the stronger guarantee.
+management:
+  # Bound to its own port so the metrics endpoint is not reachable on the
+  # public one. /actuator/prometheus reports transaction volumes, payout
+  # counts and tenant cardinality — a competitor reading it learns the size
+  # of the business, and an attacker learns when the system is busy.
+  #
+  # A Prometheus scraper cannot present a Clerk JWT, so authenticating this
+  # endpoint is not an option; keeping the port off the public router is.
+  # THIS PORT MUST NOT BE PUBLICLY ROUTED.
+  server:
+    port: ${MANAGEMENT_PORT:8081}
+
+  endpoints:
+    web:
+      exposure:
+        # /actuator/health, /actuator/health/liveness, /actuator/health/readiness
+        # and /actuator/prometheus. Nothing else.
+        include: health,prometheus
+      base-path: /actuator
+
+  endpoint:
+    health:
+      # Component detail (database up/down) is useful when probing by hand and
+      # is not sensitive: it says a dependency is reachable, not how to reach it.
+      show-details: when-authorized
+      show-components: always
+      probes:
+        # Splits liveness (is the JVM wedged — restart me) from readiness (can
+        # I serve traffic yet — hold the load balancer). Conflating them means
+        # a slow migration on startup gets the container killed instead of
+        # waited for.
+        enabled: true
+
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+  metrics:
+    tags:
+      # Every metric carries these, so one dashboard can separate environments
+      # without a separate scrape config per deployment.
+      application: rentmanager-backend
+      # The resolved Spring property, not the raw env var: a profile passed
+      # as -Dspring-boot.run.profiles or spring.profiles.active would
+      # otherwise be tagged "prod" because SPRING_PROFILES_ACTIVE is unset,
+      # and a dashboard that mislabels which environment it is showing is
+      # worse than one with no label.
+      environment: ${spring.profiles.active:prod}
+
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+# ── Logging ───────────────────────────────────────────────────────────────
+#
+# Every line carries the trace id set by TraceIdFilter. Without it a stack
+# trace in an aggregator cannot be tied to the request that produced it, or
+# to the error_events row written at the same moment — which is the state
+# this project was in, since ErrorTrackingService read a traceId that nothing
+# ever set.
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{traceId:-no-trace}] --- [%15.15t] %-40.40logger{39} : %m%n"
+  level:
+    com.rentmanager: ${LOG_LEVEL_APP:INFO}
+    org.springframework.web: WARN
+    org.hibernate.SQL: WARN

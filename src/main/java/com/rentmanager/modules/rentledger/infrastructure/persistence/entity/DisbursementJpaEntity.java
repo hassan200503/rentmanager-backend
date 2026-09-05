@@ -71,6 +71,9 @@ public class DisbursementJpaEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "currency", nullable = false, length = 3)
+    private String currency;
+
     @Version
     private Long version;
 }

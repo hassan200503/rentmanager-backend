@@ -14,12 +14,17 @@ import com.rentmanager.modules.reservation.application.service.ReservationDetail
 import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaProperties;
 import com.rentmanager.modules.reservation.infrastructure.daraja.MpesaCallbackPayload;
 import com.rentmanager.modules.reservation.infrastructure.daraja.MpesaCallbackService;
+import com.rentmanager.modules.rentledger.domain.exception.StkPushRateLimitedException;
+import com.rentmanager.shared.security.throttle.SlidingWindowRateLimiter;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.Duration;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -31,7 +36,14 @@ import java.util.UUID;
 @RequestMapping("/api/v1/public/reservations")
 public class ReservationController {
 
+    /** Attempts allowed per phone number and per client IP, per window. */
+    private static final int MAX_PER_PHONE = 3;
+    private static final int MAX_PER_IP = 10;
+    private static final Duration RATE_WINDOW = Duration.ofMinutes(15);
+
+
     private final InitiateReservationService initiateReservationService;
+    private final SlidingWindowRateLimiter rateLimiter;
     private final MpesaCallbackService mpesaCallbackService;
     private final PaymentStatusQueryService paymentStatusQueryService;
     private final ReservationDetailQueryService reservationDetailQueryService;
@@ -47,12 +59,70 @@ public class ReservationController {
      */
     @PostMapping("/initiate")
     public ResponseEntity<ApiResponse<InitiateReservationResponse>> initiate(
-            @Valid @RequestBody InitiateReservationRequest request
+            @Valid @RequestBody InitiateReservationRequest request,
+            HttpServletRequest httpRequest
     ) {
+        enforceRateLimit(request.mpesaPhone(), httpRequest);
+
         return ResponseEntity.ok(ApiResponse.ok(
                 "STK Push sent. Awaiting payment.",
                 initiateReservationService.initiate(request)
         ));
+    }
+
+    /**
+     * Throttles the only unauthenticated endpoint in the system that causes a
+     * real M-Pesa PIN prompt to appear on a phone the caller names.
+     *
+     * <h2>Why this endpoint in particular</h2>
+     * It has to stay open — it is the public "reserve this unit" funnel, and
+     * a prospective renter has no account yet. But the caller supplies
+     * {@code mpesaPhone}, so without a limit anyone can make this platform
+     * send unlimited STK prompts to any number in Kenya. That is three
+     * problems at once: harassment; a phishing primer, since a genuine PIN
+     * prompt arriving seconds after a scam call is very convincing; and a
+     * cost amplifier billed to the platform's own Daraja account.
+     *
+     * <h2>Two keys, deliberately</h2>
+     * Per phone stops one number being targeted repeatedly from many sources.
+     * Per client IP stops one source walking through many numbers — the phone
+     * key alone would not notice that at all. Both are cheap; either alone
+     * leaves an obvious hole.
+     *
+     * <p>The limits are set for a real person who mistyped their number or
+     * cancelled the prompt and is trying again, not for a happy path that
+     * needs only one attempt.
+     */
+    private void enforceRateLimit(String mpesaPhone, HttpServletRequest httpRequest) {
+        String phoneKey = "reservation:phone:" + (mpesaPhone == null ? "" : mpesaPhone.trim());
+        if (!rateLimiter.tryAcquire(phoneKey, MAX_PER_PHONE, RATE_WINDOW)) {
+            throw new StkPushRateLimitedException(
+                    "A payment prompt was already sent to this number. "
+                            + "Please check your phone before requesting another.",
+                    rateLimiter.retryAfterSeconds(phoneKey, RATE_WINDOW));
+        }
+
+        String ipKey = "reservation:ip:" + clientIp(httpRequest);
+        if (!rateLimiter.tryAcquire(ipKey, MAX_PER_IP, RATE_WINDOW)) {
+            throw new StkPushRateLimitedException(
+                    "Too many reservation attempts. Please try again shortly.",
+                    rateLimiter.retryAfterSeconds(ipKey, RATE_WINDOW));
+        }
+    }
+
+    /**
+     * The left-most X-Forwarded-For entry when behind a proxy, else the socket
+     * address. This is a throttling key, not an authorisation input — a
+     * spoofed header buys an attacker a fresh bucket, which is no worse than
+     * the no-limit situation this replaces, and the per-phone key still holds.
+     */
+    private static String clientIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            int comma = forwarded.indexOf(',');
+            return (comma > 0 ? forwarded.substring(0, comma) : forwarded).trim();
+        }
+        return request.getRemoteAddr();
     }
 
     /**

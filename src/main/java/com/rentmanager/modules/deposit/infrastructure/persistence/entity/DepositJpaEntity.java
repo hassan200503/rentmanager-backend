@@ -52,6 +52,9 @@ public class DepositJpaEntity extends BaseTenantEntity {
     @Column(name = "refunded_at")
     private LocalDateTime refundedAt;
 
+    @Column(name = "currency", nullable = false, length = 3)
+    private String currency;
+
     public static DepositJpaEntity create(UUID tenantId) {
         DepositJpaEntity entity = new DepositJpaEntity();
         entity.restoreTenantId(tenantId);

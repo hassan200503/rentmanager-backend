@@ -108,6 +108,8 @@ public interface PropertyJpaRepository
 
     Optional<PropertyJpaEntity> findByIdAndStatus(UUID id, PropertyStatus status);
 
+    List<PropertyJpaEntity> findAllByIdInAndStatus(List<UUID> ids, PropertyStatus status);
+
     // =====================================================
     // PUBLIC SEARCH (2026-08-11)
     // Single query powering the public listings page:

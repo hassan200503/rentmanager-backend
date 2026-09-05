@@ -11,6 +11,7 @@ import com.rentmanager.shared.security.context.TenantContext;
 import com.rentmanager.shared.security.principal.AuthenticatedUser;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -20,6 +21,11 @@ import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -75,7 +81,43 @@ class ClerkJwtAuthenticationConverterTest {
         clerkServiceProvider = mock(ObjectProvider.class);
         lenient().when(clerkServiceProvider.getIfAvailable()).thenReturn(clerkService);
         converter = new ClerkJwtAuthenticationConverter(
-                userRepository, tenantRepository, tenantProfileRepository, clerkServiceProvider);
+                userRepository, tenantRepository, tenantProfileRepository, clerkServiceProvider,
+                clockProvider(Clock.systemUTC()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ObjectProvider<Clock> clockProvider(Clock clock) {
+        ObjectProvider<Clock> provider = mock(ObjectProvider.class);
+        lenient().when(provider.getIfAvailable(any())).thenReturn(clock);
+        return provider;
+    }
+
+    /** A Clock whose instant() can be advanced mid-test, for TTL-expiry tests. */
+    private static final class MutableClock extends Clock {
+        private Instant instant;
+
+        MutableClock(Instant instant) {
+            this.instant = instant;
+        }
+
+        void advance(Duration duration) {
+            this.instant = this.instant.plus(duration);
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return instant;
+        }
     }
 
     @AfterEach
@@ -197,6 +239,40 @@ class ClerkJwtAuthenticationConverterTest {
         assertThat(authorities).contains("ROLE_LANDLORD");
         assertThat(authorities).contains("ROLE_LANDLORD_OWNER");
         assertThat(authorities).hasSize(2);
+    }
+
+    /**
+     * Landlord and renter are additive, not mutually exclusive: tenant_profile
+     * is keyed (tenant_id, clerk_user_id), so a person can run their own
+     * landlord org AND separately rent from someone else. This was previously
+     * an if/else chain that returned early on the landlord branch, so such a
+     * user never received ROLE_TENANT — harmless until the renter portal
+     * gained an explicit ROLE_TENANT gate, at which point every
+     * /api/v1/tenant-portal/** call 403'd for them and the portal went dead.
+     * Confirmed against real data (a users row with both an OWNER landlord
+     * binding and a tenant_profile), not hypothetical.
+     */
+    @Test
+    void userWhoIsBothLandlordAndRenter_getsBothRoleLandlordAndRoleTenant() {
+        UUID tenantId = UUID.randomUUID();
+        User ownerWhoAlsoRents = User.createInvited(
+                CLERK_USER_ID, EMAIL, "Dual", "Role", tenantId, UserRole.OWNER
+        );
+
+        when(userRepository.findByClerkUserId(CLERK_USER_ID)).thenReturn(Optional.of(ownerWhoAlsoRents));
+        when(tenant.getId()).thenReturn(tenantId);
+        when(tenantRepository.findByClerkOrgId(CLERK_ORG_ID)).thenReturn(Optional.of(tenant));
+        when(tenantProfileRepository.existsByClerkUserId(CLERK_USER_ID)).thenReturn(true);
+
+        AbstractAuthenticationToken token = converter.convert(jwtWithOrg(CLERK_ORG_ID));
+
+        Set<String> authorities = authorityStrings(token);
+        assertThat(authorities).containsExactlyInAnyOrder(
+                "ROLE_LANDLORD", "ROLE_LANDLORD_OWNER", "ROLE_TENANT"
+        );
+        // PENDING_ONBOARDING is the "neither" fallback and must not leak in
+        // alongside real roles.
+        assertThat(authorities).doesNotContain("ROLE_PENDING_ONBOARDING");
     }
 
     @Test
@@ -380,5 +456,102 @@ class ClerkJwtAuthenticationConverterTest {
         AbstractAuthenticationToken token = converter.convert(jwtWithOrg(null));
 
         assertThat(authorityStrings(token)).containsExactly("ROLE_PENDING_ONBOARDING");
+    }
+
+    // ------------------------------------------------------------------
+    // IDENTITY CACHING (defect #9: eliminate the per-request DB round trips)
+    // ------------------------------------------------------------------
+
+    @Nested
+    class IdentityCaching {
+
+        private MutableClock mutableClock;
+
+        @BeforeEach
+        void useMutableClock() {
+            mutableClock = new MutableClock(Instant.parse("2026-01-01T00:00:00Z"));
+            converter = new ClerkJwtAuthenticationConverter(
+                    userRepository, tenantRepository, tenantProfileRepository, clerkServiceProvider,
+                    clockProvider(mutableClock));
+        }
+
+        @Test
+        void secondCallWithinTtl_hitsCacheAndSkipsRepositories() {
+            UUID tenantId = UUID.randomUUID();
+            User invitedUser = User.createInvited(
+                    CLERK_USER_ID, EMAIL, "Jane", "Doe", tenantId, UserRole.MANAGER
+            );
+            when(userRepository.findByClerkUserId(CLERK_USER_ID)).thenReturn(Optional.of(invitedUser));
+            when(tenant.getId()).thenReturn(tenantId);
+            when(tenantRepository.findByClerkOrgId(CLERK_ORG_ID)).thenReturn(Optional.of(tenant));
+
+            AbstractAuthenticationToken first = converter.convert(jwtWithOrg(CLERK_ORG_ID));
+            mutableClock.advance(Duration.ofSeconds(30)); // well under the 60s TTL
+            AbstractAuthenticationToken second = converter.convert(jwtWithOrg(CLERK_ORG_ID));
+
+            assertThat(authorityStrings(second)).isEqualTo(authorityStrings(first));
+            // findByClerkUserId/findByClerkOrgId only ran once, on the first call.
+            verify(userRepository, times(1)).findByClerkUserId(CLERK_USER_ID);
+            verify(tenantRepository, times(1)).findByClerkOrgId(CLERK_ORG_ID);
+        }
+
+        @Test
+        void callAfterTtlExpires_reQueriesRepositories() {
+            UUID tenantId = UUID.randomUUID();
+            User invitedUser = User.createInvited(
+                    CLERK_USER_ID, EMAIL, "Jane", "Doe", tenantId, UserRole.MANAGER
+            );
+            when(userRepository.findByClerkUserId(CLERK_USER_ID)).thenReturn(Optional.of(invitedUser));
+            when(tenant.getId()).thenReturn(tenantId);
+            when(tenantRepository.findByClerkOrgId(CLERK_ORG_ID)).thenReturn(Optional.of(tenant));
+
+            converter.convert(jwtWithOrg(CLERK_ORG_ID));
+            mutableClock.advance(Duration.ofSeconds(61)); // past the 60s TTL
+            converter.convert(jwtWithOrg(CLERK_ORG_ID));
+
+            verify(userRepository, times(2)).findByClerkUserId(CLERK_USER_ID);
+            verify(tenantRepository, times(2)).findByClerkOrgId(CLERK_ORG_ID);
+        }
+
+        @Test
+        void differentClerkUserIds_areCachedSeparately() {
+            UUID tenantId = UUID.randomUUID();
+            User firstUser = User.createInvited(CLERK_USER_ID, EMAIL, "Jane", "Doe", tenantId, UserRole.MANAGER);
+            User secondUser = User.createInvited("clerk_user_other", EMAIL, "Sam", "Roe", tenantId, UserRole.STAFF);
+            when(userRepository.findByClerkUserId(CLERK_USER_ID)).thenReturn(Optional.of(firstUser));
+            when(userRepository.findByClerkUserId("clerk_user_other")).thenReturn(Optional.of(secondUser));
+            when(tenant.getId()).thenReturn(tenantId);
+            when(tenantRepository.findByClerkOrgId(CLERK_ORG_ID)).thenReturn(Optional.of(tenant));
+
+            Jwt otherUserJwt = mock(Jwt.class);
+            when(otherUserJwt.getSubject()).thenReturn("clerk_user_other");
+            when(otherUserJwt.getClaimAsString("tenant_id")).thenReturn(CLERK_ORG_ID);
+            when(otherUserJwt.getClaimAsString("email")).thenReturn(EMAIL);
+
+            AbstractAuthenticationToken first = converter.convert(jwtWithOrg(CLERK_ORG_ID));
+            AbstractAuthenticationToken second = converter.convert(otherUserJwt);
+
+            assertThat(authorityStrings(first)).containsExactlyInAnyOrder("ROLE_LANDLORD", "ROLE_LANDLORD_MANAGER");
+            assertThat(authorityStrings(second)).containsExactlyInAnyOrder("ROLE_LANDLORD", "ROLE_LANDLORD_STAFF");
+            verify(userRepository, times(1)).findByClerkUserId(CLERK_USER_ID);
+            verify(userRepository, times(1)).findByClerkUserId("clerk_user_other");
+        }
+
+        @Test
+        void cachedHit_stillSetsTenantContextForThisRequest() {
+            UUID tenantId = UUID.randomUUID();
+            User invitedUser = User.createInvited(
+                    CLERK_USER_ID, EMAIL, "Jane", "Doe", tenantId, UserRole.MANAGER
+            );
+            when(userRepository.findByClerkUserId(CLERK_USER_ID)).thenReturn(Optional.of(invitedUser));
+            when(tenant.getId()).thenReturn(tenantId);
+            when(tenantRepository.findByClerkOrgId(CLERK_ORG_ID)).thenReturn(Optional.of(tenant));
+
+            converter.convert(jwtWithOrg(CLERK_ORG_ID));
+            TenantContext.clear(); // simulate the ThreadLocal being cleared at the end of the first request
+            converter.convert(jwtWithOrg(CLERK_ORG_ID)); // second request, cache hit
+
+            assertThat(TenantContext.getTenantId()).isEqualTo(tenantId);
+        }
     }
 }

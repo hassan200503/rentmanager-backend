@@ -26,8 +26,10 @@ public class ManualSubmissionErisTransmissionAdapter implements ErisTransmission
 
     @Override
     public TransmissionResult submitMonthlyFiling(ErisMonthlyFilingSubmission submission) {
-        log.info("eRITS monthly filing requested for {} ({} {}) but the integration is not configured",
-                submission.filingId(), submission.period(), submission.landlordKraPin());
+        // The KRA PIN is deliberately not logged — CLAUDE.md forbids it, and
+        // filingId already identifies the filing uniquely for diagnostics.
+        log.info("eRITS monthly filing requested for {} ({}) but the integration is not configured",
+                submission.filingId(), submission.period());
         return TransmissionResult.notAvailable(
                 "eRITS integration not configured — manual filing required");
     }

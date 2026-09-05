@@ -5,9 +5,11 @@ import com.cloudinary.utils.ObjectUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.io.ByteArrayInputStream;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.util.Map;
 import java.util.UUID;
+import javax.imageio.ImageIO;
 
 /**
  * Real Cloudinary test: uploads a tiny marker file, reads it back and
@@ -18,7 +20,23 @@ import java.util.UUID;
 @Component
 public class MediaStorageProviderTester implements ProviderTester {
 
-    private static final byte[] MARKER = "RentManager integration test marker".getBytes();
+    /**
+     * A real, minimal 1x1 PNG so the marker exercises the same image upload
+     * path (resource_type=image) the platform uses for property/unit photos —
+     * not just the generic storage path.
+     */
+    private static final byte[] MARKER = createMarkerPng();
+
+    private static byte[] createMarkerPng() {
+        try {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            BufferedImage image = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+            ImageIO.write(image, "png", out);
+            return out.toByteArray();
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to build Cloudinary test marker PNG", e);
+        }
+    }
 
     @Override
     public String providerKey() {
@@ -46,10 +64,18 @@ public class MediaStorageProviderTester implements ProviderTester {
         String publicId = "integration-tests/marker-" + UUID.randomUUID();
         try {
             Map<?, ?> upload = cloudinary.uploader().upload(
-                    new ByteArrayInputStream(MARKER),
-                    ObjectUtils.asMap("public_id", publicId, "overwrite", true)
+                    MARKER,
+                    ObjectUtils.asMap("public_id", publicId, "overwrite", true, "resource_type", "image")
             );
-            String url = String.valueOf(upload.get("url"));
+
+            // Verify the marker is actually readable back — otherwise a
+            // write/read misconfiguration could pass the test silently.
+            String uploadedUrl = nonBlank(upload, "secure_url");
+            if (uploadedUrl == null) {
+                return TestResult.failure("Upload did not return a usable URL",
+                        "Cloudinary accepted the marker but the response contained no secure_url/url — "
+                                + "check the account's upload permission.");
+            }
 
             Map<?, ?> destroy = cloudinary.uploader().destroy(publicId, ObjectUtils.emptyMap());
             String result = String.valueOf(destroy.get("result"));
@@ -63,5 +89,10 @@ public class MediaStorageProviderTester implements ProviderTester {
             log.warn("Cloudinary test connection failed for cloud={}", cloudName, e);
             return TestResult.failure("Cloudinary operation failed", String.valueOf(e.getMessage()));
         }
+    }
+
+    private static String nonBlank(Map<?, ?> values, String key) {
+        String v = String.valueOf(values.get(key));
+        return v == null || v.isBlank() || "null".equalsIgnoreCase(v) ? null : v;
     }
 }

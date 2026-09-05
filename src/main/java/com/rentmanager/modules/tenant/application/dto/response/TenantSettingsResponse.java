@@ -12,9 +12,13 @@ public class TenantSettingsResponse {
     private String currency;
     private String locale;
 
-    private boolean emailNotificationsEnabled;
-    private boolean smsNotificationsEnabled;
-    private boolean pushNotificationsEnabled;
+    // REMOVED: emailNotificationsEnabled / smsNotificationsEnabled /
+    // pushNotificationsEnabled. from() never set them, so they serialised as
+    // false on every response regardless of any setting — and there was
+    // nowhere to persist them anyway: the @Entity that declared them mapped
+    // to a "tenant_settings" table no migration creates. Rent reminder
+    // channels are configured per milestone in rent_reminder_policies, which
+    // is a real table with a real endpoint.
 
     private boolean maintenanceModuleEnabled;
     private boolean accountingModuleEnabled;

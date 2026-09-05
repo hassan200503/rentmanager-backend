@@ -37,7 +37,8 @@ public final class ProviderCatalog {
                             ProviderField.plain("base_url", "Base URL", "Sandbox: https://sandbox.safaricom.co.ke"),
                             ProviderField.plain("result_url", "B2C Result URL", "Public HTTPS endpoint for B2C results"),
                             ProviderField.plain("queue_timeout_url", "B2C Timeout URL", "Public HTTPS endpoint for B2C timeouts")
-                    )),
+                    ),
+                    null),
             new ProviderDefinition(
                     AFRICASTALKING,
                     "SMS (Africa's Talking)",
@@ -49,7 +50,8 @@ public final class ProviderCatalog {
                             ProviderField.secret("api_key", "API Key", "AT Dashboard → Settings → API Key"),
                             ProviderField.plain("sender_id", "Sender ID", "AT-approved sender ID (production)"),
                             ProviderField.plain("base_url", "Base URL", "Sandbox: https://api.sandbox.africastalking.com/version1/messaging")
-                    )),
+                    ),
+                    ProviderTestTarget.phone(true, "Recipient phone", "Type a phone number to receive the test SMS.")),
             new ProviderDefinition(
                     WHATSAPP,
                     "WhatsApp (Meta Cloud API)",
@@ -64,7 +66,8 @@ public final class ProviderCatalog {
                             ProviderField.secret("access_token", "Permanent Access Token", "Business Settings → System Users → generate token (whatsapp_business_messaging)"),
                             ProviderField.secret("verify_token", "Webhook Verify Token", "Chosen by you; must match Meta's console exactly"),
                             ProviderField.plain("template_name", "Utility Template Name", "Pre-approved template for broadcasts (e.g. announcement_utility_v1)")
-                    )),
+                    ),
+                    ProviderTestTarget.phone(false, "Recipient phone (optional)", "Type a number to send a live template message.")),
             new ProviderDefinition(
                     EMAIL,
                     "Email (SMTP)",
@@ -79,7 +82,8 @@ public final class ProviderCatalog {
                             ProviderField.plain("from_address", "From Address", "Must be verified for the sending domain"),
                             ProviderField.plain("from_name", "From Name", "Display name shown to recipients"),
                             ProviderField.plain("tls", "TLS (true/false)", "Secure transport on the configured port")
-                    )),
+                    ),
+                    ProviderTestTarget.email(true, "Recipient email", "Type an email address to receive the test email.")),
             new ProviderDefinition(
                     MEDIA_STORAGE,
                     "Media Storage (Cloudinary)",
@@ -90,7 +94,8 @@ public final class ProviderCatalog {
                             ProviderField.plain("cloud_name", "Cloud Name", "Cloudinary dashboard → Account Details"),
                             ProviderField.plain("api_key", "API Key", "Cloudinary dashboard → Account Details"),
                             ProviderField.secret("api_secret", "API Secret", "Cloudinary dashboard → Account Details")
-                    )),
+                    ),
+                    null),
             new ProviderDefinition(
                     CLERK,
                     "Authentication (Clerk)",
@@ -102,7 +107,8 @@ public final class ProviderCatalog {
                             ProviderField.secret("secret_key", "Secret Key", "Clerk Dashboard → API Keys"),
                             ProviderField.secret("webhook_signing_secret", "Webhook Signing Secret", "Clerk Dashboard → Webhooks → endpoint"),
                             ProviderField.plain("base_url", "API Base URL", "Default https://api.clerk.com/v1")
-                    ))
+                    ),
+                    null)
     );
 
     private static final Map<String, ProviderDefinition> BY_KEY =

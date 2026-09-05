@@ -28,7 +28,17 @@ public class SubscriptionPlanController {
         this.queryService = queryService;
     }
 
+    /**
+     * Platform owner route: add a plan to the catalog. Same gate and same
+     * reason as {@link #update} — subscription plans are global rows, not
+     * tenant-scoped, so there is no TenantContext scoping underneath to
+     * contain a caller who should not be here. The security chain ends in
+     * {@code anyRequest().authenticated()}, so without this annotation every
+     * authenticated user — a renter included — could add a priced plan to
+     * the catalog the public pricing page serves.
+     */
     @PostMapping
+    @PreAuthorize("hasAuthority('ROLE_PLATFORM_OWNER')")
     public ResponseEntity<ApiResponse<SubscriptionPlanResponse>> create(@RequestBody SubscriptionPlanRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(commandService.create(request)));
     }
@@ -64,7 +74,13 @@ public class SubscriptionPlanController {
         return ResponseEntity.ok(ApiResponse.ok(commandService.update(id, request)));
     }
 
+    /**
+     * Platform owner route: withdraw a plan from the catalog. Ungated, this
+     * was the sharper of the two holes — a single call could deactivate the
+     * live plans for every landlord on the platform.
+     */
     @PutMapping(TenantRoutes.DEACTIVATE)
+    @PreAuthorize("hasAuthority('ROLE_PLATFORM_OWNER')")
     public ResponseEntity<ApiResponse<Void>> deactivate(@PathVariable UUID id) {
         commandService.deactivate(id);
         return ResponseEntity.ok(ApiResponse.ok("Plan deactivated", null));

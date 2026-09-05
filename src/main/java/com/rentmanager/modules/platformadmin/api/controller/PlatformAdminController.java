@@ -11,6 +11,8 @@ import com.rentmanager.modules.platformadmin.api.dto.response.PlatformAdminInfoR
 import com.rentmanager.modules.platformadmin.api.dto.response.UserTypeSnapshot;
 import com.rentmanager.modules.platformadmin.application.service.PlatformAdminCommissionService;
 import com.rentmanager.modules.platformadmin.application.service.PlatformAdminQueryService;
+import com.rentmanager.modules.rentledger.infrastructure.persistence.entity.RentPaymentRequestJpaEntity;
+import com.rentmanager.modules.rentledger.domain.enums.RentPaymentRequestStatus;
 import com.rentmanager.modules.rentledger.domain.enums.DisbursementStatus;
 import com.rentmanager.modules.rentledger.infrastructure.persistence.entity.DisbursementJpaEntity;
 import com.rentmanager.shared.security.principal.AuthenticatedUser;
@@ -183,6 +185,26 @@ public class PlatformAdminController {
         Pageable pageable = PageRequest.of(page, Math.min(Math.max(size, 1), 100), Sort.by(Sort.Direction.DESC, "createdAt"));
         return ResponseEntity.ok(ApiResponse.ok("Disbursements",
                 queryService.getDisbursements(landlordId, status, requiresManualAttention, pageable)));
+    }
+
+    /**
+     * The rows behind the overview's pending/failed payment counters.
+     *
+     * <p>Read-only, so OWNER or ADMIN — matching the disbursement queue
+     * beside it. Cross-tenant by design; the role gate is the constraint.
+     */
+    @GetMapping("/payment-requests")
+    @PreAuthorize("hasAnyAuthority('ROLE_PLATFORM_OWNER', 'ROLE_PLATFORM_ADMIN')")
+    public ResponseEntity<ApiResponse<Page<RentPaymentRequestJpaEntity>>> paymentRequests(
+            @RequestParam(required = false) UUID landlordId,
+            @RequestParam(required = false) RentPaymentRequestStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        Pageable pageable = PageRequest.of(
+                page, Math.min(Math.max(size, 1), 100), Sort.by(Sort.Direction.DESC, "createdAt"));
+        return ResponseEntity.ok(ApiResponse.ok("Payment requests",
+                queryService.getPaymentRequests(landlordId, status, pageable)));
     }
 
     @PostMapping("/disbursements/{disbursementId}/retry")

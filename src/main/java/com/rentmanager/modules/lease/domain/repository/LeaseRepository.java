@@ -26,6 +26,21 @@ public interface LeaseRepository {
 
     List<Lease> findAllByTenant(UUID tenantId);
 
+    /**
+     * Every lease belonging to one renter under one landlord, newest first.
+     *
+     * <p>The renter portal resolves its lease on every request. It used to do
+     * that by loading {@code findAllByTenant(landlordTenantId)} — the
+     * landlord's <em>entire</em> lease book — and filtering in memory, on all
+     * twelve endpoints. Invisible at ten leases; a landlord with a thousand
+     * units made every one of their renters' dashboard loads pull a thousand
+     * rows to find one.
+     *
+     * <p>Ordered newest-first so a caller wanting "their current or most
+     * recent tenancy" can take the head of the list without re-sorting.
+     */
+    List<Lease> findAllByTenantAndTenantProfile(UUID tenantId, UUID tenantProfileId);
+
     List<Lease> findActiveByTenant(UUID tenantId);
 
     List<Lease> findByProperty(UUID tenantId, UUID propertyId);

@@ -10,6 +10,7 @@ import com.rentmanager.modules.tenant.domain.model.Tenant;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
 import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,12 +44,20 @@ public class LeaseApiTest {
     @Autowired private ObjectMapper objectMapper;
     @Autowired private TenantProfileRepository tenantProfileRepository;
     @Autowired private TenantRepository tenantRepository;
+    @Autowired private EntityManager entityManager;
 
     private static final UUID TENANT_A =
             UUID.fromString("11111111-1111-1111-1111-111111111111");
 
     private static final UUID TENANT_B =
             UUID.fromString("22222222-2222-2222-2222-222222222222");
+
+    // Must match the propertyId/unitId hardcoded in the createLease() payload below.
+    private static final UUID PROPERTY_ID =
+            UUID.fromString("33333333-3333-3333-3333-333333333333");
+
+    private static final UUID UNIT_ID =
+            UUID.fromString("44444444-4444-4444-4444-444444444444");
 
     // Must match the tenantProfileId hardcoded in the createLease() payload below.
     private static final UUID TENANT_PROFILE_ID =
@@ -65,6 +74,23 @@ public class LeaseApiTest {
         // throughout, before either row is persisted.
         seedTenant(TENANT_A);
         seedTenant(TENANT_B);
+
+        // leases.property_id/unit_id also carry real foreign keys now
+        // (V73-V74) — pin a property/unit to the fixed UUIDs the payload
+        // below already references, same rationale as TENANT_PROFILE_ID.
+        entityManager.createNativeQuery("""
+                INSERT INTO properties (id, tenant_id, reference_code, name, status, created_at, premises_type)
+                VALUES (?1, ?2, ?3, 'Test Property', 'ACTIVE', NOW(), 'RESIDENTIAL')
+                """)
+                .setParameter(1, PROPERTY_ID).setParameter(2, TENANT_A).setParameter(3, "PROP-" + PROPERTY_ID)
+                .executeUpdate();
+        entityManager.createNativeQuery("""
+                INSERT INTO units (id, unit_number, tenant_id, property_id, status, occupancy_status)
+                VALUES (?1, ?2, ?3, ?4, 'ACTIVE', 'VACANT')
+                """)
+                .setParameter(1, UNIT_ID).setParameter(2, "U-" + UNIT_ID)
+                .setParameter(3, TENANT_A).setParameter(4, PROPERTY_ID)
+                .executeUpdate();
 
         // LeaseApplicationService.create() looks this up and checks it belongs
         // to the calling landlord (TENANT_A) before allowing lease creation.

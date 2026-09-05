@@ -10,6 +10,7 @@ import com.rentmanager.modules.lease.infrastructure.persistence.repository.JpaLe
 import com.rentmanager.modules.lease.infrastructure.persistence.specification.LeaseSpecification;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -68,6 +69,19 @@ public class LeaseRepositoryImpl implements LeaseRepository {
     public List<Lease> findAllByTenant(UUID tenantId) {
         return jpaRepository.findAll(
                         LeaseSpecification.hasTenant(tenantId)
+                )
+                .stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Lease> findAllByTenantAndTenantProfile(UUID tenantId, UUID tenantProfileId) {
+        return jpaRepository.findAll(
+                        LeaseSpecification.hasTenant(tenantId)
+                                .and(LeaseSpecification.hasTenantProfile(tenantProfileId)),
+                        Sort.by(Sort.Direction.DESC, "startDate")
                 )
                 .stream()
                 .map(mapper::toDomain)
