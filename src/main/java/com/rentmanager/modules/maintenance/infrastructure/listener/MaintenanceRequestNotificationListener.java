@@ -111,12 +111,29 @@ public class MaintenanceRequestNotificationListener {
 
             String statusLabel = event.getNewStatus().name().toLowerCase().replace('_', ' ');
 
+            // Name the request and carry the landlord's own words.
+            //
+            // This used to read: Update on "Maintenance Request": in review.
+            // A renter with several open reports could not tell which one had
+            // moved, and "log in for details" led to a portal that showed the
+            // same status and nothing more. The title identifies it; the note
+            // is the only part that answers what they actually asked.
+            String title = event.getTitle() == null || event.getTitle().isBlank()
+                    ? "your maintenance request"
+                    : "\"" + event.getTitle() + "\"";
+
+            String body = event.getLandlordNote() == null || event.getLandlordNote().isBlank()
+                    ? """
+                      Update on %s: %s.
+                      Log in to your RentManager portal for details.
+                      - RentManager""".formatted(title, statusLabel)
+                    : """
+                      Update on %s: %s.
+                      %s
+                      - RentManager""".formatted(title, statusLabel, event.getLandlordNote());
+
             enqueue(event.getTenantId(), event.getEventId(), NotificationChannel.SMS,
-                    renterProfile.getPhone(), null,
-                    """
-                    Update on "Maintenance Request": %s.
-                    Log in to your RentManager portal for details.
-                    - RentManager""".formatted(statusLabel));
+                    renterProfile.getPhone(), null, body);
         } catch (Exception ex) {
             log.error("Failed to enqueue maintenance status update for event: {}", event.getEventId(), ex);
         }

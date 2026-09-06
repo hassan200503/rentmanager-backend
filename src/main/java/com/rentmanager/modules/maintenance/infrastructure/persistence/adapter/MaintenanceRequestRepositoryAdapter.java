@@ -10,7 +10,7 @@ import com.rentmanager.modules.maintenance.infrastructure.persistence.repository
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -72,8 +72,7 @@ public class MaintenanceRequestRepositoryAdapter implements MaintenanceRequestRe
 
     @Override
     public int markAllViewedByTenantId(UUID tenantId) {
-        LocalDateTime now = LocalDateTime.now();
-        return jpaRepository.markAllViewed(tenantId, now, now);
+        return jpaRepository.markAllViewed(tenantId, Instant.now());
     }
 
     @Override

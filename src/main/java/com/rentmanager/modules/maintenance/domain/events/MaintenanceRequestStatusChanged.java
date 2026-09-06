@@ -13,6 +13,10 @@ public class MaintenanceRequestStatusChanged extends DomainEvent {
     private final UUID tenantProfileId;
     private final MaintenanceRequestStatus oldStatus;
     private final MaintenanceRequestStatus newStatus;
+    /** Carried so the renter's notification can name the request they reported. */
+    private final String title;
+    /** The landlord's message to the renter, or null when they said nothing. */
+    private final String landlordNote;
 
     public MaintenanceRequestStatusChanged(
             UUID tenantId,
@@ -20,13 +24,17 @@ public class MaintenanceRequestStatusChanged extends DomainEvent {
             String correlationId,
             UUID tenantProfileId,
             MaintenanceRequestStatus oldStatus,
-            MaintenanceRequestStatus newStatus
+            MaintenanceRequestStatus newStatus,
+            String title,
+            String landlordNote
     ) {
         super(tenantId, requestId, correlationId);
         this.requestId = requestId;
         this.tenantProfileId = tenantProfileId;
         this.oldStatus = oldStatus;
         this.newStatus = newStatus;
+        this.title = title;
+        this.landlordNote = landlordNote;
     }
 
     @Override

@@ -16,12 +16,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -196,6 +196,90 @@ class MaintenanceRequestQueryServiceTest {
         verify(requestRepository).countUnviewedByTenantId(tenantId);
     }
 
+    /**
+     * The scenario that motivated these fields, taken from real data: ten
+     * requests, five answered fast, five never answered at all — one of them
+     * Urgent and 22 days old.
+     *
+     * <p>Every pre-existing metric is computed over ANSWERED requests, so
+     * that landlord scored "Response Rate 100%" and "Avg Response 6 min"
+     * while an urgent request sat untouched for three weeks. The numbers were
+     * arithmetically correct and told the opposite of the truth.
+     *
+     * <p>awaitingFirstResponse and oldestAwaitingHours cannot be improved by
+     * ignoring work, which is the whole point of them.
+     */
+    @Test
+    void slaSummaryCountsTheRequestsNobodyAnswered() {
+        Instant respondedAt = Instant.now().minusSeconds(3600);
+
+        List<MaintenanceRequest> requests = new java.util.ArrayList<>();
+        // Five answered promptly and completed.
+        for (int i = 0; i < 5; i++) {
+            requests.add(request("answered-" + i, MaintenancePriority.MEDIUM,
+                    MaintenanceRequestStatus.COMPLETED, respondedAt));
+        }
+        // Five never answered, the oldest of them long overdue.
+        for (int i = 0; i < 4; i++) {
+            requests.add(request("ignored-" + i, MaintenancePriority.MEDIUM,
+                    MaintenanceRequestStatus.SUBMITTED));
+        }
+        requests.add(agedUnanswered("ignored-urgent", 22 * 24));
+
+        when(requestRepository.findAllByTenantId(tenantId)).thenReturn(requests);
+
+        var sla = service.getSlaSummary(tenantId);
+
+        assertThat(sla.awaitingFirstResponse())
+                .as("five renters are still waiting and the hub must be able to say so")
+                .isEqualTo(5);
+        assertThat(sla.oldestAwaitingHours())
+                .as("the longest wait is the figure that should be uncomfortable")
+                .isGreaterThanOrEqualTo(22 * 24L);
+
+        // The flattering numbers are still correct on their own terms - they
+        // are just no longer the only ones available.
+        assertThat(sla.respondedRequests()).isEqualTo(5);
+        assertThat(sla.responseRatePct())
+                .as("punctuality among ANSWERED requests, which is what it has always meant")
+                .isEqualTo(100);
+    }
+
+    /** A cancelled request is not a renter left waiting. */
+    @Test
+    void cancelledRequestsAreNotCountedAsAwaitingAResponse() {
+        List<MaintenanceRequest> requests = List.of(
+                request("cancelled", MaintenancePriority.LOW, MaintenanceRequestStatus.CANCELLED),
+                request("waiting", MaintenancePriority.LOW, MaintenanceRequestStatus.SUBMITTED));
+
+        when(requestRepository.findAllByTenantId(tenantId)).thenReturn(requests);
+
+        assertThat(service.getSlaSummary(tenantId).awaitingFirstResponse()).isEqualTo(1);
+    }
+
+    @Test
+    void nothingAwaitingReportsNullRatherThanZeroHours() {
+        when(requestRepository.findAllByTenantId(tenantId)).thenReturn(List.of(
+                request("done", MaintenancePriority.LOW, MaintenanceRequestStatus.COMPLETED,
+                        Instant.now().minusSeconds(7200))));
+
+        var sla = service.getSlaSummary(tenantId);
+
+        assertThat(sla.awaitingFirstResponse()).isZero();
+        assertThat(sla.oldestAwaitingHours())
+                .as("null means 'nobody is waiting'; zero would read as 'someone just started waiting'")
+                .isNull();
+    }
+
+    private MaintenanceRequest agedUnanswered(String title, long ageHours) {
+        Instant createdAt = Instant.now().minusSeconds(ageHours * 3600);
+        return MaintenanceRequest.rehydrate(
+                UUID.randomUUID(), tenantId, unitId, propertyId, tenantProfileId,
+                UUID.randomUUID(), title, "desc", MaintenanceCategory.PLUMBING,
+                MaintenancePriority.URGENT, MaintenanceRequestStatus.SUBMITTED,
+                null, null, null, null, null, "renter", null, 0L, createdAt, createdAt);
+    }
+
     private MaintenanceRequest request(String title, MaintenancePriority priority, MaintenanceRequestStatus status) {
         return request(title, priority, status, null);
     }
@@ -208,15 +292,13 @@ class MaintenanceRequestQueryServiceTest {
                 UUID.randomUUID(), tenantId, unitId, propertyId, tenantProfileId,
                 UUID.randomUUID(), title, "desc", MaintenanceCategory.PLUMBING,
                 MaintenancePriority.MEDIUM, status,
-                null, null,
-                LocalDateTime.ofInstant(now, java.time.ZoneOffset.UTC),
-                null, null, "renter", null, 0L, createdAt, createdAt);
+                null, null, now, null, null, "renter", null, 0L, createdAt, createdAt);
     }
 
     private MaintenanceRequest request(
-            String title, MaintenancePriority priority, MaintenanceRequestStatus status, LocalDateTime firstResponse) {
+            String title, MaintenancePriority priority, MaintenanceRequestStatus status, Instant firstResponse) {
         Instant createdAt = firstResponse != null
-                ? firstResponse.minusHours(6).toInstant(java.time.ZoneOffset.UTC)
+                ? firstResponse.minusSeconds(6 * 3600)
                 : Instant.now().minusSeconds(60);
         return MaintenanceRequest.rehydrate(
                 UUID.randomUUID(), tenantId, unitId, propertyId, tenantProfileId,

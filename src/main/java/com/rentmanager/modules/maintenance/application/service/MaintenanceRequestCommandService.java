@@ -53,17 +53,32 @@ public class MaintenanceRequestCommandService {
         return request;
     }
 
-    @Transactional
     public MaintenanceRequest updateStatus(
             UUID tenantId,
             UUID requestId,
             MaintenanceRequestStatus newStatus,
             String correlationId
     ) {
+        return updateStatus(tenantId, requestId, newStatus, null, correlationId);
+    }
+
+    /**
+     * @param landlordNote optional message for the renter. It reaches them by
+     *                     SMS and in their portal, and is the only way the
+     *                     landlord can tell them anything beyond a status.
+     */
+    @Transactional
+    public MaintenanceRequest updateStatus(
+            UUID tenantId,
+            UUID requestId,
+            MaintenanceRequestStatus newStatus,
+            String landlordNote,
+            String correlationId
+    ) {
         MaintenanceRequest request = maintenanceRequestRepository.findByIdAndTenantId(requestId, tenantId)
                 .orElseThrow(() -> new IllegalArgumentException("Maintenance request not found: " + requestId));
 
-        request.changeStatus(newStatus, correlationId);
+        request.changeStatus(newStatus, landlordNote, correlationId);
         List<DomainEvent> events = request.pullDomainEvents();
         request = maintenanceRequestRepository.save(request);
         eventPublisher.publishAll(events);

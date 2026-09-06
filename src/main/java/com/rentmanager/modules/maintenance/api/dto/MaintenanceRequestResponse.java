@@ -7,7 +7,6 @@ import com.rentmanager.modules.maintenance.domain.model.MaintenanceRequest;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 public record MaintenanceRequestResponse(
@@ -22,9 +21,9 @@ public record MaintenanceRequestResponse(
         MaintenancePriority priority,
         MaintenanceRequestStatus status,
         LocalDate scheduledDate,
-        LocalDateTime completedAt,
-        LocalDateTime firstLandlordResponseAt,
-        LocalDateTime landlordViewedAt,
+        Instant completedAt,
+        Instant firstLandlordResponseAt,
+        Instant landlordViewedAt,
         String notes,
         String createdBy,
         String assignedTo,

@@ -18,8 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -112,7 +110,7 @@ public class MaintenanceRequestQueryService {
         long respondedWithin24h = requests.stream()
                 .filter(request -> request.getFirstLandlordResponseAt() != null)
                 .filter(request -> Duration.between(
-                                request.getCreatedAt(), toInstant(request.getFirstLandlordResponseAt()))
+                                request.getCreatedAt(), request.getFirstLandlordResponseAt())
                         .toHours() <= SLA_EXCELLENT_HOURS)
                 .count();
 
@@ -120,10 +118,28 @@ public class MaintenanceRequestQueryService {
                 requests.stream()
                         .filter(request -> request.getFirstLandlordResponseAt() != null)
                         .mapToDouble(request -> Duration.between(
-                                        request.getCreatedAt(), toInstant(request.getFirstLandlordResponseAt()))
+                                        request.getCreatedAt(), request.getFirstLandlordResponseAt())
                                 .toMinutes() / 60.0)
                         .average()
                         .orElse(0.0) * 10.0) / 10.0;
+
+        // The numbers that cannot be improved by ignoring work.
+        //
+        // Every other figure here is computed over requests that already got
+        // a response, so a landlord who answers two and ignores eight scores
+        // 100% with a 6-minute average. These two count the ignored ones, and
+        // the hub leads with them for that reason.
+        List<MaintenanceRequest> awaiting = requests.stream()
+                .filter(request -> request.getFirstLandlordResponseAt() == null)
+                .filter(request -> request.getStatus() != MaintenanceRequestStatus.CANCELLED)
+                .toList();
+
+        Long oldestAwaitingHours = awaiting.stream()
+                .map(MaintenanceRequest::getCreatedAt)
+                .filter(java.util.Objects::nonNull)
+                .min(java.time.Instant::compareTo)
+                .map(oldest -> Duration.between(oldest, java.time.Instant.now()).toHours())
+                .orElse(null);
 
         boolean resolvedRequirementMet = resolved >= MIN_RESOLVED_REQUESTS_FOR_SLA;
         Integer responseRatePct = (resolvedRequirementMet && responded > 0)
@@ -136,7 +152,9 @@ public class MaintenanceRequestQueryService {
                 (int) responded,
                 avgResponseHours,
                 resolvedRequirementMet,
-                responseRatePct
+                responseRatePct,
+                awaiting.size(),
+                oldestAwaitingHours
         );
     }
 
@@ -176,10 +194,6 @@ public class MaintenanceRequestQueryService {
             case MEDIUM -> 1;
             case LOW -> 0;
         };
-    }
-
-    private static Instant toInstant(LocalDateTime value) {
-        return value.atZone(ZoneId.systemDefault()).toInstant();
     }
 
     /**
