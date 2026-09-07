@@ -157,7 +157,8 @@ class RentLedgerQueryControllerRbacTest {
                 BigDecimal.ZERO,
                 RentLedgerStatus.DUE.name(),
                 false,
-                0L
+                0L,
+                null, null, null, null
         );
     }
 }
