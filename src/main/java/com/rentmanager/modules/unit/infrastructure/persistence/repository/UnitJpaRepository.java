@@ -33,6 +33,12 @@ public interface UnitJpaRepository extends JpaRepository<UnitJpaEntity, UUID> {
     // =====================================================
     Page<UnitJpaEntity> findAllByTenantId(UUID tenantId, Pageable pageable);
 
+    /**
+     * Bulk lookup for enriching a page of leases with their unit — one
+     * query per page of leases rather than one per lease row.
+     */
+    List<UnitJpaEntity> findAllByTenantIdAndIdIn(UUID tenantId, List<UUID> ids);
+
     // =====================================================
     // EXISTS CHECK
     // =====================================================

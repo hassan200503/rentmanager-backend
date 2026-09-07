@@ -4,12 +4,15 @@ import com.rentmanager.modules.property.api.routes.PropertyRoutes;
 import com.rentmanager.modules.property.application.dto.response.PropertyResponse;
 import com.rentmanager.modules.property.application.dto.response.PropertyTypeMetadataResponse;
 import com.rentmanager.modules.property.application.query.service.PropertyQueryService;
+import com.rentmanager.modules.property.domain.enums.PropertyStatus;
+import com.rentmanager.modules.property.domain.enums.PropertyType;
 import com.rentmanager.contract.common.ApiResponse;
 import com.rentmanager.shared.security.principal.AuthenticatedUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,6 +26,7 @@ public class PropertyQueryController {
 
     private final PropertyQueryService propertyQueryService;
 
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
     @GetMapping("/{propertyId}")
     public ResponseEntity<ApiResponse<PropertyResponse>> getById(
             @AuthenticationPrincipal AuthenticatedUser user,
@@ -36,6 +40,7 @@ public class PropertyQueryController {
         );
     }
 
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
     @GetMapping
     public ResponseEntity<ApiResponse<Page<PropertyResponse>>> getAll(
             @AuthenticationPrincipal AuthenticatedUser user,
@@ -49,20 +54,24 @@ public class PropertyQueryController {
         );
     }
 
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
     @GetMapping("/search")
     public ResponseEntity<ApiResponse<Page<PropertyResponse>>> search(
             @AuthenticationPrincipal AuthenticatedUser user,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) PropertyStatus status,
+            @RequestParam(required = false) PropertyType propertyType,
             Pageable pageable
     ) {
         Page<PropertyResponse> response =
-                propertyQueryService.search(requireTenantId(user), keyword, pageable);
+                propertyQueryService.search(requireTenantId(user), keyword, status, propertyType, pageable);
 
         return ResponseEntity.ok(
                 ApiResponse.ok("Property search completed successfully", response)
         );
     }
 
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
     @GetMapping("/owner/{ownerId}")
     public ResponseEntity<ApiResponse<List<PropertyResponse>>> getByOwner(
             @AuthenticationPrincipal AuthenticatedUser user,
@@ -76,6 +85,7 @@ public class PropertyQueryController {
         );
     }
 
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
     @GetMapping("/status/{status}")
     public ResponseEntity<ApiResponse<List<PropertyResponse>>> getByStatus(
             @AuthenticationPrincipal AuthenticatedUser user,
@@ -96,6 +106,7 @@ public class PropertyQueryController {
      * (the taxonomy is global). Must be declared before {@code /{propertyId}}
      * resolution — an exact literal path wins in Spring routing regardless.
      */
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/types")
     public ResponseEntity<ApiResponse<PropertyTypeMetadataResponse>> getPropertyTypes(
             @AuthenticationPrincipal AuthenticatedUser user

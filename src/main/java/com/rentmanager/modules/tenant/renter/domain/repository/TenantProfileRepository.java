@@ -29,4 +29,10 @@ public interface TenantProfileRepository {
     void deleteById(UUID id);
 
     List<TenantProfile> findAllById(Collection<UUID> ids);
+
+    /**
+     * Every renter under this landlord whose name or phone contains the
+     * keyword. Backs the Tenants page's search box.
+     */
+    List<TenantProfile> searchByNameOrPhone(UUID tenantId, String keyword);
 }

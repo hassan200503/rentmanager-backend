@@ -14,6 +14,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -40,6 +41,17 @@ public class UnitRepositoryAdapter implements UnitRepository {
     public Page<Unit> findAllByTenantId(UUID tenantId, Pageable pageable) {
         return jpaRepository.findAllByTenantId(tenantId, pageable)
                 .map(mapper::toDomain);
+    }
+
+    @Override
+    public List<Unit> findAllByTenantIdAndIdIn(UUID tenantId, List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return jpaRepository.findAllByTenantIdAndIdIn(tenantId, ids)
+                .stream()
+                .map(mapper::toDomain)
+                .toList();
     }
 
     // =====================================================

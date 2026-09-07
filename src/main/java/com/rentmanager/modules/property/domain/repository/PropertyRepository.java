@@ -1,6 +1,7 @@
 package com.rentmanager.modules.property.domain.repository;
 
 import com.rentmanager.modules.property.domain.enums.PropertyStatus;
+import com.rentmanager.modules.property.domain.enums.PropertyType;
 import com.rentmanager.modules.property.domain.model.Property;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -24,6 +25,12 @@ public interface PropertyRepository {
     boolean existsByTenantIdAndNameIgnoreCase(UUID tenantId, String name);
 
     Page<Property> findAllByTenantId(UUID tenantId, Pageable pageable);
+
+    /**
+     * Bulk lookup for enriching a page of leases with their property — one
+     * query per page of leases rather than one per lease row.
+     */
+    List<Property> findAllByTenantIdAndIdIn(UUID tenantId, List<UUID> ids);
 
     Page<Property> search(String keyword, Pageable pageable);
 
@@ -78,4 +85,19 @@ public interface PropertyRepository {
      * here so this method is safe to call with ids from any source.
      */
     List<Property> findAllByIdInAndStatus(List<UUID> ids, PropertyStatus status);
+
+    /**
+     * Landlord dashboard Properties page: keyword, status and propertyType
+     * are each optional (null/blank means "no filter on this field") and
+     * independently combinable, always scoped to the tenant. Backs a single
+     * paginated endpoint so the frontend never has to choose between search
+     * and status filtering.
+     */
+    Page<Property> searchByTenantIdWithFilters(
+            UUID tenantId,
+            String keyword,
+            PropertyStatus status,
+            PropertyType propertyType,
+            Pageable pageable
+    );
 }

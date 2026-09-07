@@ -108,15 +108,29 @@ public class LeaseController {
     public ApiResponse<PageResponse<LeaseSummaryResponse>> search(
             @RequestParam(required = false) UUID propertyId,
             @RequestParam(required = false) LeaseStatusDTO status,
+            @RequestParam(required = false) String keyword,
             @RequestParam(required = false) LocalDate fromDate,
             @RequestParam(required = false) LocalDate toDate,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
         LeaseSearchRequest request = new LeaseSearchRequest(
-                null, propertyId, status, fromDate, toDate, page, size
+                null, propertyId, status, keyword, fromDate, toDate, page, size
         );
         return ApiResponse.ok(leaseService.search(request));
+    }
+
+    /**
+     * Portfolio-wide tenant stats for the Tenants page's stat cards — always
+     * the whole book, deliberately unaffected by the table's pagination or
+     * filters below it. A landlord expects "3 active tenants" to mean the
+     * same thing regardless of which page or filter they're currently
+     * looking at, not to change as they page through the table.
+     */
+    @GetMapping("/stats")
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
+    public ApiResponse<LeaseStatsResponse> stats() {
+        return ApiResponse.ok(leaseService.getStats());
     }
 
 

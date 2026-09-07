@@ -350,7 +350,11 @@ class LeaseControllerRbacTest {
                 BigDecimal.TEN,
                 UUID.fromString("20000000-0000-0000-0000-000000000004"),
                 "Test Tenant",
-                "+254700000000"
+                "+254700000000",
+                UUID.fromString("30000000-0000-0000-0000-000000000005"),
+                "Test Property",
+                UUID.fromString("40000000-0000-0000-0000-000000000006"),
+                "Unit 1"
         );
         // Shape confirmed from LeaseApplicationService.search(): new PageResponse<>(
         // result, request.page(), request.size(), result.size(), 1, true, true)

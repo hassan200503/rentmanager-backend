@@ -109,6 +109,7 @@ subscription-billing:
 
 clerk:
   secret-key: ${CLERK_SECRET_KEY:YOUR_CLERK_SECRET_KEY}
+  webhook-secret: ${CLERK_WEBHOOK_SECRET:}
   base-url: https://api.clerk.com/v1
   jwt-template-name: backend
 

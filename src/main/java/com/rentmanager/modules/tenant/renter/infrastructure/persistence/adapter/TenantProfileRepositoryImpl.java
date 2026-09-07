@@ -91,4 +91,9 @@ public class TenantProfileRepositoryImpl implements TenantProfileRepository {
     public List<TenantProfile> findAllById(Collection<UUID> ids) {
         return jpaRepository.findAllById(ids).stream().map(this::toDomain).toList();
     }
+
+    @Override
+    public List<TenantProfile> searchByNameOrPhone(UUID tenantId, String keyword) {
+        return jpaRepository.searchByNameOrPhone(tenantId, keyword).stream().map(this::toDomain).toList();
+    }
 }

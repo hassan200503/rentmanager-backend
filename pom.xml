@@ -318,6 +318,23 @@
                 <version>3.1.2</version>
             </plugin>
 
+            <!-- FAILSAFE — runs *IT.java classes in integration-test/verify phases.
+                 These require Docker (Testcontainers Postgres). Run with: mvn verify -pl .
+                 In CI the workflow already sets up Docker; see .github/workflows/. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.1.2</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
         </plugins>
     </build>
 

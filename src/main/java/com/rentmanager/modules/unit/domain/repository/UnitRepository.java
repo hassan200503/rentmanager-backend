@@ -6,6 +6,7 @@ import com.rentmanager.modules.unit.domain.model.Unit;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -18,6 +19,12 @@ public interface UnitRepository {
     Optional<Unit> findByIdAndTenantId(UUID id, UUID tenantId);
 
     Page<Unit> findAllByTenantId(UUID tenantId, Pageable pageable);
+
+    /**
+     * Bulk lookup for enriching a page of leases with their unit — one
+     * query per page of leases rather than one per lease row.
+     */
+    List<Unit> findAllByTenantIdAndIdIn(UUID tenantId, List<UUID> ids);
 
     // =========================
     // BUSINESS QUERIES

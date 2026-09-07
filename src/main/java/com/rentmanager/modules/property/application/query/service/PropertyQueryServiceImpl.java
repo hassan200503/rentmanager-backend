@@ -6,11 +6,14 @@ import com.rentmanager.modules.property.application.dto.response.PropertyTypeMet
 import com.rentmanager.modules.property.application.mapper.PropertyMapper;
 import com.rentmanager.modules.property.domain.enums.PremisesType;
 import com.rentmanager.modules.property.domain.enums.PropertyType;
+import com.rentmanager.modules.property.domain.enums.PropertyStatus;
+import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.shared.exception.PropertyNotFoundException;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
@@ -47,18 +50,33 @@ public class PropertyQueryServiceImpl implements PropertyQueryService {
     @Override
     public Page<PropertyResponse> getAll(UUID tenantId, Pageable pageable) {
 
-        return propertyRepository.findAllByTenantId(tenantId, pageable)
-                .map(propertyMapper::toResponse);
+        Page<Property> page = propertyRepository.findAllByTenantId(tenantId, pageable);
+        return new PageImpl<>(
+                propertyMapper.toResponseList(page.getContent()),
+                pageable,
+                page.getTotalElements()
+        );
     }
 
     // =========================================================
-    // SEARCH (TENANT SCOPED)
+    // SEARCH (TENANT SCOPED, keyword + status + propertyType)
     // =========================================================
     @Override
-    public Page<PropertyResponse> search(UUID tenantId, String keyword, Pageable pageable) {
-
-        return propertyRepository.searchByTenantId(tenantId, keyword, pageable)
-                .map(propertyMapper::toResponse);
+    public Page<PropertyResponse> search(
+            UUID tenantId,
+            String keyword,
+            PropertyStatus status,
+            PropertyType propertyType,
+            Pageable pageable
+    ) {
+        Page<Property> page = propertyRepository.searchByTenantIdWithFilters(
+                tenantId, keyword, status, propertyType, pageable
+        );
+        return new PageImpl<>(
+                propertyMapper.toResponseList(page.getContent()),
+                pageable,
+                page.getTotalElements()
+        );
     }
 
     // =========================================================

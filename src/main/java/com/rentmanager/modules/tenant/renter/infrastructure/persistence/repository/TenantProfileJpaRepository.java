@@ -3,6 +3,7 @@ package com.rentmanager.modules.tenant.renter.infrastructure.persistence.reposit
 import com.rentmanager.modules.tenant.renter.infrastructure.persistence.entity.TenantProfileEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -27,5 +28,23 @@ public interface TenantProfileJpaRepository extends JpaRepository<TenantProfileE
      */
     @Query("select distinct t.clerkUserId from TenantProfileEntity t")
     List<String> findAllClerkUserIds();
+
+    /**
+     * Backs the Tenants page's search box: a landlord searching "Hassan"
+     * needs every renter with that name, not just whichever page of leases
+     * happens to be loaded. Landlord-scoped ({@code tenantId} here is the
+     * landlord, per the naming trap — see module docs) since one renter's
+     * name is only ever searched within one landlord's book.
+     */
+    @Query("""
+            SELECT t FROM TenantProfileEntity t
+            WHERE t.tenantId = :tenantId
+              AND (LOWER(t.fullName) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                   OR t.phone LIKE CONCAT('%', :keyword, '%'))
+            """)
+    List<TenantProfileEntity> searchByNameOrPhone(
+            @Param("tenantId") UUID tenantId,
+            @Param("keyword") String keyword
+    );
 
 }

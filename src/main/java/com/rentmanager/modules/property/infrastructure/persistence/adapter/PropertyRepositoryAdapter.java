@@ -1,6 +1,7 @@
 package com.rentmanager.modules.property.infrastructure.persistence.adapter;
 
 import com.rentmanager.modules.property.domain.enums.PropertyStatus;
+import com.rentmanager.modules.property.domain.enums.PropertyType;
 import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.modules.property.infrastructure.persistence.entity.PropertyJpaEntity;
@@ -82,6 +83,17 @@ public class PropertyRepositoryAdapter implements PropertyRepository {
     public Page<Property> findAllByTenantId(UUID tenantId, Pageable pageable) {
         return jpaRepository.findAllByTenantId(tenantId, pageable)
                 .map(persistenceMapper::toDomain);
+    }
+
+    @Override
+    public List<Property> findAllByTenantIdAndIdIn(UUID tenantId, List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return jpaRepository.findAllByTenantIdAndIdIn(tenantId, ids)
+                .stream()
+                .map(persistenceMapper::toDomain)
+                .toList();
     }
 
     @Override
@@ -200,5 +212,25 @@ public class PropertyRepositoryAdapter implements PropertyRepository {
                 .stream()
                 .map(persistenceMapper::toDomain)
                 .toList();
+    }
+
+    @Override
+    public Page<Property> searchByTenantIdWithFilters(
+            UUID tenantId,
+            String keyword,
+            PropertyStatus status,
+            PropertyType propertyType,
+            Pageable pageable
+    ) {
+        // Null-safe: Hibernate 6.4 binds a null String as bytea on Postgres,
+        // breaking LOWER(); "" is the documented no-filter value.
+        return jpaRepository.searchByTenantIdWithFilters(
+                        tenantId,
+                        keyword == null ? "" : keyword,
+                        status,
+                        propertyType,
+                        pageable
+                )
+                .map(persistenceMapper::toDomain);
     }
 }

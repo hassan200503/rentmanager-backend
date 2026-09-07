@@ -70,12 +70,30 @@ public class ReviewController {
                 renterReviewQueryService.getReviews(tenantId)));
     }
 
+    /**
+     * Moderation-state counts for the dashboard's "Moderation state" card,
+     * which covers BOTH directions of this landlord's renter reviews —
+     * reviews received from renters (this module's own LandlordReview
+     * table) and reviews given to renters (RenterReview). Combining them
+     * here, rather than in the frontend, keeps "moderation state" a single
+     * source of truth: before this, the card silently omitted every given
+     * review, so a landlord with reviews pending on renters saw "0
+     * Pending" even while the Given tab listed exactly that pending
+     * review.
+     */
     @GetMapping("/counts")
     public ResponseEntity<ApiResponse<ReviewStatusCountsResponse>> getCounts() {
         UUID tenantId = resolveStrictTenantId();
+        ReviewStatusCountsResponse received = queryService.getStatusCounts(tenantId);
+        ReviewStatusCountsResponse given = renterReviewQueryService.getStatusCounts(tenantId);
+        ReviewStatusCountsResponse combined = new ReviewStatusCountsResponse(
+                received.approvedCount() + given.approvedCount(),
+                received.pendingCount() + given.pendingCount(),
+                received.hiddenCount() + given.hiddenCount()
+        );
         return ResponseEntity.ok(ApiResponse.ok(
                 "Review status counts retrieved",
-                queryService.getStatusCounts(tenantId)));
+                combined));
     }
 
     @PostMapping

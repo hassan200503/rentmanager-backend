@@ -7,7 +7,6 @@ import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.unit.domain.model.Unit;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.enums.LeaseStatus;
-import com.rentmanager.shared.exception.LeaseStateException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -16,9 +15,11 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * SaaS-grade Lease activation flow validation.
+ * Lease activation flow: full state machine must be respected.
  *
- * Ensures Unit state gating for Lease activation is enforced.
+ * activate() requires AWAITING_DEPOSIT status (post-V34 tightening). Tests
+ * that previously called approve() → activate() directly were silently
+ * broken; the fix is to include markAwaitingDeposit() in the path. See TD-126.
  */
 class LeaseActivationFlowIT extends CrossModuleBaseIT {
 
@@ -42,9 +43,8 @@ class LeaseActivationFlowIT extends CrossModuleBaseIT {
                     UUID.randomUUID()
             );
 
-            // correct lifecycle: must approve before activation
             lease.approve();
-
+            lease.markAwaitingDeposit();
             unit.markOccupied("FLOW");
             lease.activate();
 
@@ -57,7 +57,6 @@ class LeaseActivationFlowIT extends CrossModuleBaseIT {
             return null;
         });
     }
-
 
     @Test
     void should_transition_unit_to_occupied_when_lease_is_activated() {
@@ -77,7 +76,7 @@ class LeaseActivationFlowIT extends CrossModuleBaseIT {
             );
 
             lease.approve();
-
+            lease.markAwaitingDeposit();
             unit.markOccupied("SYNC");
             lease.activate();
 
@@ -88,15 +87,10 @@ class LeaseActivationFlowIT extends CrossModuleBaseIT {
 
             return null;
         });
-
-
     }
 
-
-
-
     @Test
-    void should_fail_activation_when_unit_is_vacant() {
+    void should_activate_with_vacant_unit_domain_does_not_gate_on_occupancy() {
 
         UUID tenantId = UUID.randomUUID();
 
@@ -113,17 +107,17 @@ class LeaseActivationFlowIT extends CrossModuleBaseIT {
             );
 
             lease.approve();
+            lease.markAwaitingDeposit();
 
             assertEquals("VACANT", unit.getOccupancyStatus().name());
 
-            // ACTUAL DOMAIN BEHAVIOR: activation is allowed
+            // The domain does not gate activate() on unit occupancy.
+            // Occupancy sync is an event-driven side effect; the test
+            // verifies that activation itself succeeds.
             lease.activate();
 
-            // You assert system state, not exception
             assertTrue(lease.isActive());
             assertEquals(LeaseStatus.ACTIVE, lease.getStatus());
-
-            // Unit is still VACANT unless explicitly synchronized elsewhere
             assertEquals("VACANT", unit.getOccupancyStatus().name());
 
             return null;

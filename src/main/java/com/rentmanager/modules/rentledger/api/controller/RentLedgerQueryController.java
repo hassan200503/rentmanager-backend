@@ -1,6 +1,7 @@
 package com.rentmanager.modules.rentledger.api.controller;
 
 import com.rentmanager.contract.common.ApiResponse;
+import com.rentmanager.modules.rentledger.api.dto.response.LeaseBalanceSummaryResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.RentLedgerSummaryResponse;
 import com.rentmanager.modules.rentledger.application.dto.RentLedgerSummary;
 import com.rentmanager.modules.rentledger.application.service.RentLedgerSummaryService;
@@ -77,6 +78,25 @@ public class RentLedgerQueryController {
         return ResponseEntity.ok(ApiResponse.ok(
                 "Rent ledger summary retrieved",
                 RentLedgerSummaryResponse.from(summary)));
+    }
+
+    /**
+     * The Tenants page's rent-status column and stat cards: one entry per
+     * lease that currently has money outstanding or an unresolved
+     * overpayment, computed from one query across the whole tenant rather
+     * than one ledger call per lease row.
+     */
+    @GetMapping("/balance-by-lease")
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
+    public ResponseEntity<ApiResponse<List<LeaseBalanceSummaryResponse>>> getBalanceByLease(
+            @AuthenticationPrincipal AuthenticatedUser user
+    ) {
+        List<LeaseBalanceSummaryResponse> response =
+                rentLedgerQueryService.getBalanceByLease(requireTenantId(user));
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("Lease balances retrieved successfully", response)
+        );
     }
 
     @GetMapping("/entries/{entryId}")

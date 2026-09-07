@@ -15,5 +15,13 @@ public record LeaseSummaryResponse(
         BigDecimal rentAmount,
         UUID tenantProfileId,
         String tenantFullName,
-        String tenantPhone
+        String tenantPhone,
+        UUID propertyId,
+        // Null if the property was deleted out from under an old lease — the
+        // frontend must not assume every lease resolves to a live property.
+        String propertyName,
+        UUID unitId,
+        // Unit's display label: its human-entered label if set, else its
+        // unit number — same fallback UnitTable already uses on the frontend.
+        String unitLabel
 ) {}

@@ -5,6 +5,7 @@ import com.rentmanager.modules.lease.infrastructure.persistence.entity.LeaseEnti
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -102,6 +103,32 @@ public class LeaseSpecification {
      */
     public static Specification<LeaseEntity> baseFilter(UUID tenantId) {
         return Specification.where(hasTenant(tenantId));
+    }
+
+    /**
+     * Lease number contains the keyword, case-insensitively.
+     */
+    public static Specification<LeaseEntity> matchesLeaseNumber(String keyword) {
+        return (root, query, cb) ->
+                (keyword == null || keyword.isBlank())
+                        ? null
+                        : cb.like(cb.lower(root.get("leaseNumber")), "%" + keyword.toLowerCase() + "%");
+    }
+
+    /**
+     * Tenant profile is one of the given ids — used to fold a name/phone
+     * keyword search (resolved to matching profile ids beforehand, since
+     * tenantProfileId here is a plain UUID column with no JPA association to
+     * join against) into the lease query. An empty list means "no profile
+     * matched the keyword", which must exclude every row (cb.disjunction, a
+     * literal false) rather than the "no filter" null that every other
+     * predicate here returns for an absent value.
+     */
+    public static Specification<LeaseEntity> hasTenantProfileIdIn(List<UUID> tenantProfileIds) {
+        return (root, query, cb) ->
+                (tenantProfileIds == null || tenantProfileIds.isEmpty())
+                        ? cb.disjunction()
+                        : root.get("tenantProfileId").in(tenantProfileIds);
     }
 
 }

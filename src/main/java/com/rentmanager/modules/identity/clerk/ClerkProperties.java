@@ -13,6 +13,9 @@ public class ClerkProperties {
 
     private String secretKey;
 
+    /** Webhook signing secret (Svix). Strip the 'whsec_' prefix before use. */
+    private String webhookSecret;
+
     // Clerk Backend API base URL
     private String baseUrl = "https://api.clerk.com/v1";
 }

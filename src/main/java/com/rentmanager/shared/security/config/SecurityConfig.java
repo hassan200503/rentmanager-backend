@@ -113,7 +113,10 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
-                                "/api/v1/public/**"
+                                "/api/v1/public/**",
+                                // Clerk webhooks: Svix HMAC-SHA256 verified in the controller.
+                                // No Bearer token — Clerk signs with a webhook secret instead.
+                                "/api/v1/webhooks/clerk"
                                 // "/api/v1/dev/**" was permitted here. It was
                                 // not exploitable — every controller under it
                                 // is @Profile("dev") and the default profile

@@ -1,5 +1,6 @@
 package com.rentmanager.modules.rentledger.application.query.service;
 
+import com.rentmanager.modules.rentledger.api.dto.response.LeaseBalanceSummaryResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.RentLedgerEntryResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.RentTransactionResponse;
 import com.rentmanager.modules.rentledger.domain.enums.RentLedgerStatus;
@@ -19,4 +20,11 @@ public interface RentLedgerQueryService {
     List<RentTransactionResponse> getTransactionsForEntry(UUID tenantId, UUID entryId);
 
     List<RentTransactionSummaryResponse> getAllTransactions(UUID tenantId);
+
+    /**
+     * One entry per lease with money currently outstanding or an
+     * unresolved overpayment, for the whole tenant in one query — backs
+     * the Tenants page's rent-status column and stat cards.
+     */
+    List<LeaseBalanceSummaryResponse> getBalanceByLease(UUID tenantId);
 }

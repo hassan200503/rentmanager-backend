@@ -54,15 +54,18 @@ jobs:
           # so the behaviour is the same every run rather than depending on
           # whether a daemon happened to be present.
           TESTCONTAINERS_REUSE_ENABLE: "false"
-        run: mvn --batch-mode --no-transfer-progress test
+        # verify runs both surefire (*Test.java) and failsafe (*IT.java).
+        # test would skip the integration tests; verify is the correct target.
+        run: mvn --batch-mode --no-transfer-progress verify
 
-      # Surefire XML is far easier to read than scrolling the log when
-      # something fails, and it survives the run.
+      # Both surefire and failsafe XML are included.
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: surefire-reports
-          path: target/surefire-reports/
+          name: test-reports
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
           retention-days: 7
           if-no-files-found: warn

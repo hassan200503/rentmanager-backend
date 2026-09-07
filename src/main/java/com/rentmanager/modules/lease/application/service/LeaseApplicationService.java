@@ -13,8 +13,12 @@ import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowEngine;
 import com.rentmanager.modules.lease.domain.enums.*;
+import com.rentmanager.modules.property.domain.model.Property;
+import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
 import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
+import com.rentmanager.modules.unit.domain.model.Unit;
+import com.rentmanager.modules.unit.domain.repository.UnitRepository;
 import com.rentmanager.shared.events.DomainEventPublisher;
 import com.rentmanager.shared.security.context.TenantContext;
 import com.rentmanager.shared.exception.ErrorCode;
@@ -26,6 +30,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -40,6 +45,8 @@ public class LeaseApplicationService {
     private final LeaseRepository leaseRepository;
     private final LeaseWorkflowEngine workflowEngine;
     private final TenantProfileRepository tenantProfileRepository;
+    private final PropertyRepository propertyRepository;
+    private final UnitRepository unitRepository;
     private final LeaseActivationOrchestrator leaseActivationOrchestrator;
     private final DomainEventPublisher eventPublisher;
 
@@ -47,12 +54,16 @@ public class LeaseApplicationService {
             LeaseRepository leaseRepository,
             LeaseWorkflowEngine workflowEngine,
             TenantProfileRepository tenantProfileRepository,
+            PropertyRepository propertyRepository,
+            UnitRepository unitRepository,
             LeaseActivationOrchestrator leaseActivationOrchestrator,
             DomainEventPublisher eventPublisher
     ) {
         this.leaseRepository = leaseRepository;
         this.workflowEngine = workflowEngine;
         this.tenantProfileRepository = tenantProfileRepository;
+        this.propertyRepository = propertyRepository;
+        this.unitRepository = unitRepository;
         this.leaseActivationOrchestrator = leaseActivationOrchestrator;
         this.eventPublisher = eventPublisher;
     }
@@ -150,20 +161,36 @@ public class LeaseApplicationService {
 
         LeaseStatus statusFilter = request.status() != null ? LeaseStatus.valueOf(request.status().name()) : null;
 
+        String keyword = request.keyword();
+        List<UUID> matchingProfileIds = (keyword != null && !keyword.isBlank())
+                ? tenantProfileRepository.searchByNameOrPhone(tenantId, keyword).stream()
+                        .map(TenantProfile::getId)
+                        .toList()
+                : List.of();
+
         Page<Lease> leasePage = leaseRepository.search(
                 tenantId,
                 request.propertyId(),
                 statusFilter,
                 request.fromDate(),
                 request.toDate(),
+                keyword,
+                matchingProfileIds,
                 PageRequest.of(request.page(), request.size())
         );
 
         List<Lease> leases = leasePage.getContent();
         Map<UUID, TenantProfile> profileMap = loadProfiles(leases);
+        Map<UUID, Property> propertyMap = loadProperties(tenantId, leases);
+        Map<UUID, Unit> unitMap = loadUnits(tenantId, leases);
 
         List<LeaseSummaryResponse> result = leases.stream()
-                .map(l -> toSummary(l, profileMap.get(l.getTenantProfileId())))
+                .map(l -> toSummary(
+                        l,
+                        profileMap.get(l.getTenantProfileId()),
+                        propertyMap.get(l.getPropertyId()),
+                        unitMap.get(l.getUnitId())
+                ))
                 .toList();
 
         return new PageResponse<>(
@@ -186,6 +213,30 @@ public class LeaseApplicationService {
         return tenantProfileRepository.findAllById(profileIds)
                 .stream()
                 .collect(Collectors.toMap(TenantProfile::getId, p -> p));
+    }
+
+    private Map<UUID, Property> loadProperties(UUID tenantId, List<Lease> leases) {
+        List<UUID> propertyIds = leases.stream()
+                .map(Lease::getPropertyId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (propertyIds.isEmpty()) return Collections.emptyMap();
+        return propertyRepository.findAllByTenantIdAndIdIn(tenantId, propertyIds)
+                .stream()
+                .collect(Collectors.toMap(Property::getId, p -> p));
+    }
+
+    private Map<UUID, Unit> loadUnits(UUID tenantId, List<Lease> leases) {
+        List<UUID> unitIds = leases.stream()
+                .map(Lease::getUnitId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (unitIds.isEmpty()) return Collections.emptyMap();
+        return unitRepository.findAllByTenantIdAndIdIn(tenantId, unitIds)
+                .stream()
+                .collect(Collectors.toMap(Unit::getId, u -> u));
     }
 
 
@@ -372,8 +423,41 @@ public class LeaseApplicationService {
         );
     }
 
+    /**
+     * Portfolio-wide stat-card figures — see {@code LeaseController#stats}
+     * for why these are never paginated or filtered. "Expiring soon" mirrors
+     * the frontend's isExpiringSoon(status, endDate, 30) exactly: ACTIVE or
+     * RENEWED, with 0-30 days remaining inclusive (today and up to a month
+     * out; already-expired dates and drafts/pending leases don't count).
+     */
+    public LeaseStatsResponse getStats() {
+        UUID tenantId = TenantContext.getTenantId();
+        List<Lease> leases = leaseRepository.findAllByTenant(tenantId);
+        LocalDate today = LocalDate.now();
+        LocalDate expiringCutoff = today.plusDays(30);
+
+        long activeCount = 0;
+        long expiringSoonCount = 0;
+        BigDecimal monthlyRent = BigDecimal.ZERO;
+
+        for (Lease lease : leases) {
+            boolean isLive = lease.getStatus() == LeaseStatus.ACTIVE || lease.getStatus() == LeaseStatus.RENEWED;
+            if (!isLive) continue;
+
+            activeCount++;
+            monthlyRent = monthlyRent.add(lease.getRentAmount());
+
+            LocalDate endDate = lease.getEndDate();
+            if (endDate != null && !endDate.isBefore(today) && !endDate.isAfter(expiringCutoff)) {
+                expiringSoonCount++;
+            }
+        }
+
+        return new LeaseStatsResponse(leases.size(), activeCount, expiringSoonCount, monthlyRent);
+    }
+
     // =========================================================
-    private LeaseSummaryResponse toSummary(Lease lease, TenantProfile profile) {
+    private LeaseSummaryResponse toSummary(Lease lease, TenantProfile profile, Property property, Unit unit) {
         return new LeaseSummaryResponse(
                 lease.getId(),
                 lease.getLeaseNumber(),
@@ -383,7 +467,11 @@ public class LeaseApplicationService {
                 lease.getRentAmount(),
                 profile != null ? profile.getId() : null,
                 profile != null ? profile.getFullName() : null,
-                profile != null ? profile.getPhone() : null
+                profile != null ? profile.getPhone() : null,
+                lease.getPropertyId(),
+                property != null ? property.getName() : null,
+                lease.getUnitId(),
+                unit != null ? (unit.getLabel() != null ? unit.getLabel() : unit.getUnitNumber()) : null
         );
     }
 

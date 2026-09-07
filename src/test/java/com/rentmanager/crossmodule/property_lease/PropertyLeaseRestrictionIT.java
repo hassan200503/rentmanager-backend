@@ -144,6 +144,7 @@ class PropertyLeaseRestrictionIT {
         assertEquals(LeaseStatus.DRAFT, lease.getStatus());
 
         lease.approve();
+        lease.markAwaitingDeposit();
         lease.activate();
 
         assertTrue(lease.isActive());
