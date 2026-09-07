@@ -207,6 +207,10 @@ public class RentLedgerApplicationService {
 
         List<RentLedgerEntry> entries = rentLedgerEntryRepository.findByLease(tenantId, leaseId);
 
+        // Drained before save in the create branch — save() returns a rehydrated
+        // instance with an empty event list, same as postCharge lines 137-138.
+        List<com.rentmanager.domain.base.DomainEvent> pending = new ArrayList<>();
+
         RentLedgerEntry entry;
         if (entries.isEmpty()) {
             Lease lease = leaseRepository.findByIdAndTenantId(leaseId, tenantId)
@@ -228,6 +232,7 @@ public class RentLedgerApplicationService {
                     lease.getTenantProfileId(), billingPeriodStart, billingPeriodEnd,
                     billingPeriodStart, amountDue, prorated, currency
             );
+            pending = entry.pullDomainEvents();
             entry = rentLedgerEntryRepository.save(entry);
 
             RentTransaction chargeTransaction = RentTransaction.create(
@@ -268,6 +273,8 @@ public class RentLedgerApplicationService {
         depositCommandService.recordAlreadyCollectedDeposit(
                 tenantId, leaseId, entry.getUnitId(), entry.getTenantProfileId(), depositAmount, correlationId
         );
+
+        publish(entry, pending);
     }
 
     /**

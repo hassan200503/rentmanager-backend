@@ -82,12 +82,6 @@ public class ClerkWebhookController {
             return;
         }
 
-        String email = primaryEmail(data);
-        if (email == null) {
-            log.debug("Clerk webhook: no primary email for clerkUserId={}", clerkUserId);
-            return;
-        }
-
         Optional<User> maybeUser = userRepository.findByClerkUserId(clerkUserId);
         if (maybeUser.isEmpty()) {
             log.debug("Clerk webhook: no local user for clerkUserId={} — skipping", clerkUserId);
@@ -95,10 +89,22 @@ public class ClerkWebhookController {
         }
 
         User user = maybeUser.get();
-        boolean changed = user.updateEmailIfChanged(email);
+        boolean changed = false;
+
+        String email = primaryEmail(data);
+        if (email != null) {
+            changed |= user.updateEmailIfChanged(email);
+        }
+
+        String firstName = data.path("first_name").asText(null);
+        String lastName  = data.path("last_name").asText(null);
+        if (firstName != null || lastName != null) {
+            changed |= user.updateNameIfChanged(firstName, lastName);
+        }
+
         if (changed) {
             userRepository.save(user);
-            log.info("Clerk webhook: email updated for clerkUserId={}", clerkUserId);
+            log.info("Clerk webhook: profile synced for clerkUserId={}", clerkUserId);
         }
     }
 

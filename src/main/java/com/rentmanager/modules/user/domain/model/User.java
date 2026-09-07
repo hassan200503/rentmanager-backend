@@ -148,6 +148,26 @@ public class User extends BaseEntity {
      *
      * @return true when the stored address actually changed
      */
+    /**
+     * Syncs first and last name received from a Clerk webhook or JWT claim.
+     * Returns true when at least one field actually changed.
+     */
+    public boolean updateNameIfChanged(String firstName, String lastName) {
+        String incomingFirst  = (firstName  != null) ? firstName.trim()  : "";
+        String incomingLast   = (lastName   != null) ? lastName.trim()   : "";
+        String existingFirst  = (this.firstName  != null) ? this.firstName.trim()  : "";
+        String existingLast   = (this.lastName   != null) ? this.lastName.trim()   : "";
+
+        boolean changed = !incomingFirst.equalsIgnoreCase(existingFirst)
+                || !incomingLast.equalsIgnoreCase(existingLast);
+
+        if (changed) {
+            if (!incomingFirst.isEmpty()) this.firstName = incomingFirst;
+            if (!incomingLast.isEmpty())  this.lastName  = incomingLast;
+        }
+        return changed;
+    }
+
     public boolean updateEmailIfChanged(String email) {
         if (email == null || email.isBlank()) {
             return false;
