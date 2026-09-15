@@ -17,7 +17,9 @@ import jakarta.persistence.PersistenceContext;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.rentmanager.crossmodule.support.PostgresSpringBridge;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ContextConfiguration;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -25,7 +27,11 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+// Real Postgres from the shared Testcontainers bridge — not CrossModuleBaseIT,
+// whose class-level @Transactional would wrap the very rollback under test.
+// Bare @SpringBootTest reached localhost:5432: present locally, absent in CI.
 @SpringBootTest
+@ContextConfiguration(initializers = PostgresSpringBridge.class)
 class CrossModuleRollbackIT {
 
     @Autowired
