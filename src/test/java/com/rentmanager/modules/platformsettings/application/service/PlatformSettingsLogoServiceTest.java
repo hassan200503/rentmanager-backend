@@ -57,7 +57,7 @@ class PlatformSettingsLogoServiceTest {
 
     private static PlatformSettings settingsWithLogo(String logoUrl) {
         return PlatformSettings.rehydrate(
-                7, 30, 3,
+                7, 30, 3, 30,
                 null, null, null, null, null,
                 null, null,
                 logoUrl,
@@ -144,7 +144,7 @@ class PlatformSettingsLogoServiceTest {
     void getBranding_exposesOnlyPublicIdentity() {
         UUID ownerId = UUID.randomUUID();
         PlatformSettings settings = PlatformSettings.rehydrate(
-                7, 30, 3,
+                7, 30, 3, 30,
                 null, null, null, null, null,
                 "support@rentmanager.co.ke", "+254712345678",
                 NEW_URL,

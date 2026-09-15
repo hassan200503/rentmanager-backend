@@ -20,6 +20,7 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -61,7 +62,11 @@ class DepositControllerRbacTest {
     private static final UUID LEASE_ID = UUID.randomUUID();
 
     private static final String REFUND_BODY = """
-            { "refundAmount": 1000.00 }
+            { "deductionAmount": 0.00, "refundReference": "RA65RBACTEST" }
+            """;
+
+    private static final String STK_REFUND_BODY = """
+            { "landlordPhone": "0712345678", "deductionAmount": 0.00 }
             """;
 
     @BeforeEach
@@ -72,7 +77,11 @@ class DepositControllerRbacTest {
                 .thenReturn(Optional.empty()); // cross-tenant isolation
         lenient().when(depositRepository.findByLeaseIdAndTenantId(LEASE_ID, TENANT_ID))
                 .thenReturn(Optional.of(buildDummyDeposit(TENANT_ID)));
-        lenient().when(depositCommandService.refundDeposit(eq(TENANT_ID), eq(DEPOSIT_ID), any()))
+        lenient().when(depositRepository.findAllByTenantId(any()))
+                .thenReturn(List.of(buildDummyDeposit(TENANT_ID)));
+        lenient().when(depositRepository.findAllByTenantIdAndStatus(any(), any()))
+                .thenReturn(List.of(buildDummyDeposit(TENANT_ID)));
+        lenient().when(depositCommandService.refundDeposit(eq(TENANT_ID), eq(DEPOSIT_ID), any(), any(), any(), any()))
                 .thenReturn(buildDummyDeposit(TENANT_ID));
         lenient().when(depositCommandService.forfeitDeposit(TENANT_ID, DEPOSIT_ID))
                 .thenReturn(buildDummyDeposit(TENANT_ID));
@@ -80,6 +89,20 @@ class DepositControllerRbacTest {
 
     @Nested
     class AllowedRoles {
+
+        @Test
+        void ownerCanListDeposits() throws Exception {
+            mockMvc.perform(get("/api/v1/deposits")
+                            .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_LANDLORD_OWNER")))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        void staffCanListDepositsFilteredByStatus() throws Exception {
+            mockMvc.perform(get("/api/v1/deposits?status=HELD")
+                            .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_LANDLORD_STAFF")))
+                    .andExpect(status().isOk());
+        }
 
         @Test
         void ownerCanGetDepositById() throws Exception {
@@ -117,6 +140,22 @@ class DepositControllerRbacTest {
                             .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_LANDLORD_MANAGER")))
                     .andExpect(status().isOk());
         }
+
+        @Test
+        void ownerCanInitiateRefundViaStk() throws Exception {
+            mockMvc.perform(post("/api/v1/deposits/" + DEPOSIT_ID + "/refund/initiate")
+                            .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_LANDLORD_OWNER"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(STK_REFUND_BODY))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        void ownerCanCancelPendingRefund() throws Exception {
+            mockMvc.perform(post("/api/v1/deposits/" + DEPOSIT_ID + "/refund/cancel")
+                            .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_LANDLORD_OWNER")))
+                    .andExpect(status().isOk());
+        }
     }
 
     @Nested
@@ -134,12 +173,39 @@ class DepositControllerRbacTest {
         }
 
         @Test
+        void staffCannotInitiateRefundViaStk() throws Exception {
+            mockMvc.perform(post("/api/v1/deposits/" + DEPOSIT_ID + "/refund/initiate")
+                            .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_LANDLORD_STAFF"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(STK_REFUND_BODY))
+                    .andExpect(status().isForbidden());
+
+            verifyNoInteractions(depositCommandService);
+        }
+
+        @Test
+        void staffCannotCancelPendingRefund() throws Exception {
+            mockMvc.perform(post("/api/v1/deposits/" + DEPOSIT_ID + "/refund/cancel")
+                            .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_LANDLORD_STAFF")))
+                    .andExpect(status().isForbidden());
+
+            verifyNoInteractions(depositCommandService);
+        }
+
+        @Test
         void staffCannotForfeitDeposit() throws Exception {
             mockMvc.perform(post("/api/v1/deposits/" + DEPOSIT_ID + "/forfeit")
                             .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_LANDLORD_STAFF")))
                     .andExpect(status().isForbidden());
 
             verifyNoInteractions(depositCommandService);
+        }
+
+        @Test
+        void unrecognizedRoleCannotListDeposits() throws Exception {
+            mockMvc.perform(get("/api/v1/deposits")
+                            .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_NOT_A_REAL_ROLE")))
+                    .andExpect(status().isForbidden());
         }
 
         @Test
@@ -176,7 +242,8 @@ class DepositControllerRbacTest {
     class RequestValidation {
 
         @Test
-        void refundWithNullAmount_returns400() throws Exception {
+        void refundWithNullDeductionAmount_returns400() throws Exception {
+            // deductionAmount is @NotNull — missing field must fail bean validation
             mockMvc.perform(post("/api/v1/deposits/" + DEPOSIT_ID + "/refund")
                             .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_LANDLORD_OWNER"))
                             .contentType(MediaType.APPLICATION_JSON)
@@ -187,11 +254,12 @@ class DepositControllerRbacTest {
         }
 
         @Test
-        void refundWithZeroAmount_returns400() throws Exception {
+        void refundWithNegativeDeductionAmount_returns400() throws Exception {
+            // deductionAmount is @DecimalMin("0.00") — negative value must fail
             mockMvc.perform(post("/api/v1/deposits/" + DEPOSIT_ID + "/refund")
                             .with(MockTenantAuthentication.asTenant(TENANT_ID, "ROLE_LANDLORD_OWNER"))
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{ \"refundAmount\": 0.00 }"))
+                            .content("{ \"deductionAmount\": -1.00 }"))
                     .andExpect(status().isBadRequest());
 
             verifyNoInteractions(depositCommandService);

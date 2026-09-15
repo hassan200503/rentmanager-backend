@@ -258,9 +258,18 @@ public class SubscriptionBillingService {
                 .map(order -> order.getStatus())
                 .orElse(null);
 
+        // Defensive: NULL subscription_status means the account predates the
+        // status column being tracked (V4 created it nullable). A COMMISSION
+        // landlord with no status is always TRIAL — the V95 migration backfills
+        // these rows, but this guard ensures the API never leaks null to the
+        // frontend regardless of migration timing.
+        SubscriptionStatus effectiveStatus = tenant.getSubscriptionStatus() != null
+                ? tenant.getSubscriptionStatus()
+                : (tenant.getBillingMode() == BillingMode.COMMISSION ? SubscriptionStatus.TRIAL : null);
+
         return new SubscriptionStatusResponse(
                 tenant.getBillingMode(),
-                tenant.getSubscriptionStatus(),
+                effectiveStatus,
                 plan != null ? plan.getCode() : null,
                 plan != null ? plan.getName() : null,
                 plan != null ? plan.getMonthlyPrice() : null,
@@ -271,7 +280,8 @@ public class SubscriptionBillingService {
                 darajaResolver.credentials().businessShortCode(),
                 tenant.getTenantCode(),
                 darajaProperties.isRatibaEnabled(),
-                standingOrderStatus
+                standingOrderStatus,
+                tenant.getFreeTrialEndsAt()
         );
     }
 
@@ -366,6 +376,36 @@ public class SubscriptionBillingService {
         return createdAt == null
                 || createdAt.isBefore(Instant.now().minus(Duration.ofMinutes(
                         subscriptionBillingProperties.getPaymentRequestExpiryMinutes())));
+    }
+
+    /**
+     * Admin-initiated plan activation — no M-Pesa payment required.
+     * Used for Enterprise and other manually negotiated plans.
+     * ROLE_PLATFORM_OWNER only (enforced at the controller layer).
+     */
+    @Transactional
+    public void adminActivateSubscription(UUID tenantId, String planCode, int periodMonths) {
+        Tenant tenant = findTenant(tenantId);
+
+        SubscriptionPlan plan = subscriptionPlanRepository.findByCode(planCode)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Subscription plan not found: " + planCode,
+                        ErrorCode.SUBSCRIPTION_PLAN_NOT_FOUND));
+
+        if (!plan.isActive()) {
+            throw new BusinessException(
+                    "Subscription plan is not active: " + planCode,
+                    ErrorCode.SUBSCRIPTION_PLAN_NOT_ACTIVE);
+        }
+
+        LocalDate startDate = LocalDate.now();
+        LocalDate endDate = startDate.plusMonths(periodMonths);
+
+        tenant.adminAssignPlan(plan.getId(), startDate, endDate);
+        tenantRepository.save(tenant);
+
+        log.info("Admin activated premium subscription. tenantId={} planCode={} periodMonths={}",
+                tenantId, planCode, periodMonths);
     }
 
     /**

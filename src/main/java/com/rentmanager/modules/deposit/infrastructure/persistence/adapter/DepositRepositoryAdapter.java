@@ -1,5 +1,6 @@
 package com.rentmanager.modules.deposit.infrastructure.persistence.adapter;
 
+import com.rentmanager.modules.deposit.domain.enums.DepositStatus;
 import com.rentmanager.modules.deposit.domain.model.Deposit;
 import com.rentmanager.modules.deposit.domain.repository.DepositRepository;
 import com.rentmanager.modules.deposit.infrastructure.persistence.entity.DepositJpaEntity;
@@ -77,6 +78,28 @@ public class DepositRepositoryAdapter implements DepositRepository {
     }
 
     @Override
+    public Optional<Deposit> findByPendingRefundCheckoutRequestId(String checkoutRequestId) {
+        return jpaRepository.findByPendingRefundCheckoutRequestId(checkoutRequestId)
+                .map(this::toDomain);
+    }
+
+    @Override
+    public List<Deposit> findAllByTenantIdAndStatus(UUID tenantId, DepositStatus status) {
+        return jpaRepository.findByTenantIdAndStatusOrderByPaidAtDesc(tenantId, status)
+                .stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Deposit> findAllByTenantId(UUID tenantId) {
+        return jpaRepository.findByTenantIdOrderByPaidAtDesc(tenantId)
+                .stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
     public void delete(Deposit deposit) {
         jpaRepository.deleteById(deposit.getId());
     }
@@ -101,7 +124,17 @@ public class DepositRepositoryAdapter implements DepositRepository {
                 e.getStatus(),
                 e.getPaidAt(),
                 e.getRefundedAt(),
-                e.getCurrency()
+                e.getCurrency(),
+                e.getDeductionAmount(),
+                e.getDeductionReason(),
+                e.getRefundReference(),
+                e.getRefundRemarks(),
+                e.getPendingRefundCheckoutRequestId(),
+                e.getPendingRefundPhone(),
+                e.getPendingRefundDeduction(),
+                e.getPendingRefundDeductionReason(),
+                e.getPendingRefundRemarks(),
+                e.getPendingRefundInitiatedAt()
         );
     }
 
@@ -127,6 +160,16 @@ public class DepositRepositoryAdapter implements DepositRepository {
         e.setPaidAt(d.getPaidAt());
         e.setRefundedAt(d.getRefundedAt());
         e.setCurrency(d.getCurrency());
+        e.setDeductionAmount(d.getDeductionAmount());
+        e.setDeductionReason(d.getDeductionReason());
+        e.setRefundReference(d.getRefundReference());
+        e.setRefundRemarks(d.getRefundRemarks());
+        e.setPendingRefundCheckoutRequestId(d.getPendingRefundCheckoutRequestId());
+        e.setPendingRefundPhone(d.getPendingRefundPhone());
+        e.setPendingRefundDeduction(d.getPendingRefundDeduction());
+        e.setPendingRefundDeductionReason(d.getPendingRefundDeductionReason());
+        e.setPendingRefundRemarks(d.getPendingRefundRemarks());
+        e.setPendingRefundInitiatedAt(d.getPendingRefundInitiatedAt());
 
         return e;
     }
@@ -137,5 +180,15 @@ public class DepositRepositoryAdapter implements DepositRepository {
         e.setStatus(d.getStatus());
         e.setPaidAt(d.getPaidAt());
         e.setRefundedAt(d.getRefundedAt());
+        e.setDeductionAmount(d.getDeductionAmount());
+        e.setDeductionReason(d.getDeductionReason());
+        e.setRefundReference(d.getRefundReference());
+        e.setRefundRemarks(d.getRefundRemarks());
+        e.setPendingRefundCheckoutRequestId(d.getPendingRefundCheckoutRequestId());
+        e.setPendingRefundPhone(d.getPendingRefundPhone());
+        e.setPendingRefundDeduction(d.getPendingRefundDeduction());
+        e.setPendingRefundDeductionReason(d.getPendingRefundDeductionReason());
+        e.setPendingRefundRemarks(d.getPendingRefundRemarks());
+        e.setPendingRefundInitiatedAt(d.getPendingRefundInitiatedAt());
     }
 }

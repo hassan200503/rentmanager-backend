@@ -2,6 +2,7 @@ package com.rentmanager.modules.tax.infrastructure.persistence.repository;
 
 import com.rentmanager.modules.tax.domain.enums.TaxInvoiceStatus;
 import com.rentmanager.modules.tax.infrastructure.persistence.entity.TaxInvoiceJpaEntity;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -36,4 +37,9 @@ public interface TaxInvoiceJpaRepository extends JpaRepository<TaxInvoiceJpaEnti
             @Param("now") LocalDateTime now,
             Pageable pageable
     );
+
+    Page<TaxInvoiceJpaEntity> findAllByTenantIdOrderByOccurredAtDesc(
+            UUID tenantId, Pageable pageable);
+
+    long countByTenantIdAndStatusIn(UUID tenantId, List<TaxInvoiceStatus> statuses);
 }

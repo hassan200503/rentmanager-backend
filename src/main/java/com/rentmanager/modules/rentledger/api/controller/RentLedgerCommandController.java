@@ -63,8 +63,12 @@ public class RentLedgerCommandController {
     public ApiResponse<RentLedgerEntryResponse> recordTransaction(
             @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable UUID entryId,
-            @Valid @RequestBody RecordRentTransactionRequest request
+            @Valid @RequestBody RecordRentTransactionRequest request,
+            // Optional so existing clients keep working; the mobile app always
+            // sends one per logical submission. See V98.
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
+        requireValidIdempotencyKey(idempotencyKey);
         RentLedgerEntry entry = rentLedgerApplicationService.applyTransaction(
                 requireTenantId(user),
                 UUID.randomUUID().toString(),
@@ -74,7 +78,8 @@ public class RentLedgerCommandController {
                 request.externalReference(),
                 request.source(),
                 user.getEmail(),
-                request.occurredAt() != null ? request.occurredAt() : LocalDateTime.now()
+                request.occurredAt() != null ? request.occurredAt() : LocalDateTime.now(),
+                idempotencyKey
         );
         return ApiResponse.ok(RentLedgerEntryResponse.from(entry));
     }
@@ -152,6 +157,21 @@ public class RentLedgerCommandController {
                 request.occurredAt() != null ? request.occurredAt() : LocalDateTime.now()
         );
         return ApiResponse.ok("Overpayment applied as credit", null);
+    }
+
+    private static final java.util.regex.Pattern IDEMPOTENCY_KEY =
+            java.util.regex.Pattern.compile("^[A-Za-z0-9._:-]{8,100}$");
+
+    /**
+     * Validated here rather than with a constraint annotation: this controller
+     * is not @Validated, so a @Pattern on a header would be silently ignored.
+     */
+    static void requireValidIdempotencyKey(String key) {
+        if (key != null && !IDEMPOTENCY_KEY.matcher(key).matches()) {
+            throw new com.rentmanager.shared.exception.BusinessException(
+                    "Idempotency-Key must be 8-100 characters of letters, digits, '.', '_', ':' or '-'",
+                    com.rentmanager.shared.exception.ErrorCode.VALIDATION_ERROR);
+        }
     }
 
     private UUID requireTenantId(AuthenticatedUser user) {

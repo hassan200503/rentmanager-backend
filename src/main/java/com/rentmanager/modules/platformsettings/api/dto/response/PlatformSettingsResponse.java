@@ -11,7 +11,8 @@ public record PlatformSettingsResponse(
 
     public record BillingSettings(
             int premiumGraceDays,
-            int subscriptionPaymentExpiryMinutes
+            int subscriptionPaymentExpiryMinutes,
+            int trialDurationDays
     ) {
     }
 

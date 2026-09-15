@@ -1,6 +1,7 @@
 package com.rentmanager.modules.platformadmin.api.controller;
 
 import com.rentmanager.contract.common.ApiResponse;
+import com.rentmanager.modules.platformadmin.api.dto.request.AdminActivateSubscriptionRequest;
 import com.rentmanager.modules.platformadmin.api.dto.request.SetLandlordCommissionRequest;
 import com.rentmanager.modules.platformadmin.api.dto.request.UpdateLandlordStatusRequest;
 import com.rentmanager.modules.platformadmin.api.dto.response.AdminOverviewResponse;
@@ -11,6 +12,7 @@ import com.rentmanager.modules.platformadmin.api.dto.response.PlatformAdminInfoR
 import com.rentmanager.modules.platformadmin.api.dto.response.UserTypeSnapshot;
 import com.rentmanager.modules.platformadmin.application.service.PlatformAdminCommissionService;
 import com.rentmanager.modules.platformadmin.application.service.PlatformAdminQueryService;
+import com.rentmanager.modules.tenant.application.service.SubscriptionBillingService;
 import com.rentmanager.modules.rentledger.infrastructure.persistence.entity.RentPaymentRequestJpaEntity;
 import com.rentmanager.modules.rentledger.domain.enums.RentPaymentRequestStatus;
 import com.rentmanager.modules.rentledger.domain.enums.DisbursementStatus;
@@ -66,6 +68,7 @@ public class PlatformAdminController {
 
     private final PlatformAdminQueryService queryService;
     private final PlatformAdminCommissionService commissionService;
+    private final SubscriptionBillingService subscriptionBillingService;
 
     @GetMapping("/info")
     @PreAuthorize("hasAnyAuthority('ROLE_PLATFORM_OWNER', 'ROLE_PLATFORM_ADMIN')")
@@ -212,6 +215,22 @@ public class PlatformAdminController {
     public ResponseEntity<ApiResponse<Void>> retryDisbursement(@PathVariable UUID disbursementId) {
         queryService.retryDisbursement(disbursementId);
         return ResponseEntity.ok(ApiResponse.ok("Disbursement retry initiated", null));
+    }
+
+    /**
+     * Manually activates a premium subscription for a landlord, bypassing
+     * the M-Pesa payment gate. Used for Enterprise and other negotiated plans.
+     * ROLE_PLATFORM_OWNER only — this is a money-adjacent action.
+     */
+    @PostMapping("/landlords/{landlordId}/subscription/activate")
+    @PreAuthorize("hasAuthority('ROLE_PLATFORM_OWNER')")
+    public ResponseEntity<ApiResponse<Void>> activateLandlordSubscription(
+            @PathVariable UUID landlordId,
+            @Valid @RequestBody AdminActivateSubscriptionRequest request
+    ) {
+        subscriptionBillingService.adminActivateSubscription(
+                landlordId, request.planCode(), request.periodMonths());
+        return ResponseEntity.ok(ApiResponse.ok("Subscription activated", null));
     }
 
     private String resolveActor(Authentication authentication) {

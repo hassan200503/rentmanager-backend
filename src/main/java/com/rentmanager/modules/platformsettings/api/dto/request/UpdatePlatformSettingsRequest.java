@@ -9,6 +9,11 @@ import jakarta.validation.constraints.Size;
 
 public record UpdatePlatformSettingsRequest(
         @NotNull
+        @Min(7)
+        @Max(90)
+        Integer trialDurationDays,
+
+        @NotNull
         @Min(1)
         @Max(60)
         Integer premiumGraceDays,

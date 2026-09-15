@@ -5,6 +5,7 @@ import com.rentmanager.modules.tenant.domain.enums.StandingOrderStatus;
 import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 
 /**
@@ -28,6 +29,7 @@ public class SubscriptionStatusResponse {
     private final String accountReference;
     private final boolean ratibaEnabled;
     private final StandingOrderStatus standingOrderStatus;
+    private final Instant freeTrialEndsAt;
 
     public SubscriptionStatusResponse(
             BillingMode billingMode,
@@ -42,7 +44,8 @@ public class SubscriptionStatusResponse {
             String paybillNumber,
             String accountReference,
             boolean ratibaEnabled,
-            StandingOrderStatus standingOrderStatus
+            StandingOrderStatus standingOrderStatus,
+            Instant freeTrialEndsAt
     ) {
         this.billingMode = billingMode;
         this.subscriptionStatus = subscriptionStatus;
@@ -57,6 +60,7 @@ public class SubscriptionStatusResponse {
         this.accountReference = accountReference;
         this.ratibaEnabled = ratibaEnabled;
         this.standingOrderStatus = standingOrderStatus;
+        this.freeTrialEndsAt = freeTrialEndsAt;
     }
 
     public BillingMode getBillingMode() { return billingMode; }
@@ -72,4 +76,5 @@ public class SubscriptionStatusResponse {
     public String getAccountReference() { return accountReference; }
     public boolean isRatibaEnabled() { return ratibaEnabled; }
     public StandingOrderStatus getStandingOrderStatus() { return standingOrderStatus; }
+    public Instant getFreeTrialEndsAt() { return freeTrialEndsAt; }
 }

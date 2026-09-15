@@ -1,8 +1,13 @@
 package com.rentmanager.modules.deposit.application.service;
 
+import com.rentmanager.modules.deposit.domain.exception.DepositStateException;
 import com.rentmanager.modules.deposit.domain.model.Deposit;
 import com.rentmanager.modules.deposit.domain.repository.DepositRepository;
+import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaProperties;
+import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaService;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
+import com.rentmanager.modules.tenant.infrastructure.persistence.entity.TenantEntity;
+import com.rentmanager.modules.tenant.infrastructure.persistence.repository.TenantJpaRepository;
 import com.rentmanager.shared.events.DomainEventPublisher;
 import com.rentmanager.shared.exception.ErrorCode;
 import com.rentmanager.shared.exception.ResourceNotFoundException;
@@ -23,7 +28,10 @@ public class DepositCommandService {
 
     private final DepositRepository depositRepository;
     private final TenantRepository tenantRepository;
+    private final TenantJpaRepository tenantJpaRepository;
     private final DomainEventPublisher eventPublisher;
+    private final DarajaService darajaService;
+    private final DarajaProperties darajaProperties;
 
     public Deposit createDeposit(UUID tenantId, UUID leaseId, UUID unitId,
                                  UUID tenantProfileId, BigDecimal amountRequired) {
@@ -65,14 +73,34 @@ public class DepositCommandService {
         return saved;
     }
 
-    public Deposit refundDeposit(UUID tenantId, UUID depositId, BigDecimal refundAmount) {
+    public Deposit refundDeposit(UUID tenantId, UUID depositId,
+                                  BigDecimal deductionAmount, String deductionReason,
+                                  String refundReference, String refundRemarks) {
 
         Deposit deposit = depositRepository.findByIdAndTenantId(depositId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Deposit not found: " + depositId, ErrorCode.DEPOSIT_NOT_FOUND));
 
-        deposit.refund(refundAmount, generateCorrelationId());
+        BigDecimal effectiveDeduction = deductionAmount != null ? deductionAmount : BigDecimal.ZERO;
 
-        // FIX: pull from pre-save `deposit`.
+        if (effectiveDeduction.compareTo(BigDecimal.ZERO) > 0
+                && (deductionReason == null || deductionReason.isBlank())) {
+            throw new DepositStateException(
+                    "Deduction reason is required when deducting from the deposit",
+                    ErrorCode.DEPOSIT_DEDUCTION_REASON_REQUIRED
+            );
+        }
+
+        BigDecimal refundAmount = deposit.getAmountPaid().subtract(effectiveDeduction);
+        if (refundAmount.compareTo(BigDecimal.ZERO) > 0
+                && (refundReference == null || refundReference.isBlank())) {
+            throw new DepositStateException(
+                    "M-Pesa transaction reference is required when issuing a refund",
+                    ErrorCode.DEPOSIT_REFUND_REFERENCE_REQUIRED
+            );
+        }
+
+        deposit.refund(effectiveDeduction, deductionReason, refundReference, refundRemarks, generateCorrelationId());
+
         var events = deposit.pullDomainEvents();
 
         Deposit saved = depositRepository.save(deposit);
@@ -144,6 +172,128 @@ public class DepositCommandService {
         deposit.pullDomainEvents(); // drained, not published — see javadoc above
 
         return depositRepository.save(deposit);
+    }
+
+    /**
+     * Initiates a deposit refund by sending an STK push to the landlord's own
+     * M-Pesa phone. The landlord authorises the refund by entering their PIN;
+     * when Safaricom confirms, {@link #completeRefundFromCallback} finalises
+     * the deposit record automatically.
+     *
+     * <p>Money flow: landlord personal M-Pesa → landlord's own business shortcode
+     * (via STK push). The tenant should be sent the refund separately via
+     * M-Pesa "Send Money" or the platform's B2C flow.</p>
+     *
+     * @return the CheckoutRequestID to pass back to the client for status polling
+     */
+    public String initiateRefundViaStk(UUID tenantId, UUID depositId,
+                                        String landlordPhone,
+                                        BigDecimal deductionAmount,
+                                        String deductionReason,
+                                        String remarks) {
+
+        Deposit deposit = depositRepository.findByIdAndTenantId(depositId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Deposit not found: " + depositId, ErrorCode.DEPOSIT_NOT_FOUND));
+
+        BigDecimal effectiveDeduction = deductionAmount != null ? deductionAmount : BigDecimal.ZERO;
+
+        if (effectiveDeduction.compareTo(BigDecimal.ZERO) > 0
+                && (deductionReason == null || deductionReason.isBlank())) {
+            throw new DepositStateException(
+                    "Deduction reason is required when deducting from the deposit",
+                    ErrorCode.DEPOSIT_DEDUCTION_REASON_REQUIRED
+            );
+        }
+
+        BigDecimal refundAmount = deposit.getAmountPaid().subtract(effectiveDeduction);
+        if (refundAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new DepositStateException(
+                    "Refund amount must be > 0 — use Forfeit if the full deposit is being kept",
+                    ErrorCode.DEPOSIT_REFUND_EXCEEDS_PAID
+            );
+        }
+
+        TenantEntity landlord = tenantJpaRepository.findById(tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Landlord not found", ErrorCode.RESOURCE_NOT_FOUND));
+
+        if (!landlord.getDarajaCredentials().isConfigured()) {
+            throw new DepositStateException(
+                    "Daraja credentials are not configured — set up M-Pesa credentials in Payment Settings first",
+                    ErrorCode.RESOURCE_NOT_FOUND
+            );
+        }
+
+        String callbackUrl = darajaProperties.getDepositRefundCallbackUrl();
+        if (callbackUrl == null || callbackUrl.isBlank()) {
+            throw new DepositStateException(
+                    "Deposit refund callback URL is not configured",
+                    ErrorCode.RESOURCE_NOT_FOUND
+            );
+        }
+
+        String shortDepositId = depositId.toString().substring(0, 8).toUpperCase();
+        String checkoutRequestId = darajaService.initiateSTKPush(
+                landlordPhone,
+                refundAmount,
+                "DEP-REFUND-" + shortDepositId,
+                "Deposit refund authorisation",
+                landlord.getDarajaCredentials(),
+                callbackUrl
+        );
+
+        // pendingRefundPhone stores the tenant's phone (the intended refund recipient).
+        // It was loaded from TenantProfile when the request was enriched by the controller.
+        // We use null here and rely on renterPhone from DepositResponse for display.
+        deposit.markRefundPending(checkoutRequestId, null,
+                effectiveDeduction, deductionReason, remarks);
+
+        var events = deposit.pullDomainEvents();
+        depositRepository.save(deposit);
+        eventPublisher.publishAll(events);
+
+        log.info("Deposit refund STK push initiated. depositId={} checkoutRequestId={} amount={}",
+                depositId, checkoutRequestId, refundAmount);
+
+        return checkoutRequestId;
+    }
+
+    /**
+     * Called by the STK push callback handler when Safaricom confirms the
+     * landlord's M-Pesa payment. Finalises the deposit refund with the
+     * M-Pesa receipt as the audit reference.
+     */
+    public void completeRefundFromCallback(String checkoutRequestId, String mpesaReceipt) {
+        Deposit deposit = depositRepository.findByPendingRefundCheckoutRequestId(checkoutRequestId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "No deposit found for checkout request: " + checkoutRequestId,
+                        ErrorCode.DEPOSIT_NOT_FOUND));
+
+        deposit.completePendingRefund(mpesaReceipt, generateCorrelationId());
+
+        var events = deposit.pullDomainEvents();
+        depositRepository.save(deposit);
+        eventPublisher.publishAll(events);
+
+        log.info("Deposit refund completed via STK callback. checkoutRequestId={} receipt={}",
+                checkoutRequestId, mpesaReceipt);
+    }
+
+    /**
+     * Cancels an in-flight refund STK push, allowing the landlord to retry
+     * with corrected details or revert to the manual refund flow.
+     */
+    public void cancelPendingRefund(UUID tenantId, UUID depositId) {
+        Deposit deposit = depositRepository.findByIdAndTenantId(depositId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Deposit not found: " + depositId, ErrorCode.DEPOSIT_NOT_FOUND));
+
+        if (!deposit.hasPendingRefund()) {
+            return;
+        }
+        deposit.clearPendingRefund();
+        depositRepository.save(deposit);
+        log.info("Pending deposit refund cancelled. depositId={}", depositId);
     }
 
     private String resolveCurrency(UUID tenantId) {

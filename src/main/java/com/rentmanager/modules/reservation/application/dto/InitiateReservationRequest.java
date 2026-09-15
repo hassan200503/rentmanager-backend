@@ -3,6 +3,7 @@ package com.rentmanager.modules.reservation.application.dto;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import com.rentmanager.shared.phone.KenyanMsisdn;
 import jakarta.validation.constraints.Pattern;
 
 import java.time.LocalDate;
@@ -17,7 +18,7 @@ public record InitiateReservationRequest(
         String fullName,
 
         @NotBlank
-        @Pattern(regexp = "^\\+2547\\d{8}$", message = "Enter a valid Kenyan number e.g. +254712345678")
+        @Pattern(regexp = KenyanMsisdn.E164_PATTERN, message = "Enter a valid Kenyan number e.g. +254712345678")
         String phone,
 
         @NotBlank
@@ -31,6 +32,6 @@ public record InitiateReservationRequest(
         LocalDate moveInDate,
 
         @NotBlank
-        @Pattern(regexp = "^\\+2547\\d{8}$", message = "Enter a valid M-Pesa number e.g. +254712345678")
+        @Pattern(regexp = KenyanMsisdn.E164_PATTERN, message = "Enter a valid M-Pesa number e.g. +254712345678")
         String mpesaPhone
 ) {}

@@ -34,6 +34,11 @@ public class PropertyTaxRegistrationRepositoryAdapter implements PropertyTaxRegi
     }
 
     @Override
+    public List<PropertyTaxRegistration> findAllByTenantId(UUID tenantId) {
+        return jpaRepository.findAllByTenantId(tenantId).stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
     public PropertyTaxRegistration save(PropertyTaxRegistration registration) {
         return mapper.toDomain(jpaRepository.save(mapper.toJpaEntity(registration)));
     }

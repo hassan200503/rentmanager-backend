@@ -48,6 +48,11 @@ public class DarajaProperties {
     private String ratibaCreateStandingOrderUrl =
             "https://sandbox.safaricom.co.ke/standingorder/v1/createStandingOrderExternal";
 
+    // Callback URL for deposit refund STK push authorisations. When the landlord
+    // authorises a deposit refund via M-Pesa prompt, the result lands here.
+    // Uses the same callbackSecret path segment as all other STK flows.
+    private String depositRefundCallbackUrl;
+
     // Production base URL
     private String baseUrl = "https://api.safaricom.co.ke";
 }

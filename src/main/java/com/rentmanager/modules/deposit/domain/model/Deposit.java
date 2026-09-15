@@ -32,6 +32,26 @@ public class Deposit extends AggregateRoot {
     private LocalDateTime refundedAt;
     private String currency;
 
+    // Refund detail — populated only after refund() is called.
+    // deductionAmount: portion kept by landlord (0 for full refund).
+    // deductionReason: free-text, required when deductionAmount > 0.
+    // refundReference: Safaricom M-Pesa confirmation code, required when money was sent.
+    // refundRemarks: optional landlord notes.
+    private BigDecimal deductionAmount;
+    private String deductionReason;
+    private String refundReference;
+    private String refundRemarks;
+
+    // In-flight STK push authorisation — set by markRefundPending(), cleared by
+    // completePendingRefund() or clearPendingRefund(). The checkout request ID
+    // is indexed so the callback handler can locate this deposit instantly.
+    private String pendingRefundCheckoutRequestId;
+    private String pendingRefundPhone;
+    private BigDecimal pendingRefundDeduction;
+    private String pendingRefundDeductionReason;
+    private String pendingRefundRemarks;
+    private LocalDateTime pendingRefundInitiatedAt;
+
     public static Deposit create(
             UUID tenantId,
             UUID leaseId,
@@ -95,26 +115,91 @@ public class Deposit extends AggregateRoot {
         ));
     }
 
-    public void refund(BigDecimal refundAmount, String correlationId) {
+    /**
+     * Records a deposit refund with optional landlord deduction.
+     *
+     * @param deductionAmount portion kept by the landlord (0 for full refund,
+     *                        must be < amountPaid — use forfeit() if deducting
+     *                        the full amount)
+     * @param deductionReason explanation for any deduction; validated as
+     *                        non-blank by the service when deductionAmount > 0
+     * @param refundReference Safaricom M-Pesa confirmation code; validated as
+     *                        non-blank by the service when money is sent
+     * @param refundRemarks   optional landlord notes
+     * @param correlationId   tracing ID for event publishing
+     */
+    public void refund(BigDecimal deductionAmount, String deductionReason,
+                       String refundReference, String refundRemarks, String correlationId) {
         if (status != DepositStatus.HELD) {
             throw new DepositStateException("Only held deposits can be refunded", ErrorCode.DEPOSIT_NOT_HELD);
         }
-        if (refundAmount == null || refundAmount.compareTo(amountPaid) > 0) {
+        BigDecimal effectiveDeduction = deductionAmount != null ? deductionAmount : BigDecimal.ZERO;
+        if (effectiveDeduction.compareTo(BigDecimal.ZERO) < 0) {
+            throw new DepositStateException("Deduction amount cannot be negative", ErrorCode.DEPOSIT_REFUND_EXCEEDS_PAID);
+        }
+        if (effectiveDeduction.compareTo(amountPaid) >= 0) {
             throw new DepositStateException(
-                    "Refund amount cannot exceed amount paid",
+                    "Deduction equals or exceeds amount paid — use forfeit() for full deduction",
                     ErrorCode.DEPOSIT_REFUND_EXCEEDS_PAID
             );
         }
 
+        BigDecimal refundAmount = amountPaid.subtract(effectiveDeduction);
+
+        this.deductionAmount = effectiveDeduction;
+        this.deductionReason = deductionReason;
+        this.refundReference = refundReference;
+        this.refundRemarks = refundRemarks;
         this.amountRefunded = refundAmount;
-        this.status = refundAmount.compareTo(amountPaid) == 0
-                ? DepositStatus.REFUNDED
-                : DepositStatus.PARTIALLY_REFUNDED;
+        this.status = effectiveDeduction.compareTo(BigDecimal.ZERO) > 0
+                ? DepositStatus.PARTIALLY_REFUNDED
+                : DepositStatus.REFUNDED;
         this.refundedAt = LocalDateTime.now();
 
         registerEvent(new DepositRefundedEvent(
                 getTenantId(), getId(), correlationId, leaseId, refundAmount
         ));
+    }
+
+    public void markRefundPending(String checkoutRequestId, String recipientPhone,
+                                   BigDecimal deduction, String deductionReason, String remarks) {
+        if (status != DepositStatus.HELD) {
+            throw new DepositStateException("Only held deposits can initiate a refund", ErrorCode.DEPOSIT_NOT_HELD);
+        }
+        if (pendingRefundCheckoutRequestId != null) {
+            throw new DepositStateException(
+                    "A refund is already in progress — wait for M-Pesa confirmation or cancel first",
+                    ErrorCode.DEPOSIT_NOT_HELD);
+        }
+        this.pendingRefundCheckoutRequestId = checkoutRequestId;
+        this.pendingRefundPhone = recipientPhone;
+        this.pendingRefundDeduction = deduction != null ? deduction : BigDecimal.ZERO;
+        this.pendingRefundDeductionReason = deductionReason;
+        this.pendingRefundRemarks = remarks;
+        this.pendingRefundInitiatedAt = LocalDateTime.now();
+    }
+
+    public void completePendingRefund(String mpesaReceipt, String correlationId) {
+        if (pendingRefundCheckoutRequestId == null) {
+            throw new DepositStateException("No pending refund to complete", ErrorCode.DEPOSIT_NOT_HELD);
+        }
+        BigDecimal deduction = pendingRefundDeduction != null ? pendingRefundDeduction : BigDecimal.ZERO;
+        // refund() validates status is HELD and deduction < amountPaid internally
+        refund(deduction, pendingRefundDeductionReason, mpesaReceipt, pendingRefundRemarks, correlationId);
+        clearPendingRefund();
+    }
+
+    public void clearPendingRefund() {
+        this.pendingRefundCheckoutRequestId = null;
+        this.pendingRefundPhone = null;
+        this.pendingRefundDeduction = null;
+        this.pendingRefundDeductionReason = null;
+        this.pendingRefundRemarks = null;
+        this.pendingRefundInitiatedAt = null;
+    }
+
+    public boolean hasPendingRefund() {
+        return pendingRefundCheckoutRequestId != null;
     }
 
     public void forfeit(String correlationId) {
@@ -140,7 +225,17 @@ public class Deposit extends AggregateRoot {
             DepositStatus status,
             LocalDateTime paidAt,
             LocalDateTime refundedAt,
-            String currency
+            String currency,
+            BigDecimal deductionAmount,
+            String deductionReason,
+            String refundReference,
+            String refundRemarks,
+            String pendingRefundCheckoutRequestId,
+            String pendingRefundPhone,
+            BigDecimal pendingRefundDeduction,
+            String pendingRefundDeductionReason,
+            String pendingRefundRemarks,
+            LocalDateTime pendingRefundInitiatedAt
     ) {
         Deposit deposit = Deposit.builder()
                 .leaseId(leaseId)
@@ -153,6 +248,16 @@ public class Deposit extends AggregateRoot {
                 .paidAt(paidAt)
                 .refundedAt(refundedAt)
                 .currency(currency != null ? currency : "KES")
+                .deductionAmount(deductionAmount != null ? deductionAmount : BigDecimal.ZERO)
+                .deductionReason(deductionReason)
+                .refundReference(refundReference)
+                .refundRemarks(refundRemarks)
+                .pendingRefundCheckoutRequestId(pendingRefundCheckoutRequestId)
+                .pendingRefundPhone(pendingRefundPhone)
+                .pendingRefundDeduction(pendingRefundDeduction)
+                .pendingRefundDeductionReason(pendingRefundDeductionReason)
+                .pendingRefundRemarks(pendingRefundRemarks)
+                .pendingRefundInitiatedAt(pendingRefundInitiatedAt)
                 .build();
 
         deposit.setId(id);

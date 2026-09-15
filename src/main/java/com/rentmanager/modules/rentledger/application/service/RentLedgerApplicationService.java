@@ -326,6 +326,50 @@ public class RentLedgerApplicationService {
             String recordedBy,
             LocalDateTime occurredAt
     ) {
+        return applyTransaction(tenantId, correlationId, ledgerEntryId, type, amount,
+                externalReference, source, recordedBy, occurredAt, null);
+    }
+
+    /**
+     * As above, with a client idempotency key for manually recorded
+     * transactions (V98). If a transaction was already recorded under this
+     * key in this organisation, nothing is written and the entry is returned
+     * as it stands — whether the earlier request is visible yet or loses a
+     * concurrent race, which the unique index catches below.
+     *
+     * <p>A key reused for a DIFFERENT ledger entry is refused rather than
+     * silently treated as a duplicate: that is a client bug, and pretending it
+     * succeeded would tell a caretaker a payment was recorded when it was not.
+     */
+    @Transactional
+    public RentLedgerEntry applyTransaction(
+            UUID tenantId,
+            String correlationId,
+            UUID ledgerEntryId,
+            RentTransactionType type,
+            BigDecimal amount,
+            String externalReference,
+            RentTransactionSource source,
+            String recordedBy,
+            LocalDateTime occurredAt,
+            String idempotencyKey
+    ) {
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            Optional<RentTransaction> previous =
+                    rentTransactionRepository.findByIdempotencyKey(tenantId, idempotencyKey);
+            if (previous.isPresent()) {
+                if (!previous.get().getLedgerEntryId().equals(ledgerEntryId)) {
+                    throw new RentLedgerStateException(
+                            "This Idempotency-Key was already used for a different rent entry",
+                            ErrorCode.VALIDATION_ERROR);
+                }
+                log.info("applyTransaction is a no-op: idempotency key already recorded. tenantId={} entryId={}",
+                        tenantId, ledgerEntryId);
+                return rentLedgerEntryRepository.findByIdAndTenantId(ledgerEntryId, tenantId)
+                        .orElseThrow(() -> entryNotFound(ledgerEntryId));
+            }
+        }
+
         if (externalReference != null) {
             Optional<RentTransaction> duplicate =
                     rentTransactionRepository.findByExternalReference(tenantId, externalReference);
@@ -352,7 +396,7 @@ public class RentLedgerApplicationService {
                 recordedBy,
                 occurredAt,
                 entry.getCurrency()
-        );
+        ).withIdempotencyKey(idempotencyKey);
 
         entry.applyTransaction(correlationId, transaction);
 
@@ -360,7 +404,7 @@ public class RentLedgerApplicationService {
             rentTransactionRepository.save(transaction);
         } catch (DataIntegrityViolationException e) {
             // Lost the race: another concurrent delivery for the same
-            // externalReference committed first. Not an error — return the
+            // externalReference or idempotency key committed first. Not an error — return the
             // entry as it stands rather than propagating a 500 for what is,
             // from the caller's perspective, a successfully-processed
             // duplicate.

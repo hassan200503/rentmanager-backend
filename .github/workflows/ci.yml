@@ -69,3 +69,28 @@ jobs:
             target/failsafe-reports/
           retention-days: 7
           if-no-files-found: warn
+
+  image:
+    name: Production image builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # The Dockerfile is what actually ships. Building it on every push catches
+    # a broken image before deploy night rather than on it.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build backend image (not pushed)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Validate deploy stack configuration
+        working-directory: deploy
+        run: |
+          cp .env.example .env
+          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-placeholder-password-000/; s/^JWT_SECRET=.*/JWT_SECRET=ci/; s/^DARAJA_CREDENTIALS_ENCRYPTION_KEY=.*/DARAJA_CREDENTIALS_ENCRYPTION_KEY=ci/; s/^CLERK_PUBLISHABLE_KEY=.*/CLERK_PUBLISHABLE_KEY=pk_test_ci/; s/^CLERK_SECRET_KEY=.*/CLERK_SECRET_KEY=sk_test_ci/; s#^CLERK_JWKS_URL=.*#CLERK_JWKS_URL=https://ci.invalid/jwks#' .env
+          mkdir -p ../../rentmanager-frontend
+          docker compose config --quiet
+          bash -n deploy.sh && sh -n backup.sh

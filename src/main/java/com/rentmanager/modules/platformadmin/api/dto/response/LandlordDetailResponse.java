@@ -8,6 +8,7 @@ import com.rentmanager.modules.rentledger.domain.enums.DisbursementStatus;
 import com.rentmanager.modules.rentledger.domain.enums.RentPaymentRequestStatus;
 import com.rentmanager.modules.rentledger.domain.enums.RentTransactionSource;
 import com.rentmanager.modules.tenant.domain.enums.BillingMode;
+import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;
 import com.rentmanager.modules.tenant.domain.enums.TenantStatus;
 
 import java.math.BigDecimal;
@@ -42,6 +43,11 @@ public record LandlordDetailResponse(
         BigDecimal commissionAmount,
         BigDecimal effectiveCommissionRate,
         String commissionSource,
+        SubscriptionStatus subscriptionStatus,
+        UUID subscriptionPlanId,
+        LocalDate planStartDate,
+        LocalDate planEndDate,
+        Instant freeTrialEndsAt,
         List<PropertySummary> properties,
         List<RenterSummary> renters,
         List<LeaseSummary> leases,

@@ -5,6 +5,7 @@ import com.rentmanager.modules.tenant.application.command.service.TenantCommandS
 import com.rentmanager.modules.tenant.application.dto.request.ConfigureDarajaCredentialsRequest;
 import com.rentmanager.modules.tenant.application.dto.request.CreateTenantRequest;
 import com.rentmanager.modules.tenant.application.dto.request.SuspendTenantRequest;
+import com.rentmanager.modules.tenant.application.dto.request.UpdateTenantRequest;
 import com.rentmanager.modules.tenant.application.dto.response.DarajaCredentialsStatusResponse;
 import com.rentmanager.modules.tenant.application.dto.response.DarajaCredentialsTestResponse;
 import com.rentmanager.modules.tenant.application.dto.response.TenantResponse;
@@ -57,6 +58,23 @@ public class TenantController {
         TenantResponse response =
                 tenantCommandService.getTenant(currentTenant, tenantId);
 
+        return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
+    // ------------------------------------------------------------
+    // UPDATE TENANT PROFILE (name, contact phone, email, address)
+    // ------------------------------------------------------------
+    // Self-service: a landlord updates their own display name, phone, and
+    // address as shown to renters on the tenant portal. OWNER-only — staff
+    // can read but should not rewrite the landlord identity.
+    @PreAuthorize("hasAuthority('ROLE_LANDLORD_OWNER')")
+    @PatchMapping("/{tenantId}/profile")
+    public ResponseEntity<ApiResponse<TenantResponse>> updateTenantProfile(
+            @PathVariable UUID tenantId,
+            @RequestBody UpdateTenantRequest request
+    ) {
+        UUID currentTenant = resolveStrictTenantId();
+        TenantResponse response = tenantCommandService.updateTenantProfile(currentTenant, tenantId, request);
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 

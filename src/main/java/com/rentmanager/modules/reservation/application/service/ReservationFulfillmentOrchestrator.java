@@ -18,6 +18,7 @@ import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
 import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
 import com.rentmanager.modules.unit.domain.model.Unit;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
+import com.rentmanager.domain.base.DomainEvent;
 import com.rentmanager.shared.events.DomainEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +31,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -205,7 +207,7 @@ public class ReservationFulfillmentOrchestrator {
                 tenantProfileRepository.save(tenantProfile);
                 saga.tenantProfileCreatedThisRun = false;
             } else {
-                tenantProfile = tenantProfileRepository.save(TenantProfile.create(
+                TenantProfile newProfile = TenantProfile.create(
                         landlordTenantId,
                         clerkUserId,
                         event.getFullName(),
@@ -213,13 +215,10 @@ public class ReservationFulfillmentOrchestrator {
                         event.getPhone(),
                         event.getNationalId(),
                         reservationId.toString()
-                ));
-                // TenantProfileCreatedEvent is only ever registered on this
-                // newly-created branch (existingProfile never registers
-                // one), so publishing here is safe and correct regardless
-                // of which branch ran, matching the save -> publishAll
-                // convention used for Lease/Unit below.
-                eventPublisher.publishAll(tenantProfile.pullDomainEvents());
+                );
+                List<DomainEvent> profileEvents = newProfile.pullDomainEvents();
+                tenantProfile = tenantProfileRepository.save(newProfile);
+                eventPublisher.publishAll(profileEvents);
                 saga.tenantProfileCreatedThisRun = true;
             }
             saga.tenantProfileId = tenantProfile.getId();
@@ -279,8 +278,11 @@ public class ReservationFulfillmentOrchestrator {
             saga.unitReserved = true;
 
             // ---- Step 6: Complete reservation ----
+            reservation.complete(clerkUserId);
+            // Pull events from the original object before save() returns a
+            // rehydrated copy that has no transient domain events.
+            List<DomainEvent> reservationEvents = reservation.pullDomainEvents();
             try {
-                reservation.complete(clerkUserId);
                 reservation = reservationRepository.save(reservation);
                 reservationRepository.flush();
             } catch (ObjectOptimisticLockingFailureException ex) {
@@ -290,7 +292,7 @@ public class ReservationFulfillmentOrchestrator {
                 throw ex;
             }
 
-            eventPublisher.publishAll(reservation.pullDomainEvents());
+            eventPublisher.publishAll(reservationEvents);
 
             log.info("Reservation fulfilled. reservationId={} leaseId={} clerkUserId={}",
                     reservation.getId(), lease.getId(), clerkUserId);

@@ -4,12 +4,8 @@ import java.math.BigDecimal;
 
 /**
  * Read-model for {@code GET /api/v1/admin/overview}: platform-wide KPIs,
- * current/previous month collection + commission, STK and B2C health, and
- * the environment (sandbox vs production) the backend is wired to.
- *
- * All money values are retained commission amounts (commission never moves
- * physically — it stays in the collection shortcode), so "commission" here
- * is the platform's share on the month's completed rent transactions.
+ * subscription funnel (trial → premium → lapsed), GMV, STK/B2C health,
+ * and the environment (sandbox vs production) the backend is wired to.
  */
 public record AdminOverviewResponse(
         PlatformStats platform,
@@ -28,7 +24,14 @@ public record AdminOverviewResponse(
             long totalUnits,
             long activeLeases,
             long totalRenters,
-            BigDecimal platformDefaultCommissionRate
+            BigDecimal platformDefaultCommissionRate,
+            // Subscription funnel: how many landlords are at each stage
+            long trialLandlords,
+            long premiumLandlords,
+            long lapsedLandlords,
+            // MRR: monthly_price sum for all active PREMIUM_MONTHLY tenants
+            // (excludes Enterprise plans where monthly_price IS NULL)
+            BigDecimal mrrAmount
     ) {}
 
     public record PaymentStats(

@@ -34,8 +34,8 @@ public class TenantProfileRepositoryImpl implements TenantProfileRepository {
     }
 
     @Override
-    public Optional<TenantProfile> findByClerkUserId(String clerkUserId) {
-        return jpaRepository.findByClerkUserId(clerkUserId).map(this::toDomain);
+    public List<TenantProfile> findAllByClerkUserId(String clerkUserId) {
+        return jpaRepository.findAllByClerkUserId(clerkUserId).stream().map(this::toDomain).toList();
     }
 
     @Override

@@ -129,24 +129,23 @@ class CrossModuleRollbackIT {
         // =====================================
         // VERIFY DATABASE STATE
         // =====================================
+        // Counted in SQL against the tables: the domain classes are not JPA
+        // entities, so a JPQL "from Property" never resolved.
 
-        Long propertyCount = entityManager.createQuery(
-                        "select count(p) from Property p where p.tenantId = :tenantId",
-                        Long.class)
+        Long propertyCount = ((Number) entityManager.createNativeQuery(
+                        "select count(*) from properties where tenant_id = :tenantId")
                 .setParameter("tenantId", tenantId)
-                .getSingleResult();
+                .getSingleResult()).longValue();
 
-        Long unitCount = entityManager.createQuery(
-                        "select count(u) from Unit u where u.tenantId = :tenantId",
-                        Long.class)
+        Long unitCount = ((Number) entityManager.createNativeQuery(
+                        "select count(*) from units where tenant_id = :tenantId")
                 .setParameter("tenantId", tenantId)
-                .getSingleResult();
+                .getSingleResult()).longValue();
 
-        Long leaseCount = entityManager.createQuery(
-                        "select count(l) from Lease l where l.tenantId = :tenantId",
-                        Long.class)
+        Long leaseCount = ((Number) entityManager.createNativeQuery(
+                        "select count(*) from leases where tenant_id = :tenantId")
                 .setParameter("tenantId", tenantId)
-                .getSingleResult();
+                .getSingleResult()).longValue();
 
         // =====================================
         // ASSERT FULL ROLLBACK

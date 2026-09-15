@@ -27,9 +27,6 @@ public class LeaseActionValidator {
         List<String> errors = new ArrayList<>();
 
 
-        if (request.getPerformedBy() == null) {
-            errors.add("PerformedBy is required");
-        }
 
         if (request.getAction() == null) {
             errors.add("Action is required");

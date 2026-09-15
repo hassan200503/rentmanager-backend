@@ -1,7 +1,11 @@
 package com.rentmanager.modules.user.api;
 
 import com.rentmanager.contract.common.ApiResponse;
+import com.rentmanager.modules.user.application.dto.response.SessionAccessResponse;
 import com.rentmanager.modules.user.application.dto.response.UserResponse;
+import com.rentmanager.modules.user.application.query.access.SessionAccessResolver;
+import com.rentmanager.shared.security.principal.AuthenticatedUser;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.rentmanager.modules.user.application.query.service.UserQueryService;
 import com.rentmanager.shared.security.context.TenantContext;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +45,22 @@ public class UserQueryController {
         return ResponseEntity.ok(
                 ApiResponse.ok("Current user retrieved successfully", response)
         );
+    }
+
+    /**
+     * The experiences this session is authorised for, from the same
+     * authorities method security evaluates. Clients route on this rather
+     * than on JWT claims or Clerk metadata. A hint for UI only — every
+     * endpoint still enforces its own gate.
+     */
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/me/access")
+    public ResponseEntity<ApiResponse<SessionAccessResponse>> getCurrentAccess(
+            @AuthenticationPrincipal AuthenticatedUser user
+    ) {
+        SessionAccessResponse response = SessionAccessResolver.resolve(
+                user.getUserId(), user.getTenantId(), user.getAuthorities());
+        return ResponseEntity.ok(ApiResponse.ok("Session access resolved", response));
     }
 
     @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")

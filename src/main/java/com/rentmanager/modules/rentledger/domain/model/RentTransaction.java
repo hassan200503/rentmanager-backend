@@ -61,6 +61,12 @@ public class RentTransaction extends AggregateRoot {
     private RentTransactionType type;
     private BigDecimal amount;
     private String externalReference;
+
+    // Client-supplied key for one logical manual submission (V98). Unique per
+    // landlord organisation, so a retried or double-tapped cash recording is
+    // refused by the database. Null for every system-generated transaction.
+    private String idempotencyKey;
+
     private RentTransactionSource source;
     private String recordedBy;
     private LocalDateTime occurredAt;
@@ -174,6 +180,25 @@ public class RentTransaction extends AggregateRoot {
         transaction.assignTenant(tenantId);
 
         return transaction;
+    }
+
+    /** Maximum length of an idempotency key, matching V98's column. */
+    public static final int IDEMPOTENCY_KEY_MAX_LENGTH = 100;
+
+    /**
+     * Attaches the client's idempotency key. Only meaningful before the first
+     * save (the column is immutable under V81/V98) and also used by the
+     * persistence mapper when restoring a row.
+     */
+    public RentTransaction withIdempotencyKey(String key) {
+        if (key == null || key.isBlank()) {
+            return this;
+        }
+        if (key.length() > IDEMPOTENCY_KEY_MAX_LENGTH) {
+            throw new IllegalArgumentException("Idempotency-Key must be at most " + IDEMPOTENCY_KEY_MAX_LENGTH + " characters");
+        }
+        this.idempotencyKey = key;
+        return this;
     }
 
     public static RentTransaction rehydrate(

@@ -336,9 +336,11 @@ public class Lease extends AggregateRoot {
 
     public void cancel(String reason) {
 
-        if (status == LeaseStatus.ACTIVE) {
+        // Previously only ACTIVE was refused, so an occupied RENEWED lease, or
+        // one already TERMINATED/EXPIRED/CANCELLED, could be cancelled.
+        if (!status.isCancellable()) {
             throw new LeaseStateException(
-                    "Cannot cancel active lease",
+                    "Only a lease that has not started can be cancelled. End an active or renewed lease by terminating it.",
                     ErrorCode.LEASE_UPDATE_CLOSED_NOT_ALLOWED
             );
         }

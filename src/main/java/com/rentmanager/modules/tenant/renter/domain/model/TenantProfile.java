@@ -180,6 +180,20 @@ public class TenantProfile extends AggregateRoot {
      * Broadcast WhatsApp delivery is only attempted for profiles where
      * this is true.
      */
+    /**
+     * Detaches this renter record from a login that has been deleted. The
+     * profile itself is the landlord's record of their tenant and is kept;
+     * it simply no longer belongs to any sign-in. Marketing consent is
+     * withdrawn with the account.
+     */
+    public void unlinkIdentity(String tombstone) {
+        if (tombstone == null || tombstone.isBlank()) {
+            throw new IllegalArgumentException("Tombstone is required");
+        }
+        this.clerkUserId = tombstone;
+        this.whatsappOptIn = false;
+    }
+
     public void updateWhatsAppOptIn(boolean enabled) {
         this.whatsappOptIn = enabled;
     }

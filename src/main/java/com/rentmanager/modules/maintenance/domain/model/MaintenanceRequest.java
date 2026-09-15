@@ -124,6 +124,18 @@ public class MaintenanceRequest extends AggregateRoot {
             return;
         }
 
+        if (newStatus == null) {
+            throw new IllegalArgumentException("Status is required");
+        }
+        if (!oldStatus.canMoveTo(newStatus)) {
+            throw new IllegalStateException(transitionRefusal(oldStatus, newStatus));
+        }
+        if (oldStatus == MaintenanceRequestStatus.CANCELLED) {
+            // Terminal: not even a note. A reply on a cancelled request would
+            // notify the renter about something that is closed.
+            throw new IllegalStateException("This request was cancelled and can't be updated.");
+        }
+
         this.status = newStatus;
         if (note != null) {
             this.notes = note;
@@ -165,12 +177,32 @@ public class MaintenanceRequest extends AggregateRoot {
         }
     }
 
+    private static String transitionRefusal(MaintenanceRequestStatus from, MaintenanceRequestStatus to) {
+        if (to == MaintenanceRequestStatus.SUBMITTED) {
+            return "A request can't be moved back to Submitted. Send a message instead, or move it to In review.";
+        }
+        if (from == MaintenanceRequestStatus.CANCELLED) {
+            return "This request was cancelled and can't be updated.";
+        }
+        if (from == MaintenanceRequestStatus.COMPLETED) {
+            return "A completed request can only be reopened as In progress.";
+        }
+        return "A request can't move from " + from + " to " + to + ".";
+    }
+
     public void schedule(LocalDate date, String correlationId) {
+        // Check before mutating: a refused move must leave the aggregate untouched.
+        if (status == MaintenanceRequestStatus.CANCELLED || !status.canMoveTo(MaintenanceRequestStatus.SCHEDULED)) {
+            throw new IllegalStateException(transitionRefusal(status, MaintenanceRequestStatus.SCHEDULED));
+        }
         this.scheduledDate = date;
         changeStatus(MaintenanceRequestStatus.SCHEDULED, correlationId);
     }
 
     public void assignTo(String assignee, String correlationId) {
+        if (status == MaintenanceRequestStatus.CANCELLED) {
+            throw new IllegalStateException("This request was cancelled and can't be updated.");
+        }
         this.assignedTo = assignee;
         if (this.status == MaintenanceRequestStatus.SUBMITTED) {
             changeStatus(MaintenanceRequestStatus.IN_REVIEW, correlationId);

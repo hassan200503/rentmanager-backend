@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -164,5 +165,9 @@ public class TenantEntity extends BaseEntity {
     @Setter
     @Column(name = "plan_auto_renew", nullable = false)
     private boolean planAutoRenew;
+
+    @Setter
+    @Column(name = "free_trial_ends_at")
+    private Instant freeTrialEndsAt;
 
 }

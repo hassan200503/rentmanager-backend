@@ -70,7 +70,8 @@ class AnnouncementDispatchSweepServiceTest {
         smsService = mock(SmsService.class);
         emailService = mock(EmailService.class);
         whatsAppService = mock(WhatsAppService.class);
-        NotificationDispatchService dispatchService = new NotificationDispatchService(smsService, emailService, whatsAppService);
+        NotificationDispatchService dispatchService = new NotificationDispatchService(smsService, emailService, whatsAppService,
+                mock(com.rentmanager.modules.notification.push.application.PushNotificationService.class));
         AnnouncementProperties properties = new AnnouncementProperties();
         properties.setWhatsappMaxChars(30);
         AnnouncementWhatsAppTemplate template = new AnnouncementWhatsAppTemplate(properties);

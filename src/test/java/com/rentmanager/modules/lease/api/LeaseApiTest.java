@@ -191,6 +191,20 @@ public class LeaseApiTest {
                 .andExpect(jsonPath("$.success").value(false));
     }
 
+    private void seedHeldDeposit(String leaseId) {
+        entityManager.createNativeQuery("""
+                INSERT INTO deposits (id, tenant_id, lease_id, unit_id, tenant_profile_id,
+                                      amount_required, amount_paid, status, paid_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, 30000, 30000, 'HELD', NOW())
+                """)
+                .setParameter(1, UUID.randomUUID())
+                .setParameter(2, TENANT_A)
+                .setParameter(3, UUID.fromString(leaseId))
+                .setParameter(4, UNIT_ID)
+                .setParameter(5, TENANT_PROFILE_ID)
+                .executeUpdate();
+    }
+
     @Test
     void shouldRunFullLeaseLifecycle() throws Exception {
 
@@ -198,6 +212,8 @@ public class LeaseApiTest {
 
         performAction(leaseId, "APPROVE");
         performAction(leaseId, "AWAITING_DEPOSIT");
+        // A lease with securityDeposit > 0 requires a HELD deposit before activation.
+        seedHeldDeposit(leaseId);
         performAction(leaseId, "ACTIVATE");
 
         mockMvc.perform(get("/api/v1/leases/" + leaseId)

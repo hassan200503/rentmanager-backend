@@ -147,7 +147,7 @@ class TenantApiIT {
         when(tenantCommandService.createTenant(eq(tenantId), any()))
                 .thenReturn(response);
 
-        mockMvc.perform(post("/api/tenants")
+        mockMvc.perform(post("/api/v1/tenants")
                         .with(MockTenantAuthentication.asTenant(tenantId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(CREATE_TENANT_REQUEST_JSON))
@@ -171,7 +171,7 @@ class TenantApiIT {
         // with TestSecurityConfig's permitAll(), this is the only way to
         // reach resolveStrictTenantId() with a genuinely empty context
         // and prove it rejects rather than silently falling back.
-        mockMvc.perform(post("/api/tenants")
+        mockMvc.perform(post("/api/v1/tenants")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(CREATE_TENANT_REQUEST_JSON))
                 .andExpect(status().isForbidden())
@@ -181,7 +181,7 @@ class TenantApiIT {
 
     @Test
     void should_reject_getTenant_when_no_tenant_context_present() throws Exception {
-        mockMvc.perform(get("/api/tenants/{tenantId}", UUID.randomUUID()))
+        mockMvc.perform(get("/api/v1/tenants/{tenantId}", UUID.randomUUID()))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
@@ -197,7 +197,7 @@ class TenantApiIT {
         when(tenantCommandService.getTenant(eq(tenantId), eq(tenantId)))
                 .thenReturn(response);
 
-        mockMvc.perform(get("/api/tenants/{tenantId}", tenantId)
+        mockMvc.perform(get("/api/v1/tenants/{tenantId}", tenantId)
                         .with(MockTenantAuthentication.asTenant(tenantId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
@@ -219,7 +219,7 @@ class TenantApiIT {
                 .thenThrow(new SecurityException(
                         "Cross-tenant access denied for tenant: " + otherTenantId));
 
-        mockMvc.perform(get("/api/tenants/{tenantId}", otherTenantId)
+        mockMvc.perform(get("/api/v1/tenants/{tenantId}", otherTenantId)
                         .with(MockTenantAuthentication.asTenant(callerTenantId)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.success").value(false))

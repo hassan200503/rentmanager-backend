@@ -115,6 +115,23 @@ public class User extends BaseEntity {
         return user;
     }
 
+    /**
+     * Erases this account's identity after self-service deletion. The row is
+     * kept (other records reference users.id) but can no longer be tied to a
+     * person: the Clerk id and email are replaced with unique tombstones
+     * (both columns are NOT NULL and unique) and the name is removed.
+     */
+    public void anonymiseForDeletion(String tombstone) {
+        if (tombstone == null || tombstone.isBlank()) {
+            throw new IllegalArgumentException("Tombstone is required");
+        }
+        this.clerkUserId = tombstone;
+        this.email = tombstone + "@deleted.invalid";
+        this.firstName = null;
+        this.lastName = null;
+        this.active = false;
+    }
+
     public void assignTenant(UUID tenantId) {
         if (tenantId == null) {
             throw new IllegalArgumentException("Tenant ID cannot be null");

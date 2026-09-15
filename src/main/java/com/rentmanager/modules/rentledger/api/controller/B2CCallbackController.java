@@ -97,7 +97,8 @@ public class B2CCallbackController {
     }
 
     private boolean constantTimeEquals(String a, String b) {
-        if (a == null || b == null) return false;
+        // A blank configured secret must never match (unconfigured environment).
+        if (a == null || b == null || b.isBlank()) return false;
         return MessageDigest.isEqual(a.getBytes(java.nio.charset.StandardCharsets.UTF_8),
                 b.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }

@@ -31,6 +31,7 @@ public class MaintenanceRequestController {
 
     private final MaintenanceRequestCommandService commandService;
     private final MaintenanceRequestQueryService queryService;
+    private final com.rentmanager.modules.maintenance.application.service.LandlordMaintenanceSubmissionGuard submissionGuard;
 
     // Staff-on-behalf-of submission: a caretaker logging a problem a renter
     // reported in person. Renters do NOT reach this — they submit through
@@ -45,8 +46,10 @@ public class MaintenanceRequestController {
             @AuthenticationPrincipal AuthenticatedUser user,
             @Valid @RequestBody CreateMaintenanceRequest request
     ) {
+        UUID tenantId = requireTenantId(user);
+        submissionGuard.verify(tenantId, request.unitId(), request.propertyId(), request.tenantProfileId(), request.leaseId());
         MaintenanceRequest result = commandService.submit(
-                requireTenantId(user),
+                tenantId,
                 request.unitId(),
                 request.propertyId(),
                 request.tenantProfileId(),
@@ -55,7 +58,9 @@ public class MaintenanceRequestController {
                 request.description(),
                 request.category(),
                 request.priority(),
-                request.createdBy() != null ? request.createdBy() : user.getEmail(),
+                // Always the authenticated user: a body value let a caller attribute
+                // the request to anyone.
+                user.getEmail(),
                 UUID.randomUUID().toString()
         );
         return ResponseEntity.ok(ApiResponse.ok("Maintenance request submitted", MaintenanceRequestResponse.from(result)));

@@ -15,6 +15,7 @@ import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowEngine;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
+import com.rentmanager.modules.deposit.domain.repository.DepositRepository;
 import com.rentmanager.shared.events.DomainEventPublisher;
 import com.rentmanager.shared.security.context.TenantContext;
 import org.junit.jupiter.api.AfterEach;
@@ -68,6 +69,8 @@ class LeaseApplicationServiceSearchTest {
     private LeaseActivationOrchestrator leaseActivationOrchestrator;
     @Mock
     private DomainEventPublisher eventPublisher;
+    @Mock
+    private DepositRepository depositRepository;
 
     private LeaseApplicationService service;
 
@@ -80,7 +83,7 @@ class LeaseApplicationServiceSearchTest {
         service = new LeaseApplicationService(
                 leaseRepository, workflowEngine, tenantProfileRepository,
                 propertyRepository, unitRepository,
-                leaseActivationOrchestrator, eventPublisher
+                leaseActivationOrchestrator, eventPublisher, depositRepository
         );
         TenantContext.setTenantId(tenantId);
         when(tenantProfileRepository.findAllById(any())).thenReturn(Collections.emptyList());

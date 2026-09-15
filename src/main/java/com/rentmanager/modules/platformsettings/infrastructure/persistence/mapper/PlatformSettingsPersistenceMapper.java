@@ -19,6 +19,7 @@ public class PlatformSettingsPersistenceMapper {
         jpa.setPremiumGraceDays(settings.getPremiumGraceDays());
         jpa.setSubscriptionPaymentExpiryMinutes(settings.getSubscriptionPaymentExpiryMinutes());
         jpa.setDisbursementMaxRetryAttempts(settings.getDisbursementMaxRetryAttempts());
+        jpa.setTrialDurationDays(settings.getTrialDurationDays());
         jpa.setRevenueBusinessShortcode(settings.getRevenueBusinessShortcode());
         jpa.setRevenuePaybill(settings.getRevenuePaybill());
         jpa.setRevenueTill(settings.getRevenueTill());
@@ -39,6 +40,7 @@ public class PlatformSettingsPersistenceMapper {
                 jpa.getPremiumGraceDays(),
                 jpa.getSubscriptionPaymentExpiryMinutes(),
                 jpa.getDisbursementMaxRetryAttempts(),
+                jpa.getTrialDurationDays(),
                 jpa.getRevenueBusinessShortcode(),
                 jpa.getRevenuePaybill(),
                 jpa.getRevenueTill(),

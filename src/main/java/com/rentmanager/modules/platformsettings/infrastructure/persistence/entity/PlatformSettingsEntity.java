@@ -50,4 +50,7 @@ public class PlatformSettingsEntity extends BaseEntity {
 
     @Column(name = "logo_url", length = 500)
     private String logoUrl;
+
+    @Column(name = "trial_duration_days", nullable = false)
+    private int trialDurationDays;
 }

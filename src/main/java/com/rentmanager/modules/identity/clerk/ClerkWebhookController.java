@@ -44,6 +44,7 @@ public class ClerkWebhookController {
     private final ClerkProperties clerkProperties;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
+    private final com.rentmanager.modules.identity.account.AccountDeletionService accountDeletionService;
 
     @PostMapping
     @Transactional
@@ -66,6 +67,15 @@ public class ClerkWebhookController {
 
             if ("user.updated".equals(type) || "user.created".equals(type)) {
                 handleUserUpsert(root.path("data"));
+            }
+            if ("user.deleted".equals(type)) {
+                // A person deleted their login outside the app (Clerk Account
+                // Portal or dashboard). Erase the local identity the same way
+                // in-app deletion does, so no orphaned email or device remains.
+                String clerkUserId = root.path("data").path("id").asText(null);
+                if (clerkUserId != null && !clerkUserId.isBlank()) {
+                    accountDeletionService.eraseLocalIdentity(clerkUserId, "CLERK_WEBHOOK");
+                }
             }
         } catch (Exception e) {
             log.error("Failed to process Clerk webhook payload", e);

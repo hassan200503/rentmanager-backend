@@ -111,17 +111,14 @@ public class ReservationController {
     }
 
     /**
-     * The left-most X-Forwarded-For entry when behind a proxy, else the socket
-     * address. This is a throttling key, not an authorisation input — a
-     * spoofed header buys an attacker a fresh bucket, which is no worse than
-     * the no-limit situation this replaces, and the per-phone key still holds.
+     * The client address as resolved by the servlet container. Behind the
+     * reverse proxy, {@code server.forward-headers-strategy=native} makes
+     * Tomcat derive it from X-Forwarded-For, trusting only private-network
+     * hops. Reading the header here directly took its left-most entry, which
+     * the caller writes — every request could claim a fresh IP bucket and the
+     * per-IP limit protected nothing.
      */
     private static String clientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            int comma = forwarded.indexOf(',');
-            return (comma > 0 ? forwarded.substring(0, comma) : forwarded).trim();
-        }
         return request.getRemoteAddr();
     }
 

@@ -1,11 +1,13 @@
 package com.rentmanager.modules.tenant.application.command.service;
 
+import com.rentmanager.modules.platformsettings.domain.model.PlatformSettings;
+import com.rentmanager.modules.platformsettings.domain.repository.PlatformSettingsRepository;
 import com.rentmanager.modules.tenant.application.dto.request.*;
 import com.rentmanager.modules.tenant.application.dto.response.DarajaCredentialsStatusResponse;
 import com.rentmanager.modules.tenant.application.dto.response.DarajaCredentialsTestResponse;
 import com.rentmanager.modules.tenant.application.dto.response.TenantResponse;
 import com.rentmanager.modules.tenant.application.mapper.TenantMapper;
-
+import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import com.rentmanager.modules.tenant.domain.model.Tenant;
 import org.springframework.stereotype.Service;
@@ -20,17 +22,20 @@ public class TenantCommandServiceImpl implements TenantCommandService {
     private final com.rentmanager.modules.integration.bridge.LandlordDarajaVerifier darajaVerifier;
     private final FinancialAuditService financialAuditService;
     private final TenantMapper tenantMapper;
+    private final PlatformSettingsRepository platformSettingsRepository;
 
     public TenantCommandServiceImpl(
             TenantRepository tenantRepository,
             TenantMapper tenantMapper,
             FinancialAuditService financialAuditService,
-            com.rentmanager.modules.integration.bridge.LandlordDarajaVerifier darajaVerifier
+            com.rentmanager.modules.integration.bridge.LandlordDarajaVerifier darajaVerifier,
+            PlatformSettingsRepository platformSettingsRepository
     ) {
         this.tenantRepository = tenantRepository;
         this.tenantMapper = tenantMapper;
         this.financialAuditService = financialAuditService;
         this.darajaVerifier = darajaVerifier;
+        this.platformSettingsRepository = platformSettingsRepository;
     }
 
     // ------------------------------------------------------------
@@ -69,6 +74,17 @@ public class TenantCommandServiceImpl implements TenantCommandService {
         // assignOrganization(UUID) does the same assignment with an added
         // null check.
         tenant.assignOrganization(tenantId);
+
+        // Override the constructor's default trial window with the owner-
+        // configured value from platform settings, but only when creating a
+        // TRIAL account (non-TRIAL creation via the 7-param path is intentional
+        // — e.g., admin seeding a non-trial account for a test).
+        if (tenant.getSubscriptionStatus() == SubscriptionStatus.TRIAL) {
+            int trialDays = platformSettingsRepository.findSingleton()
+                    .map(PlatformSettings::getTrialDurationDays)
+                    .orElse(PlatformSettings.DEFAULT_TRIAL_DURATION_DAYS);
+            tenant.startTrial(trialDays);
+        }
 
         return tenantMapper.toResponse(tenantRepository.save(tenant));
     }
@@ -277,6 +293,17 @@ public class TenantCommandServiceImpl implements TenantCommandService {
 
     // ------------------------------------------------------------
     // CONFIGURE DARAJA CREDENTIALS
+    // ------------------------------------------------------------
+    // UPDATE TENANT PROFILE (name, email, phone, address)
+    // ------------------------------------------------------------
+    @Override
+    public TenantResponse updateTenantProfile(UUID tenantId, UUID targetTenantId, UpdateTenantRequest request) {
+        Tenant tenant = findTenant(targetTenantId);
+        validateTenantAccess(tenantId, tenant);
+        tenant.updateProfile(request.getName(), request.getEmail(), request.getPhoneNumber(), request.getAddress());
+        return tenantMapper.toResponse(tenantRepository.save(tenant));
+    }
+
     // ------------------------------------------------------------
     @Override
     public DarajaCredentialsStatusResponse configureDarajaCredentials(

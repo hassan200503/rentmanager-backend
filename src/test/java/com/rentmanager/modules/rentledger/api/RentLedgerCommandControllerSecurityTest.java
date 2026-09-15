@@ -39,6 +39,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -238,8 +239,10 @@ class RentLedgerCommandControllerSecurityTest {
     @ValueSource(strings = {"ROLE_LANDLORD_OWNER", "ROLE_LANDLORD_MANAGER", "ROLE_LANDLORD_STAFF"})
     void allLandlordRoles_succeed_onRecordTransaction(String authority) throws Exception {
         RentLedgerEntry entry = mockEntry();
+        // The controller calls the idempotency-key overload (V98); the key is
+        // null here because this test sends no Idempotency-Key header.
         when(rentLedgerApplicationService.applyTransaction(
-                any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull()))
                 .thenReturn(entry);
 
         mockMvc.perform(post(RENT_LEDGER_BASE + "/entries/{entryId}/transactions", ENTRY_ID)

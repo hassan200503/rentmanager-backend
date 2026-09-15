@@ -2,6 +2,14 @@ spring:
   application:
     name: rentmanager-backend
 
+  # Uploads: property/unit media and maintenance photos validate at 5 MB.
+  # Without this Spring's 1 MB default rejected anything larger before the
+  # validation ran, as an opaque 500.
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:prod}
 
@@ -33,6 +41,15 @@ spring:
         jwt:
           jwk-set-uri: ${CLERK_JWKS_URL:https://social-monitor-54.clerk.accounts.dev/.well-known/jwks.json}
 
+# OpenAPI: useful locally (the mobile contract snapshot is generated from it),
+# but a complete public map of the API in production. Deployments set
+# API_DOCS_ENABLED=false; DeploymentSafetyGuard refuses to start otherwise.
+springdoc:
+  api-docs:
+    enabled: ${API_DOCS_ENABLED:true}
+  swagger-ui:
+    enabled: ${API_DOCS_ENABLED:true}
+
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
 
@@ -58,6 +75,12 @@ server:
   # M-Pesa callback writing a ledger row and the disbursement being created.
   shutdown: graceful
 
+  # Behind the reverse proxy, trust X-Forwarded-For only from private-network
+  # hops (Tomcat RemoteIpValve defaults) so getRemoteAddr() is the real client.
+  # The public reservation rate limit keys on it; reading the left-most header
+  # entry directly let any caller pick a fresh bucket per request.
+  forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:native}
+
 application:
   security:
     issuer: ${JWT_ISSUER:rentmanager-backend}
@@ -68,10 +91,13 @@ application:
     enableHttpsOnlyCookies: true
     enableSecureHeaders: true
 
+# Optional at startup: unset values disable repair/property photo upload
+# (clear error at use) instead of refusing to boot. Same for the Daraja
+# callback values below — callbacks with a blank secret are always rejected.
 cloudinary:
-  cloud-name: ${CLOUDINARY_CLOUD_NAME}
-  api-key: ${CLOUDINARY_API_KEY}
-  api-secret: ${CLOUDINARY_API_SECRET}
+  cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+  api-key: ${CLOUDINARY_API_KEY:}
+  api-secret: ${CLOUDINARY_API_SECRET:}
 
 
 
@@ -80,14 +106,14 @@ daraja:
   consumer-secret: ${DARAJA_CONSUMER_SECRET:YOUR_CONSUMER_SECRET}
   business-short-code: ${DARAJA_SHORT_CODE:174379}
   passkey: ${DARAJA_PASSKEY:YOUR_DARAJA_PASSKEY}
-  callback-url: ${DARAJA_CALLBACK_URL}
-  rent-payment-callback-url: ${DARAJA_RENT_PAYMENT_CALLBACK_URL}
-  subscription-billing-callback-url: ${DARAJA_SUBSCRIPTION_BILLING_CALLBACK_URL}
+  callback-url: ${DARAJA_CALLBACK_URL:}
+  rent-payment-callback-url: ${DARAJA_RENT_PAYMENT_CALLBACK_URL:}
+  subscription-billing-callback-url: ${DARAJA_SUBSCRIPTION_BILLING_CALLBACK_URL:}
   ratiba-enabled: ${DARAJA_RATIBA_ENABLED:false}
-  ratiba-callback-url: ${DARAJA_RATIBA_CALLBACK_URL}
+  ratiba-callback-url: ${DARAJA_RATIBA_CALLBACK_URL:}
   ratiba-create-standing-order-url: ${DARAJA_RATIBA_CREATE_STANDING_ORDER_URL:https://sandbox.safaricom.co.ke/standingorder/v1/createStandingOrderExternal}
   base-url: ${DARAJA_BASE_URL:https://sandbox.safaricom.co.ke}
-  callback-secret: ${DARAJA_CALLBACK_SECRET}
+  callback-secret: ${DARAJA_CALLBACK_SECRET:}
   credentials-encryption-key: ${DARAJA_CREDENTIALS_ENCRYPTION_KEY}
 
 # Integrations Control Plane: master key encrypting platform-level provider
@@ -134,6 +160,11 @@ platform:
 # takes over). WhatsApp has no provider yet: LoggingWhatsAppService logs
 # and skips until one is selected and configured.
 app:
+  # Deployment image sets APP_DEPLOYMENT_STRICT=true: DeploymentSafetyGuard
+  # then refuses unsafe settings (see that class).
+  deployment:
+    strict: ${APP_DEPLOYMENT_STRICT:false}
+
   notification:
     email:
       enabled: ${NOTIFICATION_EMAIL_ENABLED:false}

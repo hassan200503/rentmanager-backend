@@ -43,7 +43,8 @@ class NotificationDispatchSweepServiceTest {
         smsService = mock(SmsService.class);
         emailService = mock(EmailService.class);
         whatsAppService = mock(WhatsAppService.class);
-        dispatchService = new NotificationDispatchService(smsService, emailService, whatsAppService);
+        dispatchService = new NotificationDispatchService(smsService, emailService, whatsAppService,
+                mock(com.rentmanager.modules.notification.push.application.PushNotificationService.class));
         sweepService = new NotificationDispatchSweepService(deliveryRepository, dispatchService, mock(BusinessMetrics.class));
     }
 

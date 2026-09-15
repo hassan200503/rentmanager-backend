@@ -5,7 +5,9 @@ import com.rentmanager.contract.common.PageResponse;
 import com.rentmanager.modules.lease.application.dto.request.*;
 import com.rentmanager.modules.lease.application.dto.response.*;
 import com.rentmanager.modules.lease.application.service.LeaseApplicationService;
+import com.rentmanager.shared.security.principal.AuthenticatedUser;
 import jakarta.validation.Valid;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -83,9 +85,13 @@ public class LeaseController {
     @PostMapping("/{leaseId}/action")
     @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER')")
     public ApiResponse<LeaseActionResponse> action(
+            @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable UUID leaseId,
             @Valid @RequestBody LeaseActionRequest request
     ) {
+        // Audit identity comes from the verified token, never the body: a
+        // client-supplied actor would let anyone terminate a lease as anyone.
+        request.setActor(user != null ? user.getEmail() : null);
         return ApiResponse.ok(leaseService.executeAction(leaseId, request));
     }
 

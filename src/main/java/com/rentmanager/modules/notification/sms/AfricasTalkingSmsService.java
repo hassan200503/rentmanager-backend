@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.rentmanager.modules.integration.application.IntegrationRegistry;
 import com.rentmanager.modules.integration.domain.model.ProviderCatalog;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -31,6 +32,7 @@ import java.util.Map;
  */
 @Slf4j
 @Service
+@ConditionalOnProperty(prefix = "africastalking", name = "enabled", havingValue = "true")
 public class AfricasTalkingSmsService implements SmsService {
 
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);

@@ -5,9 +5,11 @@ import com.rentmanager.modules.tax.domain.repository.MonthlyRentalIncomeFilingRe
 import com.rentmanager.modules.tax.infrastructure.persistence.mapper.MonthlyRentalIncomeFilingPersistenceMapper;
 import com.rentmanager.modules.tax.infrastructure.persistence.repository.MonthlyRentalIncomeFilingJpaRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -26,6 +28,20 @@ public class MonthlyRentalIncomeFilingRepositoryAdapter implements MonthlyRental
     @Override
     public Optional<MonthlyRentalIncomeFiling> findByTenantIdAndPeriod(UUID tenantId, LocalDate period) {
         return jpaRepository.findByTenantIdAndPeriod(tenantId, period).map(mapper::toDomain);
+    }
+
+    @Override
+    public List<MonthlyRentalIncomeFiling> findAllByTenantId(UUID tenantId, int page, int size) {
+        return jpaRepository.findAllByTenantIdOrderByPeriodDesc(tenantId, PageRequest.of(page, size))
+                .getContent()
+                .stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public Optional<MonthlyRentalIncomeFiling> findLatestByTenantId(UUID tenantId) {
+        return jpaRepository.findTopByTenantIdOrderByPeriodDesc(tenantId).map(mapper::toDomain);
     }
 
     @Override

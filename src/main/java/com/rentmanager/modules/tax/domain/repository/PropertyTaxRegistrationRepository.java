@@ -14,5 +14,7 @@ public interface PropertyTaxRegistrationRepository {
 
     List<PropertyTaxRegistration> findAll();
 
+    List<PropertyTaxRegistration> findAllByTenantId(UUID tenantId);
+
     PropertyTaxRegistration save(PropertyTaxRegistration registration);
 }
