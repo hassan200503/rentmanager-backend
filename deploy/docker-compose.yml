@@ -31,6 +31,16 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-rentmanager}
       POSTGRES_USER: ${POSTGRES_USER:-rentmanager}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+    # Sized for the server (see .env.example). On Oracle Always Free this
+    # memory also keeps the instance above the idle-reclamation threshold.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-256MB}
+      - -c
+      - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-768MB}
+      - -c
+      - max_connections=50
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -49,6 +59,7 @@ services:
       postgres: { condition: service_healthy }
     mem_limit: ${BACKEND_MEMORY:-1536m}
     environment:
+      JAVA_TOOL_OPTIONS: ${BACKEND_JAVA_OPTS:--XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError}
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-rentmanager}
       DB_USERNAME: ${POSTGRES_USER:-rentmanager}
       DB_PASSWORD: ${POSTGRES_PASSWORD}

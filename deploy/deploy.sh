@@ -12,8 +12,15 @@ fi
 chmod 600 .env
 mkdir -p backups
 
-# shellcheck disable=SC1091
-set -a; . ./.env; set +a
+# Read only what this script needs. .env is compose syntax, not shell:
+# values may contain spaces (BACKEND_JAVA_OPTS) and inline comments.
+env_value() {
+  grep -E "^$1=" .env | tail -n 1 | cut -d= -f2- \
+    | sed -E "s/[[:space:]]+#.*\$//; s/^[\"']//; s/[\"']\$//; s/[[:space:]]+\$//"
+}
+RELEASE="$(env_value RELEASE)"
+APP_DOMAIN="$(env_value APP_DOMAIN)"
+API_DOMAIN="$(env_value API_DOMAIN)"
 
 echo "==> Validating compose configuration"
 docker compose config --quiet

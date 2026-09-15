@@ -6,6 +6,9 @@ talks to `https://API_DOMAIN`.
 
 Allow about 90 minutes the first time. Every step says how to confirm it worked.
 
+> **No budget?** Start with [ORACLE_FREE.md](ORACLE_FREE.md). It replaces §0–§2
+> with a free Oracle Cloud server, free DuckDNS names and free encrypted backups.
+
 ---
 
 ## 0. What you need before starting
