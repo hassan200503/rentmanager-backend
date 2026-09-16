@@ -1,6 +1,12 @@
 # RentManager at zero cost — Oracle Cloud Always Free
 
-This is the free path. Do these steps first, then continue with
+> **Needs a card** (US$1 authorised and released, never charged; prepaid and
+> virtual cards are refused). With no card at all, use
+> [FREE_NO_CARD.md](FREE_NO_CARD.md) instead — Render, Neon and Netlify, all
+> cardless. Come back here when a card is available: this path is stronger
+> (always on, 12 GB RAM, no 9-minute cold starts).
+
+This is the free path if you have a card. Do these steps first, then continue with
 [README.md](README.md) from **§2**. Limits were checked on 2026-09-15; free
 tiers change, so re-check anything that looks different.
 

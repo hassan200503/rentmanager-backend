@@ -6,8 +6,11 @@ talks to `https://API_DOMAIN`.
 
 Allow about 90 minutes the first time. Every step says how to confirm it worked.
 
-> **No budget?** Start with [ORACLE_FREE.md](ORACLE_FREE.md). It replaces §0–§2
-> with a free Oracle Cloud server, free DuckDNS names and free encrypted backups.
+> **No budget?** Two free paths, neither with a bill:
+> - **No card at all:** [FREE_NO_CARD.md](FREE_NO_CARD.md) — Render + Neon +
+>   Netlify. Replaces §0–§2 and §5 entirely (no Docker Compose, no server).
+> - **Card available** (for identity only): [ORACLE_FREE.md](ORACLE_FREE.md) —
+>   a free always-on Oracle server that runs this whole Compose stack.
 
 ---
 
