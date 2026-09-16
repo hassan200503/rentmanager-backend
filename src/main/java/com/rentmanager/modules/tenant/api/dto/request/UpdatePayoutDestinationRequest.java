@@ -16,8 +16,8 @@ public record UpdatePayoutDestinationRequest(
 
         @NotBlank(message = "A payout number is required")
         @Pattern(
-                regexp = "^\\+2547\\d{8}$",
-                message = "Enter a Safaricom number in the form +2547XXXXXXXX"
+                regexp = com.rentmanager.shared.phone.KenyanMsisdn.E164_PATTERN,
+                message = "Enter a Safaricom number in the form +2547XXXXXXXX or +2541XXXXXXXX"
         )
         String payoutPhoneNumber
 ) {}

@@ -10,7 +10,11 @@ import java.util.UUID;
 
 public class LeaseActionRequest {
 
-    @NotNull(message = "performedBy is required")
+    /**
+     * Ignored. Who performed an action is taken from the authenticated user
+     * (LeaseController sets actor). Kept only so existing clients that still
+     * send it are not rejected.
+     */
     private UUID performedBy;
 
     @NotNull(message = "action is required")

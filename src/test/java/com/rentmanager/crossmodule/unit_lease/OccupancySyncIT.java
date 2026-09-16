@@ -14,8 +14,12 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * SaaS-grade invariant:
- * Unit occupancy must ALWAYS reflect Lease lifecycle state.
+ * Unit occupancy must always reflect Lease lifecycle state.
+ *
+ * In production this sync is event-driven (DepositPaymentEventListener marks
+ * the unit occupied when a deposit is confirmed). These tests exercise the
+ * domain objects in isolation, manually performing the sync step to verify the
+ * invariant holds at the domain layer regardless of infrastructure.
  */
 class OccupancySyncIT extends CrossModuleBaseIT {
 
@@ -39,13 +43,13 @@ class OccupancySyncIT extends CrossModuleBaseIT {
                     UUID.randomUUID()
             );
 
-            // Correct lifecycle progression
             lease.approve();
+            lease.markAwaitingDeposit();
             lease.activate();
 
             assertEquals("VACANT", unit.getOccupancyStatus().name());
 
-            // In a real event-driven system, this would be automatic via event handler
+            // In production this is triggered by DepositPaymentEventListener.
             unit.markOccupied("LEASE_ACTIVATED_SYNC");
 
             AssertionHelper.assertLeaseActive(lease);
@@ -102,13 +106,12 @@ class OccupancySyncIT extends CrossModuleBaseIT {
                     UUID.randomUUID()
             );
 
-            // FIXED: correct lifecycle
             lease.approve();
+            lease.markAwaitingDeposit();
             lease.activate();
 
             assertTrue(lease.isActive());
 
-            // SaaS-grade invariant enforcement:
             IllegalStateException ex = assertThrows(IllegalStateException.class, () -> {
 
                 if (lease.isActive()) {

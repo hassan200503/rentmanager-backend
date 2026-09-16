@@ -90,4 +90,25 @@ class RenterReviewQueryServiceTest {
         assertNull(summary.averageRating());
         assertFalse(summary.averageShown());
     }
+
+    /**
+     * Previously untested: ReviewController#getCounts() silently omitted
+     * this method's result entirely (only the received-review counts from
+     * ReviewQueryService were exposed), so the dashboard's "Moderation
+     * state" card never reflected a landlord's own reviews of their
+     * renters. Mirrors ReviewQueryServiceTest#getStatusCountsReportsEachState
+     * for the received side.
+     */
+    @Test
+    void getStatusCountsReportsEachState() {
+        when(reviewRepository.countApprovedByTenantId(LANDLORD_TENANT_ID)).thenReturn(4L);
+        when(reviewRepository.countByTenantIdAndStatus(LANDLORD_TENANT_ID, ReviewStatus.PENDING)).thenReturn(2L);
+        when(reviewRepository.countByTenantIdAndStatus(LANDLORD_TENANT_ID, ReviewStatus.HIDDEN)).thenReturn(1L);
+
+        var counts = service.getStatusCounts(LANDLORD_TENANT_ID);
+
+        assertEquals(4L, counts.approvedCount());
+        assertEquals(2L, counts.pendingCount());
+        assertEquals(1L, counts.hiddenCount());
+    }
 }

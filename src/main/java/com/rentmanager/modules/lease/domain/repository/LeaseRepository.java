@@ -114,5 +114,21 @@ public interface LeaseRepository {
 
     List<Lease> findAllByIdIn(Collection<UUID> ids);
 
-    Page<Lease> search(UUID tenantId, UUID propertyId, LeaseStatus status, LocalDate fromDate, LocalDate toDate, Pageable pageable);
+    /**
+     * keyword matches the lease number OR any tenant profile id in
+     * matchingTenantProfileIds — the application layer resolves a raw
+     * name/phone search term to profile ids first (tenantProfileId here is a
+     * plain UUID column, not a JPA association to join against). Pass null
+     * for both when there is no keyword filter.
+     */
+    Page<Lease> search(
+            UUID tenantId,
+            UUID propertyId,
+            LeaseStatus status,
+            LocalDate fromDate,
+            LocalDate toDate,
+            String leaseNumberKeyword,
+            List<UUID> matchingTenantProfileIds,
+            Pageable pageable
+    );
 }

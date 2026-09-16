@@ -12,7 +12,10 @@ import com.rentmanager.modules.lease.domain.enums.LeaseType;
 import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowEngine;
+import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
+import com.rentmanager.modules.unit.domain.repository.UnitRepository;
+import com.rentmanager.modules.deposit.domain.repository.DepositRepository;
 import com.rentmanager.shared.events.DomainEventPublisher;
 import com.rentmanager.shared.security.context.TenantContext;
 import org.junit.jupiter.api.AfterEach;
@@ -59,9 +62,15 @@ class LeaseApplicationServiceSearchTest {
     @Mock
     private TenantProfileRepository tenantProfileRepository;
     @Mock
+    private PropertyRepository propertyRepository;
+    @Mock
+    private UnitRepository unitRepository;
+    @Mock
     private LeaseActivationOrchestrator leaseActivationOrchestrator;
     @Mock
     private DomainEventPublisher eventPublisher;
+    @Mock
+    private DepositRepository depositRepository;
 
     private LeaseApplicationService service;
 
@@ -73,10 +82,13 @@ class LeaseApplicationServiceSearchTest {
     void setUp() {
         service = new LeaseApplicationService(
                 leaseRepository, workflowEngine, tenantProfileRepository,
-                leaseActivationOrchestrator, eventPublisher
+                propertyRepository, unitRepository,
+                leaseActivationOrchestrator, eventPublisher, depositRepository
         );
         TenantContext.setTenantId(tenantId);
         when(tenantProfileRepository.findAllById(any())).thenReturn(Collections.emptyList());
+        when(propertyRepository.findAllByTenantIdAndIdIn(any(), any())).thenReturn(Collections.emptyList());
+        when(unitRepository.findAllByTenantIdAndIdIn(any(), any())).thenReturn(Collections.emptyList());
     }
 
     @AfterEach
@@ -103,7 +115,7 @@ class LeaseApplicationServiceSearchTest {
     }
 
     private LeaseSearchRequest request(UUID propertyId, LeaseStatusDTO status, LocalDate from, LocalDate to) {
-        return new LeaseSearchRequest(null, propertyId, status, from, to, 0, 10);
+        return new LeaseSearchRequest(null, propertyId, status, null, from, to, 0, 10);
     }
 
     @Nested
@@ -114,7 +126,7 @@ class LeaseApplicationServiceSearchTest {
             Lease l1 = activeLease(propertyA, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31));
             Lease l2 = terminatedLease(propertyB, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31));
 
-            when(leaseRepository.search(any(), any(), any(), any(), any(), any()))
+            when(leaseRepository.search(any(), any(), any(), any(), any(), any(), any(), any()))
                     .thenReturn(new PageImpl<>(List.of(l1, l2)));
 
             var result = service.search(request(null, null, null, null));
@@ -131,7 +143,7 @@ class LeaseApplicationServiceSearchTest {
             Lease inPropertyA = activeLease(propertyA, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31));
             Lease inPropertyB = activeLease(propertyB, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31));
 
-            when(leaseRepository.search(any(), any(), any(), any(), any(), any()))
+            when(leaseRepository.search(any(), any(), any(), any(), any(), any(), any(), any()))
                     .thenReturn(new PageImpl<>(List.of(inPropertyA)));
 
             var result = service.search(request(propertyA, null, null, null));
@@ -149,7 +161,7 @@ class LeaseApplicationServiceSearchTest {
             Lease active = activeLease(propertyA, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31));
             Lease terminated = terminatedLease(propertyA, LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31));
 
-            when(leaseRepository.search(any(), any(), any(), any(), any(), any()))
+            when(leaseRepository.search(any(), any(), any(), any(), any(), any(), any(), any()))
                     .thenReturn(new PageImpl<>(List.of(active)));
 
             var result = service.search(request(null, LeaseStatusDTO.ACTIVE, null, null));
@@ -167,7 +179,7 @@ class LeaseApplicationServiceSearchTest {
             Lease early = activeLease(propertyA, LocalDate.of(2024, 1, 1), LocalDate.of(2024, 12, 31));
             Lease inRange = activeLease(propertyA, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31));
 
-            when(leaseRepository.search(any(), any(), any(), any(), any(), any()))
+            when(leaseRepository.search(any(), any(), any(), any(), any(), any(), any(), any()))
                     .thenReturn(new PageImpl<>(List.of(inRange)));
 
             var result = service.search(request(null, null, LocalDate.of(2025, 1, 1), null));
@@ -181,7 +193,7 @@ class LeaseApplicationServiceSearchTest {
             Lease inRange = activeLease(propertyA, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30));
             Lease tooLate = activeLease(propertyA, LocalDate.of(2026, 1, 1), LocalDate.of(2027, 6, 30));
 
-            when(leaseRepository.search(any(), any(), any(), any(), any(), any()))
+            when(leaseRepository.search(any(), any(), any(), any(), any(), any(), any(), any()))
                     .thenReturn(new PageImpl<>(List.of(inRange)));
 
             var result = service.search(request(null, null, null, LocalDate.of(2026, 12, 31)));
@@ -200,7 +212,7 @@ class LeaseApplicationServiceSearchTest {
             Lease wrongProperty = activeLease(propertyB, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30));
             Lease wrongStatus = terminatedLease(propertyA, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30));
 
-            when(leaseRepository.search(any(), any(), any(), any(), any(), any()))
+            when(leaseRepository.search(any(), any(), any(), any(), any(), any(), any(), any()))
                     .thenReturn(new PageImpl<>(List.of(matches)));
 
             var result = service.search(request(

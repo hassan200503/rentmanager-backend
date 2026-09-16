@@ -417,6 +417,51 @@ public class GlobalExceptionHandler {
                         "CONFLICT"));
     }
 
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Object>> handleUploadTooLarge(
+            org.springframework.web.multipart.MaxUploadSizeExceededException ex
+    ) {
+        return ResponseEntity
+                .status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(ApiResponse.fail("Files must be 5 MB or smaller.", "PAYLOAD_TOO_LARGE"));
+    }
+
+    // =========================================================
+    // CLIENT REQUEST MISTAKES (4xx, never tracked)
+    // =========================================================
+    // These used to fall into the generic handler: an unknown path under a
+    // public prefix (/api/v1/public/<anything>, disabled /v3/api-docs), a
+    // wrong HTTP method or a malformed UUID answered 500 and wrote an
+    // error_events row — so any unauthenticated scanner could fill that table
+    // and bury real incidents. They are the caller's mistake, not ours.
+    @ExceptionHandler({
+            org.springframework.web.servlet.resource.NoResourceFoundException.class,
+            org.springframework.web.servlet.NoHandlerFoundException.class,
+            org.springframework.web.HttpRequestMethodNotSupportedException.class,
+            org.springframework.web.HttpMediaTypeNotSupportedException.class,
+            org.springframework.web.bind.MissingServletRequestParameterException.class,
+            org.springframework.web.bind.MissingRequestHeaderException.class,
+            org.springframework.web.multipart.support.MissingServletRequestPartException.class,
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class
+    })
+    public ResponseEntity<ApiResponse<Object>> handleClientRequestMistake(Exception ex) {
+        if (ex instanceof org.springframework.web.servlet.resource.NoResourceFoundException
+                || ex instanceof org.springframework.web.servlet.NoHandlerFoundException) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.fail("Not found", ErrorCode.RESOURCE_NOT_FOUND.name()));
+        }
+        if (ex instanceof org.springframework.web.HttpRequestMethodNotSupportedException) {
+            return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                    .body(ApiResponse.fail("Method not allowed", "METHOD_NOT_ALLOWED"));
+        }
+        if (ex instanceof org.springframework.web.HttpMediaTypeNotSupportedException) {
+            return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                    .body(ApiResponse.fail("Unsupported content type", "UNSUPPORTED_MEDIA_TYPE"));
+        }
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.fail("Invalid request", ErrorCode.VALIDATION_ERROR.name()));
+    }
+
     // =========================================================
     // FALLBACK (KEEP LAST)
     // =========================================================

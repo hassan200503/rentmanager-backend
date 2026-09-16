@@ -21,5 +21,9 @@ public interface TaxInvoiceRepository {
      */
     List<TaxInvoice> findDue(LocalDateTime now, int maxAttempts, int limit);
 
+    List<TaxInvoice> findAllByTenantId(UUID tenantId, int page, int size);
+
+    long countAttentionRequiredByTenantId(UUID tenantId);
+
     TaxInvoice save(TaxInvoice invoice);
 }

@@ -336,6 +336,56 @@ class RentLedgerPersistenceIntegrationTest extends AbstractPostgresIntegrationTe
         }).isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    /**
+     * V98: a cash payment has no external reference, so the idempotency key is
+     * the only thing that stops a retried submission recording it twice. The
+     * guard must hold in the database, not just in the service's pre-check,
+     * because two requests can race past the check together.
+     */
+    @Test
+    @Transactional
+    void enforcesUniqueIdempotencyKeyPerTenant() {
+        RentLedgerEntry entry = rentLedgerEntryRepository.save(newEntry(LocalDate.of(2026, 6, 1)));
+        entityManager.flush();
+
+        rentTransactionRepository.save(RentTransaction.create(
+                tenantId, entry.getId(), leaseId, RentTransactionType.PAYMENT,
+                new BigDecimal("500.00"), null, RentTransactionSource.CASH, "staff-1", LocalDateTime.now()
+        ).withIdempotencyKey("mobile-cash-key-0001"));
+        entityManager.flush();
+
+        RentTransaction retried = RentTransaction.create(
+                tenantId, entry.getId(), leaseId, RentTransactionType.PAYMENT,
+                new BigDecimal("500.00"), null, RentTransactionSource.CASH, "staff-1", LocalDateTime.now()
+        ).withIdempotencyKey("mobile-cash-key-0001");
+
+        // Last action — see PITFALL #2.
+        assertThatThrownBy(() -> {
+            rentTransactionRepository.save(retried);
+            flushAndTranslate();
+        }).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @Transactional
+    void idempotencyKeyRoundTripsAndIsTenantScoped() {
+        RentLedgerEntry entry = rentLedgerEntryRepository.save(newEntry(LocalDate.of(2026, 6, 1)));
+        entityManager.flush();
+
+        rentTransactionRepository.save(RentTransaction.create(
+                tenantId, entry.getId(), leaseId, RentTransactionType.PAYMENT,
+                new BigDecimal("300.00"), null, RentTransactionSource.CASH, "staff-1", LocalDateTime.now()
+        ).withIdempotencyKey("mobile-cash-key-0002"));
+        entityManager.flush();
+        entityManager.clear();
+
+        Optional<RentTransaction> found = rentTransactionRepository.findByIdempotencyKey(tenantId, "mobile-cash-key-0002");
+        assertThat(found).isPresent();
+        assertThat(found.get().getIdempotencyKey()).isEqualTo("mobile-cash-key-0002");
+        assertThat(found.get().getLedgerEntryId()).isEqualTo(entry.getId());
+        assertThat(rentTransactionRepository.findByIdempotencyKey(UUID.randomUUID(), "mobile-cash-key-0002")).isEmpty();
+    }
+
     @Test
     @Transactional
     void findByExternalReferenceIsTenantScoped() {

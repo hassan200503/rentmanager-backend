@@ -10,6 +10,7 @@ import com.rentmanager.modules.maintenance.domain.enums.MaintenanceCategory;
 import com.rentmanager.modules.maintenance.domain.enums.MaintenancePriority;
 import com.rentmanager.modules.maintenance.domain.model.MaintenanceRequest;
 import com.rentmanager.modules.maintenance.domain.repository.MaintenanceRequestRepository;
+import com.rentmanager.modules.property.domain.repository.PropertyMediaRepository;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.modules.rentledger.application.autopay.AutoPayService;
 import com.rentmanager.modules.rentledger.domain.exception.RentLedgerStateException;
@@ -89,6 +90,7 @@ class TenantPortalServiceTest {
     private LeaseRepository leaseRepository;
     private UnitRepository unitRepository;
     private PropertyRepository propertyRepository;
+    private PropertyMediaRepository propertyMediaRepository;
     private TenantRepository tenantRepository;
     private RentLedgerEntryRepository rentLedgerEntryRepository;
     private RentTransactionRepository rentTransactionRepository;
@@ -121,6 +123,7 @@ class TenantPortalServiceTest {
         leaseRepository = mock(LeaseRepository.class);
         unitRepository = mock(UnitRepository.class);
         propertyRepository = mock(PropertyRepository.class);
+        propertyMediaRepository = mock(PropertyMediaRepository.class);
         tenantRepository = mock(TenantRepository.class);
         rentLedgerEntryRepository = mock(RentLedgerEntryRepository.class);
         rentTransactionRepository = mock(RentTransactionRepository.class);
@@ -141,6 +144,7 @@ class TenantPortalServiceTest {
                 leaseRepository,
                 unitRepository,
                 propertyRepository,
+                propertyMediaRepository,
                 tenantRepository,
                 rentLedgerEntryRepository,
                 rentTransactionRepository,
@@ -162,8 +166,8 @@ class TenantPortalServiceTest {
         activeLease = buildActiveLease(LANDLORD_TENANT_ID, tenantProfile.getId());
 
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(renterUser));
-        when(tenantProfileRepository.findByClerkUserId(CLERK_USER_ID))
-                .thenReturn(Optional.of(tenantProfile));
+        when(tenantProfileRepository.findAllByClerkUserId(CLERK_USER_ID))
+                .thenReturn(List.of(tenantProfile));
         when(leaseRepository.findAllByTenant(LANDLORD_TENANT_ID))
                 .thenReturn(List.of(activeLease));
             when(leaseRepository.findAllByTenantAndTenantProfile(LANDLORD_TENANT_ID, tenantProfile.getId()))
@@ -193,8 +197,8 @@ class TenantPortalServiceTest {
 
             when(userRepository.findById(userWithNoProfile.getId()))
                     .thenReturn(Optional.of(userWithNoProfile));
-            when(tenantProfileRepository.findByClerkUserId(clerkId))
-                    .thenReturn(Optional.empty());
+            when(tenantProfileRepository.findAllByClerkUserId(clerkId))
+                    .thenReturn(List.of());
 
             assertThrows(RentLedgerStateException.class,
                     () -> service.initiateRentPayment(
@@ -350,7 +354,9 @@ class TenantPortalServiceTest {
             Deposit deposit = Deposit.rehydrate(
                     UUID.randomUUID(), LANDLORD_TENANT_ID, activeLease.getId(), UUID.randomUUID(),
                     tenantProfile.getId(), new BigDecimal("15000.00"), new BigDecimal("15000.00"),
-                    BigDecimal.ZERO, DepositStatus.HELD, java.time.LocalDateTime.now(), null, "KES"
+                    BigDecimal.ZERO, DepositStatus.HELD, java.time.LocalDateTime.now(), null, "KES",
+                    null, null, null, null,
+                    null, null, null, null, null, null
             );
             when(depositRepository.findByLeaseIdAndTenantId(activeLease.getId(), LANDLORD_TENANT_ID))
                     .thenReturn(Optional.of(deposit));
@@ -389,7 +395,9 @@ class TenantPortalServiceTest {
                     UUID.randomUUID(), LANDLORD_TENANT_ID, expired.getId(), UUID.randomUUID(),
                     tenantProfile.getId(), new BigDecimal("15000.00"), new BigDecimal("15000.00"),
                     new BigDecimal("15000.00"), DepositStatus.REFUNDED, java.time.LocalDateTime.now(),
-                    java.time.LocalDateTime.now(), "KES"
+                    java.time.LocalDateTime.now(), "KES",
+                    null, null, null, null,
+                    null, null, null, null, null, null
             );
             when(depositRepository.findByLeaseIdAndTenantId(expired.getId(), LANDLORD_TENANT_ID))
                     .thenReturn(Optional.of(deposit));
@@ -650,8 +658,8 @@ class TenantPortalServiceTest {
             Lease renterBLease = buildActiveLease(LANDLORD_TENANT_ID, renterBProfileId);
 
             when(userRepository.findById(renterBUserId)).thenReturn(Optional.of(renterB));
-            when(tenantProfileRepository.findByClerkUserId(renterBClerkId))
-                    .thenReturn(Optional.of(renterBProfile));
+            when(tenantProfileRepository.findAllByClerkUserId(renterBClerkId))
+                .thenReturn(List.of(renterBProfile));
             when(leaseRepository.findAllByTenant(LANDLORD_TENANT_ID))
                     .thenReturn(List.of(activeLease, renterBLease));
                 when(leaseRepository.findAllByTenantAndTenantProfile(LANDLORD_TENANT_ID, tenantProfile.getId()))

@@ -5,7 +5,9 @@ import com.rentmanager.contract.common.PageResponse;
 import com.rentmanager.modules.lease.application.dto.request.*;
 import com.rentmanager.modules.lease.application.dto.response.*;
 import com.rentmanager.modules.lease.application.service.LeaseApplicationService;
+import com.rentmanager.shared.security.principal.AuthenticatedUser;
 import jakarta.validation.Valid;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -83,9 +85,13 @@ public class LeaseController {
     @PostMapping("/{leaseId}/action")
     @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER')")
     public ApiResponse<LeaseActionResponse> action(
+            @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable UUID leaseId,
             @Valid @RequestBody LeaseActionRequest request
     ) {
+        // Audit identity comes from the verified token, never the body: a
+        // client-supplied actor would let anyone terminate a lease as anyone.
+        request.setActor(user != null ? user.getEmail() : null);
         return ApiResponse.ok(leaseService.executeAction(leaseId, request));
     }
 
@@ -108,15 +114,29 @@ public class LeaseController {
     public ApiResponse<PageResponse<LeaseSummaryResponse>> search(
             @RequestParam(required = false) UUID propertyId,
             @RequestParam(required = false) LeaseStatusDTO status,
+            @RequestParam(required = false) String keyword,
             @RequestParam(required = false) LocalDate fromDate,
             @RequestParam(required = false) LocalDate toDate,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
         LeaseSearchRequest request = new LeaseSearchRequest(
-                null, propertyId, status, fromDate, toDate, page, size
+                null, propertyId, status, keyword, fromDate, toDate, page, size
         );
         return ApiResponse.ok(leaseService.search(request));
+    }
+
+    /**
+     * Portfolio-wide tenant stats for the Tenants page's stat cards — always
+     * the whole book, deliberately unaffected by the table's pagination or
+     * filters below it. A landlord expects "3 active tenants" to mean the
+     * same thing regardless of which page or filter they're currently
+     * looking at, not to change as they page through the table.
+     */
+    @GetMapping("/stats")
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
+    public ApiResponse<LeaseStatsResponse> stats() {
+        return ApiResponse.ok(leaseService.getStats());
     }
 
 

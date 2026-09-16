@@ -15,6 +15,9 @@ import java.util.UUID;
  *       STK pushes are swept EXPIRED after this window.</li>
  *   <li>{@code disbursementMaxRetryAttempts} - per-disbursement B2C retry
  *       budget before the payout is flagged for manual attention.</li>
+ *   <li>{@code trialDurationDays} - how long a new landlord's free trial lasts
+ *       from the moment their account is created. Applied by
+ *       {@code CreateTenantCommandHandler} at onboarding time.</li>
  *   <li>{@code revenue*} - canonical M-Pesa collection/payout identifiers for
  *       platform revenue (non-secret values only; secret Daraja credentials
  *       stay in environment configuration).</li>
@@ -28,10 +31,12 @@ public class PlatformSettings {
     public static final int DEFAULT_PREMIUM_GRACE_DAYS = 7;
     public static final int DEFAULT_SUBSCRIPTION_PAYMENT_EXPIRY_MINUTES = 30;
     public static final int DEFAULT_DISBURSEMENT_MAX_RETRY_ATTEMPTS = 3;
+    public static final int DEFAULT_TRIAL_DURATION_DAYS = 30;
 
     private final int premiumGraceDays;
     private final int subscriptionPaymentExpiryMinutes;
     private final int disbursementMaxRetryAttempts;
+    private final int trialDurationDays;
 
     private final String revenueBusinessShortcode;
     private final String revenuePaybill;
@@ -52,6 +57,7 @@ public class PlatformSettings {
             int premiumGraceDays,
             int subscriptionPaymentExpiryMinutes,
             int disbursementMaxRetryAttempts,
+            int trialDurationDays,
             String revenueBusinessShortcode,
             String revenuePaybill,
             String revenueTill,
@@ -67,6 +73,7 @@ public class PlatformSettings {
         this.premiumGraceDays = premiumGraceDays;
         this.subscriptionPaymentExpiryMinutes = subscriptionPaymentExpiryMinutes;
         this.disbursementMaxRetryAttempts = disbursementMaxRetryAttempts;
+        this.trialDurationDays = trialDurationDays;
         this.revenueBusinessShortcode = revenueBusinessShortcode;
         this.revenuePaybill = revenuePaybill;
         this.revenueTill = revenueTill;
@@ -85,6 +92,7 @@ public class PlatformSettings {
                 DEFAULT_PREMIUM_GRACE_DAYS,
                 DEFAULT_SUBSCRIPTION_PAYMENT_EXPIRY_MINUTES,
                 DEFAULT_DISBURSEMENT_MAX_RETRY_ATTEMPTS,
+                DEFAULT_TRIAL_DURATION_DAYS,
                 null, null, null, null, null,
                 null, null,
                 null,
@@ -98,6 +106,7 @@ public class PlatformSettings {
             int premiumGraceDays,
             int subscriptionPaymentExpiryMinutes,
             int disbursementMaxRetryAttempts,
+            int trialDurationDays,
             String revenueBusinessShortcode,
             String revenuePaybill,
             String revenueTill,
@@ -114,6 +123,7 @@ public class PlatformSettings {
                 premiumGraceDays,
                 subscriptionPaymentExpiryMinutes,
                 disbursementMaxRetryAttempts,
+                trialDurationDays,
                 revenueBusinessShortcode,
                 revenuePaybill,
                 revenueTill,
@@ -137,6 +147,7 @@ public class PlatformSettings {
             int premiumGraceDays,
             int subscriptionPaymentExpiryMinutes,
             int disbursementMaxRetryAttempts,
+            int trialDurationDays,
             String revenueBusinessShortcode,
             String revenuePaybill,
             String revenueTill,
@@ -150,6 +161,7 @@ public class PlatformSettings {
                 premiumGraceDays,
                 subscriptionPaymentExpiryMinutes,
                 disbursementMaxRetryAttempts,
+                trialDurationDays,
                 normalize(revenueBusinessShortcode),
                 normalize(revenuePaybill),
                 normalize(revenueTill),
@@ -175,6 +187,7 @@ public class PlatformSettings {
                 premiumGraceDays,
                 subscriptionPaymentExpiryMinutes,
                 disbursementMaxRetryAttempts,
+                trialDurationDays,
                 revenueBusinessShortcode,
                 revenuePaybill,
                 revenueTill,
@@ -206,6 +219,10 @@ public class PlatformSettings {
 
     public int getDisbursementMaxRetryAttempts() {
         return disbursementMaxRetryAttempts;
+    }
+
+    public int getTrialDurationDays() {
+        return trialDurationDays;
     }
 
     public String getRevenueBusinessShortcode() {

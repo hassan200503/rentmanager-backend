@@ -60,6 +60,15 @@ public interface RentLedgerEntryJpaRepository extends JpaRepository<RentLedgerEn
     List<RentLedgerEntryJpaEntity> findByTenantIdAndStatus(UUID tenantId, RentLedgerStatus status);
 
     /**
+     * Backs the Tenants page's per-lease rent status: every currently
+     * unsettled or overpaid entry for the tenant, in one query, grouped by
+     * lease in the application layer (see
+     * {@code RentLedgerQueryServiceImpl#getBalanceByLease}) rather than
+     * querying once per lease.
+     */
+    List<RentLedgerEntryJpaEntity> findByTenantIdAndStatusIn(UUID tenantId, List<RentLedgerStatus> statuses);
+
+    /**
      * Backs {@code RentLedgerEntryRepository.findLatestByLeaseId} — used by
      * {@code RentChargeScheduler} to resume posting from the most recent
      * period already on record for a lease.

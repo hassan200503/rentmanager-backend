@@ -13,7 +13,12 @@ public interface TenantProfileRepository {
 
     Optional<TenantProfile> findByTenantIdAndClerkUserId(UUID tenantId, String clerkUserId);
 
-    Optional<TenantProfile> findByClerkUserId(String clerkUserId);
+    /**
+     * Every renter profile held by one person. A person renting from two
+     * landlords (or who moved from one to another) has one profile per
+     * landlord; a single-result lookup threw once that happened.
+     */
+    List<TenantProfile> findAllByClerkUserId(String clerkUserId);
 
     boolean existsByClerkUserId(String clerkUserId);
 
@@ -29,4 +34,10 @@ public interface TenantProfileRepository {
     void deleteById(UUID id);
 
     List<TenantProfile> findAllById(Collection<UUID> ids);
+
+    /**
+     * Every renter under this landlord whose name or phone contains the
+     * keyword. Backs the Tenants page's search box.
+     */
+    List<TenantProfile> searchByNameOrPhone(UUID tenantId, String keyword);
 }

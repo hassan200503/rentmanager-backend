@@ -33,5 +33,6 @@ public record TenantLeaseResponse(
         String landlordPrimaryColor,
         String landlordSecondaryColor,
         String billingMode,
-        String subscriptionStatus
+        String subscriptionStatus,
+        String propertyThumbnailUrl
 ) {}

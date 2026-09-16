@@ -1,5 +1,7 @@
 package com.rentmanager.modules.tenant.application.command.handler;
 
+import com.rentmanager.modules.platformsettings.domain.model.PlatformSettings;
+import com.rentmanager.modules.platformsettings.domain.repository.PlatformSettingsRepository;
 import com.rentmanager.modules.tenant.domain.enums.TenantType;
 import com.rentmanager.modules.tenant.domain.model.Tenant;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
@@ -41,6 +43,9 @@ import java.util.UUID;
  *    does the same organizationId assignment (with an added null check);
  *    behavior here is unchanged since id is always a freshly-generated,
  *    non-null UUID at this call site.
+ *  - Trial duration is now read from PlatformSettings so the owner can
+ *    configure it via the admin console (PUT /admin/settings). Falls back to
+ *    the domain constant (30 days) if no settings row exists yet.
  */
 @Component
 public class CreateTenantCommandHandler {
@@ -50,9 +55,14 @@ public class CreateTenantCommandHandler {
     private static final String DEFAULT_LOCALE = "en-KE";
 
     private final TenantRepository tenantRepository;
+    private final PlatformSettingsRepository platformSettingsRepository;
 
-    public CreateTenantCommandHandler(TenantRepository tenantRepository) {
+    public CreateTenantCommandHandler(
+            TenantRepository tenantRepository,
+            PlatformSettingsRepository platformSettingsRepository
+    ) {
         this.tenantRepository = tenantRepository;
+        this.platformSettingsRepository = platformSettingsRepository;
     }
 
     /**
@@ -122,6 +132,14 @@ public class CreateTenantCommandHandler {
         if (address != null && !address.isBlank()) {
             tenant.updateAddress(address);
         }
+
+        // Override the constructor default with the owner-configured trial
+        // duration. If the platform_settings row doesn't exist yet (fresh
+        // deploy, no owner has logged in), fall back to the domain default.
+        int trialDays = platformSettingsRepository.findSingleton()
+                .map(PlatformSettings::getTrialDurationDays)
+                .orElse(PlatformSettings.DEFAULT_TRIAL_DURATION_DAYS);
+        tenant.startTrial(trialDays);
 
         return tenantRepository.save(tenant);
     }

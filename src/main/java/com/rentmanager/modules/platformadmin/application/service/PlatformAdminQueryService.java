@@ -19,6 +19,8 @@ import com.rentmanager.modules.rentledger.domain.enums.RentPaymentRequestStatus;
 import com.rentmanager.modules.rentledger.infrastructure.persistence.entity.DisbursementJpaEntity;
 import com.rentmanager.modules.rentledger.infrastructure.persistence.entity.RentPaymentRequestJpaEntity;
 import com.rentmanager.modules.rentledger.infrastructure.persistence.entity.RentTransactionJpaEntity;
+import com.rentmanager.modules.platformadmin.infrastructure.persistence.projection.SubscriptionStatusCount;
+import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;
 import com.rentmanager.modules.tenant.domain.enums.TenantStatus;
 import com.rentmanager.modules.tenant.infrastructure.persistence.entity.TenantEntity;
 import com.rentmanager.modules.tenant.renter.infrastructure.persistence.entity.TenantProfileEntity;
@@ -263,6 +265,15 @@ public class PlatformAdminQueryService {
         long activeLeases = adminReadModelRepository.countLeasesByStatus(LeaseStatus.ACTIVE);
         long renters = adminReadModelRepository.countRenters();
 
+        Map<SubscriptionStatus, Long> subscriptionCounts = new EnumMap<>(SubscriptionStatus.class);
+        adminReadModelRepository.countTenantsBySubscriptionStatus()
+                .forEach(c -> {
+                    if (c.status() != null) {
+                        subscriptionCounts.put(c.status(), c.count());
+                    }
+                });
+        BigDecimal mrr = adminReadModelRepository.sumActiveSubscriptionMonthlyRevenue();
+
         Map<RentPaymentRequestStatus, Long> paymentRequests = paymentsByStatus();
         Map<DisbursementStatus, Long> disbursements = disbursementsByStatus();
         long requiresManualAttention = adminReadModelRepository.countDisbursementsRequiringManualAttention();
@@ -291,7 +302,11 @@ public class PlatformAdminQueryService {
                         tenantStatus.getOrDefault(TenantStatus.SUSPENDED, 0L),
                         tenantStatus.getOrDefault(TenantStatus.PENDING, 0L),
                         tenantStatus.getOrDefault(TenantStatus.DEACTIVATED, 0L),
-                        properties, units, activeLeases, renters, defaultRate),
+                        properties, units, activeLeases, renters, defaultRate,
+                        subscriptionCounts.getOrDefault(SubscriptionStatus.TRIAL, 0L),
+                        subscriptionCounts.getOrDefault(SubscriptionStatus.ACTIVE, 0L),
+                        subscriptionCounts.getOrDefault(SubscriptionStatus.LAPSED, 0L),
+                        mrr != null ? mrr : BigDecimal.ZERO),
                 new AdminOverviewResponse.PaymentStats(
                         gmvCurrentMonth, gmvPreviousMonth, commissionCurrentMonth, commissionPreviousMonth,
                         paymentRequests.getOrDefault(RentPaymentRequestStatus.PENDING, 0L),
@@ -346,7 +361,9 @@ public class PlatformAdminQueryService {
         UUID tenantId = tenant.getId();
         return new LandlordSummaryResponse(
                 tenant.getId(), tenant.getName(), tenant.getSlug(), tenant.getEmail(),
-                tenant.getBillingMode(), tenant.getStatus(), tenant.getCreatedAt(),
+                tenant.getBillingMode(),
+                tenant.getSubscriptionStatus(),
+                tenant.getStatus(), tenant.getCreatedAt(),
                 propertiesByTenant.getOrDefault(tenantId, 0L),
                 unitsByTenant.getOrDefault(tenantId, 0L),
                 leasesByTenant.getOrDefault(tenantId, 0L),
@@ -424,6 +441,11 @@ public class PlatformAdminQueryService {
                 money == null ? BigDecimal.ZERO : money.amount(),
                 money == null ? BigDecimal.ZERO : money.commissionAmount(),
                 commission.ratePercent(), commission.source(),
+                tenant.getSubscriptionStatus(),
+                tenant.getSubscriptionPlanId(),
+                tenant.getPlanStartDate(),
+                tenant.getPlanEndDate(),
+                tenant.getFreeTrialEndsAt(),
                 propertySummaries, renterSummaries, leaseSummaries, paymentSummaries,
                 disbursementSummaries, transactionSummaries);
     }

@@ -14,7 +14,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 @Getter
@@ -127,6 +129,12 @@ public class Tenant extends BaseEntity {
  @Column(name = "plan_auto_renew", nullable = false)
  private boolean planAutoRenew;
 
+ // When the 90-day free trial window closes. Null only for tenants created
+ // before V92 whose back-fill did not apply (i.e. already on premium).
+ // Treat null as "trial not active" — never as "trial runs forever".
+ @Column(name = "free_trial_ends_at")
+ private Instant freeTrialEndsAt;
+
  @Embedded
  @AttributeOverrides({
          @AttributeOverride(name = "logoUrl", column = @Column(name = "branding_logo_url")),
@@ -206,6 +214,10 @@ public class Tenant extends BaseEntity {
   // Never PLATFORM_CUSTODY by default - that is unlicensed aggregation.
   this.collectionMode = CollectionMode.DIRECT;
   this.planAutoRenew = true;
+  // 30-day free trial (one rent cycle). CreateTenantCommandHandler overrides
+  // this with the owner-configured value from platform_settings immediately
+  // after construction via startTrial(int days).
+  this.freeTrialEndsAt = Instant.now().plus(30, ChronoUnit.DAYS);
 
   this.active = false;
 
@@ -416,7 +428,8 @@ UUID subscriptionPlanId,
            LocalDate planGraceEndsAt,
            boolean planAutoRenew,
            String kraPin,
-           boolean vatRegistered
+           boolean vatRegistered,
+           Instant freeTrialEndsAt
    ) {
     Tenant tenant = new Tenant();
 
@@ -457,6 +470,7 @@ UUID subscriptionPlanId,
     tenant.planAutoRenew = planAutoRenew;
     tenant.kraPin = kraPin;
     tenant.vatRegistered = vatRegistered;
+    tenant.freeTrialEndsAt = freeTrialEndsAt;
     return tenant;
    }
 
@@ -550,6 +564,27 @@ UUID subscriptionPlanId,
  }
 
  /**
+  * Admin-initiated plan assignment — bypasses the self-service payment gate.
+  * Used for Enterprise and other manually negotiated plans. Auto-renew is
+  * false because admin-managed plans require explicit renewal by the owner.
+  * Supports plan changes on an already-premium landlord (e.g. Starter → Enterprise).
+  */
+ public void adminAssignPlan(UUID subscriptionPlanId, LocalDate startDate, LocalDate endDate) {
+  if (subscriptionPlanId == null) {
+   throw new IllegalArgumentException("Subscription plan ID cannot be null");
+  }
+  validatePlanDateRange(startDate, endDate);
+
+  this.billingMode = BillingMode.PREMIUM_MONTHLY;
+  this.subscriptionPlanId = subscriptionPlanId;
+  this.planStartDate = startDate;
+  this.planEndDate = endDate;
+  this.planGraceEndsAt = null;
+  this.planAutoRenew = false;
+  this.subscriptionStatus = SubscriptionStatus.ACTIVE;
+ }
+
+ /**
   * Extends the paid premium period after a successful renewal payment.
   */
  public void extendPremiumSubscription(LocalDate newEndDate) {
@@ -623,6 +658,37 @@ UUID subscriptionPlanId,
   if (endDate.isBefore(startDate)) {
    throw new IllegalArgumentException("Plan end date cannot be before start date");
   }
+ }
+
+ // ----------------------------------------------------------------
+ // FREE TRIAL HELPERS
+ // ----------------------------------------------------------------
+
+ public Instant getFreeTrialEndsAt() {
+  return freeTrialEndsAt;
+ }
+
+ /**
+  * Overrides the default trial end set in the constructor with the owner-
+  * configured duration from platform settings. Called once, at onboarding,
+  * immediately after Tenant.create().
+  */
+ public void startTrial(int days) {
+  if (days < 1) {
+   throw new IllegalArgumentException("Trial duration must be at least 1 day");
+  }
+  this.freeTrialEndsAt = Instant.now().plus(days, ChronoUnit.DAYS);
+ }
+
+ /**
+  * True while the landlord is within their free trial window.
+  * Null freeTrialEndsAt (e.g. already on premium before V92) is treated
+  * as "not in trial" — never as "trial runs forever".
+  */
+ public boolean isInActiveTrial() {
+  return subscriptionStatus == SubscriptionStatus.TRIAL
+   && freeTrialEndsAt != null
+   && Instant.now().isBefore(freeTrialEndsAt);
  }
 
  // ----------------------------------------------------------------
@@ -741,4 +807,29 @@ UUID subscriptionPlanId,
   }
 
   public String getPayoutPhoneNumber() { return payoutPhoneNumber; }
+
+  /**
+   * Updates the landlord's own contact details as set from their dashboard.
+   * Null/blank values are accepted and replace the current value (the caller
+   * decides which fields to include — a null here means "clear this field").
+   * name must not be blank because it is a non-null DB column.
+   */
+  /**
+   * Partial update: null means "no change"; empty string means "clear the field".
+   * This lets callers send only the fields they want to update without wiping the rest.
+   */
+  public void updateProfile(String name, String email, String phoneNumber, String address) {
+    if (name != null && !name.isBlank()) {
+      this.name = name.trim();
+    }
+    if (email != null && !email.isBlank()) {
+      this.email = email.trim();
+    }
+    if (phoneNumber != null) {
+      this.phoneNumber = phoneNumber.isBlank() ? null : phoneNumber.trim();
+    }
+    if (address != null) {
+      this.address = address.isBlank() ? null : address.trim();
+    }
+  }
 }

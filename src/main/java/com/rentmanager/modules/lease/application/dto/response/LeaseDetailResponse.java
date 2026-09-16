@@ -44,5 +44,24 @@ public record LeaseDetailResponse(
         LocalDateTime renewedAt,
         LocalDateTime cancelledAt,
         TerminationTypeDTO terminationType,
-        String terminationReason
-) {}
+        String terminationReason,
+
+        /** Actions a landlord may take on this lease now (see LeaseActionPolicy). Clients render controls from this. */
+        java.util.List<com.rentmanager.modules.lease.application.dto.request.LeaseActionType> allowedActions
+) {
+    /** Pre-allowedActions arity, kept for existing callers; reports no actions. */
+    public LeaseDetailResponse(
+            UUID id, String leaseNumber, UUID tenantId, UUID propertyId, UUID unitId,
+            LeaseTypeDTO leaseType, BillingCycleDTO billingCycle, LocalDate startDate, LocalDate endDate,
+            BigDecimal rentAmount, BigDecimal securityDeposit, LeaseStatusDTO status, Integer gracePeriodDays,
+            Boolean autoRenew, LocalDate createdAt, LocalDate updatedAt, Long version,
+            String tenantFullName, String tenantPhone,
+            LocalDateTime signedAt, LocalDateTime activatedAt, LocalDateTime terminatedAt, LocalDateTime expiredAt,
+            LocalDateTime renewedAt, LocalDateTime cancelledAt, TerminationTypeDTO terminationType, String terminationReason
+    ) {
+        this(id, leaseNumber, tenantId, propertyId, unitId, leaseType, billingCycle, startDate, endDate,
+                rentAmount, securityDeposit, status, gracePeriodDays, autoRenew, createdAt, updatedAt, version,
+                tenantFullName, tenantPhone, signedAt, activatedAt, terminatedAt, expiredAt, renewedAt, cancelledAt,
+                terminationType, terminationReason, java.util.List.of());
+    }
+}

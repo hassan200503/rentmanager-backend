@@ -1,0 +1,14 @@
+# Never send secrets or local state into the build context.
+.env
+.env.*
+*.log
+hs_err_pid*
+replay_pid*
+target/
+.idea/
+.git/
+.github/
+docs/
+deploy/
+# Root-level ad-hoc SQL only — migrations under src/ must stay in the context.
+/V87-preflight.sql

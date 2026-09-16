@@ -7,6 +7,7 @@ import com.rentmanager.modules.tax.infrastructure.persistence.mapper.TaxInvoiceP
 import com.rentmanager.modules.tax.infrastructure.persistence.repository.TaxInvoiceJpaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -46,6 +47,24 @@ public class TaxInvoiceRepositoryAdapter implements TaxInvoiceRepository {
                 .stream()
                 .map(mapper::toDomain)
                 .toList();
+    }
+
+    @Override
+    public List<TaxInvoice> findAllByTenantId(UUID tenantId, int page, int size) {
+        return jpaRepository.findAllByTenantIdOrderByOccurredAtDesc(
+                        tenantId,
+                        PageRequest.of(page, size))
+                .getContent()
+                .stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public long countAttentionRequiredByTenantId(UUID tenantId) {
+        return jpaRepository.countByTenantIdAndStatusIn(
+                tenantId,
+                List.of(TaxInvoiceStatus.PENDING, TaxInvoiceStatus.FAILED));
     }
 
     @Override

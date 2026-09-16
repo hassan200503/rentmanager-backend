@@ -162,7 +162,7 @@ class MaintenanceRequestNotificationListenerTest {
     void enqueuesStatusUpdateToRenter_onStatusChanged() {
         MaintenanceRequestStatusChanged event = new MaintenanceRequestStatusChanged(
                 tenantId, requestId, "corr", tenantProfileId,
-                MaintenanceRequestStatus.SUBMITTED, MaintenanceRequestStatus.IN_PROGRESS);
+                MaintenanceRequestStatus.SUBMITTED, MaintenanceRequestStatus.IN_PROGRESS, "Water tank locked", null);
 
         TenantProfile profile = mockTenantProfile("+254712345678", "John Doe");
 
@@ -179,11 +179,67 @@ class MaintenanceRequestNotificationListenerTest {
         assertTrue(delivery.getMessage().toLowerCase().contains("in progress"));
     }
 
+    /**
+     * What the renter actually receives.
+     *
+     * <p>This message used to read: {@code Update on "Maintenance Request":
+     * in review. Log in to your RentManager portal for details.} A renter
+     * with several open reports could not tell which one had moved, and the
+     * portal it pointed them to showed the same status and nothing more. The
+     * title identifies the request; the landlord's note is the only part that
+     * answers what they asked.
+     */
+    @Test
+    void theRenterSmsNamesTheRequestAndCarriesTheLandlordsReply() {
+        MaintenanceRequestStatusChanged event = new MaintenanceRequestStatusChanged(
+                tenantId, requestId, "corr", tenantProfileId,
+                MaintenanceRequestStatus.SUBMITTED, MaintenanceRequestStatus.SCHEDULED,
+                "Water tank locked", "Plumber booked for Thursday morning, he has the key.");
+
+        TenantProfile profile = mockTenantProfile("+254712345678", "John Doe");
+        when(tenantProfileRepository.findById(tenantProfileId)).thenReturn(Optional.of(profile));
+
+        listener.onMaintenanceRequestStatusChanged(event);
+
+        ArgumentCaptor<NotificationDelivery> captor = ArgumentCaptor.forClass(NotificationDelivery.class);
+        verify(notificationDeliveryRepository).save(captor.capture());
+
+        String message = captor.getValue().getMessage();
+        assertTrue(message.contains("Water tank locked"),
+                "the renter must be able to tell WHICH request moved: " + message);
+        assertTrue(message.contains("Plumber booked for Thursday"),
+                "the landlord's own words are the point of the reply: " + message);
+        assertTrue(message.toLowerCase().contains("scheduled"),
+                "the status still belongs in the message: " + message);
+    }
+
+    /** No reply is a normal case: the status alone must still send cleanly. */
+    @Test
+    void theRenterSmsStillWorksWhenTheLandlordSaidNothing() {
+        MaintenanceRequestStatusChanged event = new MaintenanceRequestStatusChanged(
+                tenantId, requestId, "corr", tenantProfileId,
+                MaintenanceRequestStatus.SUBMITTED, MaintenanceRequestStatus.COMPLETED,
+                "Leaking taps", null);
+
+        TenantProfile profile = mockTenantProfile("+254712345678", "John Doe");
+        when(tenantProfileRepository.findById(tenantProfileId)).thenReturn(Optional.of(profile));
+
+        listener.onMaintenanceRequestStatusChanged(event);
+
+        ArgumentCaptor<NotificationDelivery> captor = ArgumentCaptor.forClass(NotificationDelivery.class);
+        verify(notificationDeliveryRepository).save(captor.capture());
+
+        String message = captor.getValue().getMessage();
+        assertTrue(message.contains("Leaking taps"), message);
+        assertTrue(message.toLowerCase().contains("completed"), message);
+        assertFalse(message.contains("null"), "a missing note must not leak the word null: " + message);
+    }
+
     @Test
     void enqueuesNothing_whenTenantProfileNotFound_onStatusChanged() {
         MaintenanceRequestStatusChanged event = new MaintenanceRequestStatusChanged(
                 tenantId, requestId, "corr", tenantProfileId,
-                MaintenanceRequestStatus.SUBMITTED, MaintenanceRequestStatus.IN_PROGRESS);
+                MaintenanceRequestStatus.SUBMITTED, MaintenanceRequestStatus.IN_PROGRESS, "Water tank locked", null);
 
         when(tenantProfileRepository.findById(tenantProfileId)).thenReturn(Optional.empty());
 
@@ -196,7 +252,7 @@ class MaintenanceRequestNotificationListenerTest {
     void enqueuesNothing_whenProfilePhoneIsBlank_onStatusChanged() {
         MaintenanceRequestStatusChanged event = new MaintenanceRequestStatusChanged(
                 tenantId, requestId, "corr", tenantProfileId,
-                MaintenanceRequestStatus.SUBMITTED, MaintenanceRequestStatus.IN_PROGRESS);
+                MaintenanceRequestStatus.SUBMITTED, MaintenanceRequestStatus.IN_PROGRESS, "Water tank locked", null);
 
         TenantProfile profile = mockTenantProfile("", "John Doe");
 

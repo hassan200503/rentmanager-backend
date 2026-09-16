@@ -55,11 +55,43 @@ public class DepositJpaEntity extends BaseTenantEntity {
     @Column(name = "currency", nullable = false, length = 3)
     private String currency;
 
+    @Column(name = "deduction_amount", nullable = false, precision = 19, scale = 2)
+    private BigDecimal deductionAmount;
+
+    @Column(name = "deduction_reason", columnDefinition = "TEXT")
+    private String deductionReason;
+
+    @Column(name = "refund_reference", length = 100)
+    private String refundReference;
+
+    @Column(name = "refund_remarks", columnDefinition = "TEXT")
+    private String refundRemarks;
+
+    // STK push refund pending state — set on initiation, cleared on completion/failure.
+    @Column(name = "pending_refund_checkout_request_id", length = 100)
+    private String pendingRefundCheckoutRequestId;
+
+    @Column(name = "pending_refund_phone", length = 20)
+    private String pendingRefundPhone;
+
+    @Column(name = "pending_refund_deduction", precision = 19, scale = 2)
+    private BigDecimal pendingRefundDeduction;
+
+    @Column(name = "pending_refund_deduction_reason", columnDefinition = "TEXT")
+    private String pendingRefundDeductionReason;
+
+    @Column(name = "pending_refund_remarks", columnDefinition = "TEXT")
+    private String pendingRefundRemarks;
+
+    @Column(name = "pending_refund_initiated_at")
+    private LocalDateTime pendingRefundInitiatedAt;
+
     public static DepositJpaEntity create(UUID tenantId) {
         DepositJpaEntity entity = new DepositJpaEntity();
         entity.restoreTenantId(tenantId);
         entity.amountPaid = BigDecimal.ZERO;
         entity.amountRefunded = BigDecimal.ZERO;
+        entity.deductionAmount = BigDecimal.ZERO;
         entity.status = DepositStatus.UNPAID;
         return entity;
     }

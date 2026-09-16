@@ -274,6 +274,9 @@ public class RentReminderService {
         String value = switch (channel) {
             case SMS, WHATSAPP -> phone;
             case EMAIL -> email;
+            // Reminder policies do not offer push; a push address is a device
+            // token resolved per person, not a field on the renter profile.
+            case PUSH -> null;
         };
         return (value == null || value.isBlank()) ? null : value.trim();
     }

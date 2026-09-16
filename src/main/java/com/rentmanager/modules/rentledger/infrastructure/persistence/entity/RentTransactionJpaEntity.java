@@ -36,6 +36,9 @@ public class RentTransactionJpaEntity extends BaseTenantEntity {
     @Column(name = "external_reference")
     private String externalReference;
 
+    @Column(name = "idempotency_key", updatable = false, length = 100)
+    private String idempotencyKey;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "source", nullable = false)
     private RentTransactionSource source;

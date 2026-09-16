@@ -3,6 +3,7 @@ package com.rentmanager.modules.platformadmin.api;
 import com.rentmanager.modules.platformadmin.api.controller.PlatformAdminController;
 import com.rentmanager.modules.platformadmin.application.service.PlatformAdminQueryService;
 import com.rentmanager.modules.rentledger.application.service.CommissionPolicyService;
+import com.rentmanager.modules.tenant.application.service.SubscriptionBillingService;
 import com.rentmanager.modules.rentledger.domain.enums.RentPaymentRequestStatus;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
@@ -77,6 +78,9 @@ class AdminPaymentRequestsSecurityTest {
 
     @MockBean
     private ErrorTrackingService errorTrackingService;
+
+    @MockBean
+    private SubscriptionBillingService subscriptionBillingService;
 
     @MockBean
     private JwtProvider jwtProvider;

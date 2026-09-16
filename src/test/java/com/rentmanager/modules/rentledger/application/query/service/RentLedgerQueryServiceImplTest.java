@@ -9,9 +9,11 @@ import com.rentmanager.modules.rentledger.domain.exception.RentLedgerEntryNotFou
 import com.rentmanager.modules.rentledger.domain.model.RentLedgerEntry;
 import com.rentmanager.modules.rentledger.domain.model.RentTransaction;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
+import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentLedgerEntryRepository;
 import com.rentmanager.modules.rentledger.domain.repository.RentTransactionRepository;
 import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
+import com.rentmanager.modules.unit.domain.repository.UnitRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -53,6 +55,10 @@ class RentLedgerQueryServiceImplTest {
     private LeaseRepository leaseRepository;
     @Mock
     private TenantProfileRepository tenantProfileRepository;
+    @Mock
+    private UnitRepository unitRepository;
+    @Mock
+    private PropertyRepository propertyRepository;
 
     private RentLedgerQueryServiceImpl service;
 
@@ -63,7 +69,7 @@ class RentLedgerQueryServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new RentLedgerQueryServiceImpl(rentLedgerEntryRepository, rentTransactionRepository, leaseRepository, tenantProfileRepository);
+        service = new RentLedgerQueryServiceImpl(rentLedgerEntryRepository, rentTransactionRepository, leaseRepository, tenantProfileRepository, unitRepository, propertyRepository);
     }
 
     private RentLedgerEntry newEntry() {

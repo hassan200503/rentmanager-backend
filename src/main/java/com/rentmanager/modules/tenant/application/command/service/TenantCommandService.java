@@ -29,6 +29,8 @@ public interface TenantCommandService {
 
     TenantResponse getTenant(UUID tenantId, UUID targetTenantId);
 
+    TenantResponse updateTenantProfile(UUID tenantId, UUID targetTenantId, UpdateTenantRequest request);
+
 
 
     DarajaCredentialsStatusResponse configureDarajaCredentials(

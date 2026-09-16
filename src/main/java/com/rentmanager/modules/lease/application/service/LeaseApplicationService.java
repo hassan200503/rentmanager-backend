@@ -2,6 +2,8 @@ package com.rentmanager.modules.lease.application.service;
 
 import com.rentmanager.contract.common.PageResponse;
 import com.rentmanager.domain.base.DomainEvent;
+import com.rentmanager.modules.deposit.domain.enums.DepositStatus;
+import com.rentmanager.modules.deposit.domain.repository.DepositRepository;
 import com.rentmanager.modules.lease.application.dto.request.*;
 import com.rentmanager.modules.lease.application.dto.response.*;
 import com.rentmanager.modules.lease.application.dto.request.CreateLeaseRequest;
@@ -13,9 +15,14 @@ import com.rentmanager.modules.lease.domain.model.Lease;
 import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowEngine;
 import com.rentmanager.modules.lease.domain.enums.*;
+import com.rentmanager.modules.property.domain.model.Property;
+import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
 import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
+import com.rentmanager.modules.unit.domain.model.Unit;
+import com.rentmanager.modules.unit.domain.repository.UnitRepository;
 import com.rentmanager.shared.events.DomainEventPublisher;
+import com.rentmanager.shared.exception.BusinessException;
 import com.rentmanager.shared.security.context.TenantContext;
 import com.rentmanager.shared.exception.ErrorCode;
 import com.rentmanager.shared.exception.ResourceNotFoundException;
@@ -26,6 +33,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -40,21 +48,30 @@ public class LeaseApplicationService {
     private final LeaseRepository leaseRepository;
     private final LeaseWorkflowEngine workflowEngine;
     private final TenantProfileRepository tenantProfileRepository;
+    private final PropertyRepository propertyRepository;
+    private final UnitRepository unitRepository;
     private final LeaseActivationOrchestrator leaseActivationOrchestrator;
     private final DomainEventPublisher eventPublisher;
+    private final DepositRepository depositRepository;
 
     public LeaseApplicationService(
             LeaseRepository leaseRepository,
             LeaseWorkflowEngine workflowEngine,
             TenantProfileRepository tenantProfileRepository,
+            PropertyRepository propertyRepository,
+            UnitRepository unitRepository,
             LeaseActivationOrchestrator leaseActivationOrchestrator,
-            DomainEventPublisher eventPublisher
+            DomainEventPublisher eventPublisher,
+            DepositRepository depositRepository
     ) {
         this.leaseRepository = leaseRepository;
         this.workflowEngine = workflowEngine;
         this.tenantProfileRepository = tenantProfileRepository;
+        this.propertyRepository = propertyRepository;
+        this.unitRepository = unitRepository;
         this.leaseActivationOrchestrator = leaseActivationOrchestrator;
         this.eventPublisher = eventPublisher;
+        this.depositRepository = depositRepository;
     }
 
     // =========================================================
@@ -150,20 +167,36 @@ public class LeaseApplicationService {
 
         LeaseStatus statusFilter = request.status() != null ? LeaseStatus.valueOf(request.status().name()) : null;
 
+        String keyword = request.keyword();
+        List<UUID> matchingProfileIds = (keyword != null && !keyword.isBlank())
+                ? tenantProfileRepository.searchByNameOrPhone(tenantId, keyword).stream()
+                        .map(TenantProfile::getId)
+                        .toList()
+                : List.of();
+
         Page<Lease> leasePage = leaseRepository.search(
                 tenantId,
                 request.propertyId(),
                 statusFilter,
                 request.fromDate(),
                 request.toDate(),
+                keyword,
+                matchingProfileIds,
                 PageRequest.of(request.page(), request.size())
         );
 
         List<Lease> leases = leasePage.getContent();
         Map<UUID, TenantProfile> profileMap = loadProfiles(leases);
+        Map<UUID, Property> propertyMap = loadProperties(tenantId, leases);
+        Map<UUID, Unit> unitMap = loadUnits(tenantId, leases);
 
         List<LeaseSummaryResponse> result = leases.stream()
-                .map(l -> toSummary(l, profileMap.get(l.getTenantProfileId())))
+                .map(l -> toSummary(
+                        l,
+                        profileMap.get(l.getTenantProfileId()),
+                        propertyMap.get(l.getPropertyId()),
+                        unitMap.get(l.getUnitId())
+                ))
                 .toList();
 
         return new PageResponse<>(
@@ -188,6 +221,30 @@ public class LeaseApplicationService {
                 .collect(Collectors.toMap(TenantProfile::getId, p -> p));
     }
 
+    private Map<UUID, Property> loadProperties(UUID tenantId, List<Lease> leases) {
+        List<UUID> propertyIds = leases.stream()
+                .map(Lease::getPropertyId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (propertyIds.isEmpty()) return Collections.emptyMap();
+        return propertyRepository.findAllByTenantIdAndIdIn(tenantId, propertyIds)
+                .stream()
+                .collect(Collectors.toMap(Property::getId, p -> p));
+    }
+
+    private Map<UUID, Unit> loadUnits(UUID tenantId, List<Lease> leases) {
+        List<UUID> unitIds = leases.stream()
+                .map(Lease::getUnitId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (unitIds.isEmpty()) return Collections.emptyMap();
+        return unitRepository.findAllByTenantIdAndIdIn(tenantId, unitIds)
+                .stream()
+                .collect(Collectors.toMap(Unit::getId, u -> u));
+    }
+
 
 
 
@@ -208,6 +265,28 @@ public class LeaseApplicationService {
             case AWAITING_DEPOSIT -> workflowEngine.markAwaitingDeposit(lease);
 
             case ACTIVATE -> {
+                // Guard: if a non-zero security deposit was required, it must
+                // be in HELD status before the lease can go live. A zero-deposit
+                // lease (where the landlord has waived it) is allowed through.
+                //
+                // We check here (application layer) rather than inside Lease.activate()
+                // to keep the domain model decoupled from the deposit module.
+                if (lease.getSecurityDeposit() != null
+                        && lease.getSecurityDeposit().compareTo(BigDecimal.ZERO) > 0) {
+
+                    boolean depositHeld = depositRepository
+                            .findByLeaseIdAndTenantId(lease.getId(), tenantId)
+                            .map(d -> d.getStatus() == DepositStatus.HELD)
+                            .orElse(false);
+
+                    if (!depositHeld) {
+                        throw new BusinessException(
+                                "Security deposit has not been collected. " +
+                                        "The deposit must be received before the lease can be activated.",
+                                ErrorCode.DEPOSIT_NOT_HELD
+                        );
+                    }
+                }
                 workflowEngine.activate(lease);
                 leaseActivationOrchestrator.onLeaseActivated(tenantId, lease);
             }
@@ -217,60 +296,36 @@ public class LeaseApplicationService {
                     request.getReason()
             );
 
+            // request.getActor() is set by LeaseController from the verified
+            // principal and overwrites anything the client sent.
             case TERMINATE -> workflowEngine.terminate(
                     lease,
                     request.getTerminationType(),
-                    request.getReason()
+                    request.getReason(),
+                    request.getActor()
             );
 
             case RENEW -> workflowEngine.renew(
                     lease,
                     request.getActionDate(),
-                    calculateRenewalEndDate(lease, request)
+                    calculateRenewalEndDate(lease, request),
+                    request.getActor()
             );
 
-            // NEW: EXPIRE deliberately publishes only once (via the engine) —
-            // Lease.expire() does not registerEvent(), so the
-            // pullDomainEvents() flush below returns nothing extra for this
-            // action. See handoff notes on the pre-existing double-publish
-            // bug affecting the other cases above.
             case EXPIRE -> workflowEngine.expire(lease);
 
-            // NEW: CANCEL inherits the same double-publish behavior as
-            // TERMINATE/RENEW/APPROVE/ACTIVATE (Lease.cancel() registers an
-            // event AND the engine publishes directly) — consistent with
-            // existing (flagged, unfixed) behavior, not a new deviation.
             case CANCEL -> workflowEngine.cancel(
                     lease,
                     request.getReason()
             );
         }
 
-        // FIX: pull events from `lease` (pre-save, live domainEvents list),
-        // not from `saved` — LeaseRepositoryImpl.save() returns
-        // mapper.toDomain(...), which reconstructs the Lease via restore()/
-        // rehydrate() and never repopulates AggregateRoot's transient
-        // domainEvents list. Pulling from `saved` silently published nothing
-        // for every action (APPROVE, ACTIVATE, REJECT, TERMINATE, RENEW,
-        // EXPIRE, CANCEL) prior to this fix — the same shape as the bug
-        // already fixed in create() above.
-        //
-        // ⚠️ CONSEQUENCE OF THIS FIX — READ BEFORE DEPLOYING:
-        // The comments on EXPIRE and CANCEL above describe a "pre-existing
-        // double-publish bug," on the theory that LeaseWorkflowEngine
-        // publishes some events directly AND Lease.registerEvent() queues
-        // the same event for this flush. While this line was silently
-        // publishing nothing, that theoretical double-publish could never
-        // actually have happened in practice. Now that this flush is real,
-        // if LeaseWorkflowEngine.approve/activate/terminate/renew/cancel
-        // truly do publish directly in addition to registerEvent(), those
-        // five actions will now genuinely double-fire their events (extra
-        // notifications, duplicate side effects in any listener, etc).
-        // VERIFY LeaseWorkflowEngine's publishing behavior for each of
-        // those five methods before this goes to production — if it does
-        // publish directly, either remove the direct publish there or stop
-        // registering the event on Lease for that action, so there's a
-        // single source of truth per action.
+        // Pull from `lease` (original in-memory aggregate) before save() —
+        // LeaseRepositoryImpl.save() round-trips through mapper.toDomain(),
+        // which reconstructs via restore()/rehydrate() and never repopulates
+        // the transient domainEvents list. LeaseWorkflowEngine no longer
+        // publishes directly; every event goes through registerEvent() on the
+        // domain object and this publishAll() call.
         List<DomainEvent> events = lease.pullDomainEvents();
 
         Lease saved = leaseRepository.save(lease);
@@ -290,7 +345,13 @@ public class LeaseApplicationService {
 
         Lease lease = load(leaseId, tenantId);
 
+        // Pull any registered domain events before the aggregate is removed
+        // so they are not silently discarded (same pattern as create/executeAction).
+        List<DomainEvent> events = lease.pullDomainEvents();
+
         leaseRepository.delete(lease.getId());
+
+        eventPublisher.publishAll(events);
     }
 
     private Lease load(UUID leaseId, UUID tenantId) {
@@ -368,12 +429,46 @@ public class LeaseApplicationService {
                 lease.getRenewedAt(),
                 lease.getCancelledAt(),
                 map(lease.getTerminationType()),
-                lease.getTerminationReason()
+                lease.getTerminationReason(),
+                LeaseActionPolicy.allowedActions(lease.getStatus())
         );
     }
 
+    /**
+     * Portfolio-wide stat-card figures — see {@code LeaseController#stats}
+     * for why these are never paginated or filtered. "Expiring soon" mirrors
+     * the frontend's isExpiringSoon(status, endDate, 30) exactly: ACTIVE or
+     * RENEWED, with 0-30 days remaining inclusive (today and up to a month
+     * out; already-expired dates and drafts/pending leases don't count).
+     */
+    public LeaseStatsResponse getStats() {
+        UUID tenantId = TenantContext.getTenantId();
+        List<Lease> leases = leaseRepository.findAllByTenant(tenantId);
+        LocalDate today = LocalDate.now();
+        LocalDate expiringCutoff = today.plusDays(30);
+
+        long activeCount = 0;
+        long expiringSoonCount = 0;
+        BigDecimal monthlyRent = BigDecimal.ZERO;
+
+        for (Lease lease : leases) {
+            boolean isLive = lease.getStatus() == LeaseStatus.ACTIVE || lease.getStatus() == LeaseStatus.RENEWED;
+            if (!isLive) continue;
+
+            activeCount++;
+            monthlyRent = monthlyRent.add(lease.getRentAmount());
+
+            LocalDate endDate = lease.getEndDate();
+            if (endDate != null && !endDate.isBefore(today) && !endDate.isAfter(expiringCutoff)) {
+                expiringSoonCount++;
+            }
+        }
+
+        return new LeaseStatsResponse(leases.size(), activeCount, expiringSoonCount, monthlyRent);
+    }
+
     // =========================================================
-    private LeaseSummaryResponse toSummary(Lease lease, TenantProfile profile) {
+    private LeaseSummaryResponse toSummary(Lease lease, TenantProfile profile, Property property, Unit unit) {
         return new LeaseSummaryResponse(
                 lease.getId(),
                 lease.getLeaseNumber(),
@@ -383,7 +478,11 @@ public class LeaseApplicationService {
                 lease.getRentAmount(),
                 profile != null ? profile.getId() : null,
                 profile != null ? profile.getFullName() : null,
-                profile != null ? profile.getPhone() : null
+                profile != null ? profile.getPhone() : null,
+                lease.getPropertyId(),
+                property != null ? property.getName() : null,
+                lease.getUnitId(),
+                unit != null ? (unit.getLabel() != null ? unit.getLabel() : unit.getUnitNumber()) : null
         );
     }
 

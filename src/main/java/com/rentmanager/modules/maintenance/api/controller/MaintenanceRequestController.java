@@ -31,14 +31,25 @@ public class MaintenanceRequestController {
 
     private final MaintenanceRequestCommandService commandService;
     private final MaintenanceRequestQueryService queryService;
+    private final com.rentmanager.modules.maintenance.application.service.LandlordMaintenanceSubmissionGuard submissionGuard;
 
+    // Staff-on-behalf-of submission: a caretaker logging a problem a renter
+    // reported in person. Renters do NOT reach this — they submit through
+    // /tenant-portal/maintenance, which derives every field from the verified
+    // principal. This endpoint takes tenantProfileId and createdBy from the
+    // BODY, so an unguarded version let any authenticated caller in the org
+    // fabricate a request attributed to any renter. Gated to the landlord
+    // roles that legitimately log work on someone's behalf.
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
     @PostMapping
     public ResponseEntity<ApiResponse<MaintenanceRequestResponse>> submit(
             @AuthenticationPrincipal AuthenticatedUser user,
             @Valid @RequestBody CreateMaintenanceRequest request
     ) {
+        UUID tenantId = requireTenantId(user);
+        submissionGuard.verify(tenantId, request.unitId(), request.propertyId(), request.tenantProfileId(), request.leaseId());
         MaintenanceRequest result = commandService.submit(
-                requireTenantId(user),
+                tenantId,
                 request.unitId(),
                 request.propertyId(),
                 request.tenantProfileId(),
@@ -47,12 +58,19 @@ public class MaintenanceRequestController {
                 request.description(),
                 request.category(),
                 request.priority(),
-                request.createdBy() != null ? request.createdBy() : user.getEmail(),
+                // Always the authenticated user: a body value let a caller attribute
+                // the request to anyone.
+                user.getEmail(),
                 UUID.randomUUID().toString()
         );
         return ResponseEntity.ok(ApiResponse.ok("Maintenance request submitted", MaintenanceRequestResponse.from(result)));
     }
 
+    // Returns every request in the landlord org, across all renters — so it
+    // must never be reachable by a renter. Scoping alone was doing that job
+    // (a renter has no Clerk org, so requireTenantId throws), which is true
+    // but incidental. CLAUDE.md requires the annotation AND the scoping.
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
     @GetMapping
     public ResponseEntity<ApiResponse<List<MaintenanceRequestResponse>>> list(
             @AuthenticationPrincipal AuthenticatedUser user,
@@ -97,6 +115,7 @@ public class MaintenanceRequestController {
                 new MaintenanceUnviewedCountResponse(updated)));
     }
 
+    @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER', 'ROLE_LANDLORD_MANAGER', 'ROLE_LANDLORD_STAFF')")
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<MaintenanceRequestResponse>> get(
             @AuthenticationPrincipal AuthenticatedUser user,
@@ -114,7 +133,8 @@ public class MaintenanceRequestController {
             @Valid @RequestBody UpdateMaintenanceStatusRequest request
     ) {
         MaintenanceRequest result = commandService.updateStatus(
-                requireTenantId(user), id, request.status(), UUID.randomUUID().toString());
+                requireTenantId(user), id, request.status(), request.note(),
+                UUID.randomUUID().toString());
         return ResponseEntity.ok(ApiResponse.ok("Status updated", MaintenanceRequestResponse.from(result)));
     }
 

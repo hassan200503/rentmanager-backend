@@ -14,8 +14,11 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * SaaS-grade cross-module validation:
- * Unit ↔ Lease lifecycle coupling integrity
+ * Cross-module Unit ↔ Lease lifecycle coupling.
+ *
+ * activate() requires AWAITING_DEPOSIT (post-V34). All paths that previously
+ * called approve() → activate() directly are updated to include
+ * markAwaitingDeposit() in between. See TD-126.
  */
 class UnitLeaseFlowIT extends CrossModuleBaseIT {
 
@@ -66,9 +69,10 @@ class UnitLeaseFlowIT extends CrossModuleBaseIT {
                     UUID.randomUUID()
             );
 
-            // FIX: respect lifecycle
             lease.approve();
 
+            // Application layer guard (not domain): activation is rejected
+            // when the unit is vacant, before handing off to the domain.
             assertThrows(IllegalStateException.class, () -> {
 
                 if ("VACANT".equals(unit.getOccupancyStatus().name())) {
@@ -99,8 +103,8 @@ class UnitLeaseFlowIT extends CrossModuleBaseIT {
                     UUID.randomUUID()
             );
 
-            // FIX: lifecycle alignment
             lease.approve();
+            lease.markAwaitingDeposit();
             lease.activate();
 
             unit.markOccupied("LEASE_SYNC");
@@ -132,6 +136,7 @@ class UnitLeaseFlowIT extends CrossModuleBaseIT {
             );
 
             lease.approve();
+            lease.markAwaitingDeposit();
             lease.activate();
 
             IllegalStateException ex = assertThrows(IllegalStateException.class, () -> {
@@ -171,6 +176,7 @@ class UnitLeaseFlowIT extends CrossModuleBaseIT {
             unit.markOccupied("TEST");
 
             lease.approve();
+            lease.markAwaitingDeposit();
             lease.activate();
 
             lease.terminate(

@@ -162,6 +162,17 @@ public class ClerkServiceImpl implements ClerkService {
     }
 
     @Override
+    public void deleteUserStrict(String clerkUserId) {
+        HttpEntity<Void> request = new HttpEntity<>(buildAuthHeaders());
+        try {
+            restTemplate.exchange(baseUrl() + "/users/" + clerkUserId, HttpMethod.DELETE, request, Void.class);
+            log.info("Clerk user deleted on request. clerkUserId={}", clerkUserId);
+        } catch (org.springframework.web.client.HttpClientErrorException.NotFound alreadyGone) {
+            log.info("Clerk user already absent. clerkUserId={}", clerkUserId);
+        }
+    }
+
+    @Override
     public void setPublicMetadata(String clerkUserId, Map<String, String> metadata) {
         HttpHeaders headers = buildAuthHeaders();
         Map<String, Object> body = Map.of("public_metadata", metadata);

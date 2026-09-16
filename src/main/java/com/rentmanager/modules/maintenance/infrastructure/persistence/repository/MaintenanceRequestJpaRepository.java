@@ -8,7 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -46,18 +46,19 @@ public interface MaintenanceRequestJpaRepository extends JpaRepository<Maintenan
     long countByTenantIdAndLandlordViewedAtIsNull(UUID tenantId);
 
     /**
-     * V54: bulk-mark all unviewed requests for the tenant as viewed. A
+     * V54/TD-128: bulk-mark all unviewed requests for the tenant as viewed. A
      * single statement keeps the sidebar badge clearing cheap even with many
      * requests; lifecycle callbacks don't fire for bulk updates, so
      * updated_at is set explicitly.
+     *
+     * Both columns are now TIMESTAMPTZ (V91), so one Instant value covers both.
      */
     @Modifying
     @Query("""
             UPDATE MaintenanceRequestJpaEntity m
-               SET m.landlordViewedAt = :viewedAt, m.updatedAt = :updatedAt
+               SET m.landlordViewedAt = :now, m.updatedAt = :now
              WHERE m.tenantId = :tenantId AND m.landlordViewedAt IS NULL
             """)
     int markAllViewed(@Param("tenantId") UUID tenantId,
-                      @Param("viewedAt") LocalDateTime viewedAt,
-                      @Param("updatedAt") LocalDateTime updatedAt);
+                      @Param("now") Instant now);
 }

@@ -75,7 +75,8 @@ public interface TenantPersistenceMapper {
                 entity.getPlanGraceEndsAt(),
                 entity.isPlanAutoRenew(),
                 entity.getKraPin(),
-                entity.isVatRegistered()
+                entity.isVatRegistered(),
+                entity.getFreeTrialEndsAt()
         );
     }
 }

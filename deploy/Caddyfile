@@ -1,0 +1,41 @@
+# TLS certificates are obtained and renewed automatically (Let's Encrypt).
+# DNS A/AAAA records for both domains must point at this host first.
+{
+	email {$ACME_EMAIL}
+}
+
+(common) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+		-X-Powered-By
+	}
+	# Actuator lives on the internal management port; never serve it here.
+	@actuator path /actuator /actuator/*
+	respond @actuator 404
+}
+
+# Web app. /api/v1 is proxied by Next to the backend.
+{$APP_DOMAIN} {
+	import common
+	request_body {
+		max_size 8MB
+	}
+	reverse_proxy web:3000
+}
+
+# API for the mobile app, M-Pesa callbacks and the Clerk webhook.
+{$API_DOMAIN} {
+	import common
+	header X-Frame-Options "DENY"
+	# API docs are disabled in the image; refuse the paths at the edge too.
+	@docs path /v3/api-docs /v3/api-docs/* /swagger-ui /swagger-ui/* /swagger-ui.html
+	respond @docs 404
+	request_body {
+		max_size 8MB
+	}
+	reverse_proxy backend:8080
+}

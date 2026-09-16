@@ -138,12 +138,27 @@ public class LeaseRepositoryImpl implements LeaseRepository {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Lease> search(UUID tenantId, UUID propertyId, LeaseStatus status, LocalDate fromDate, LocalDate toDate, Pageable pageable) {
+    public Page<Lease> search(
+            UUID tenantId,
+            UUID propertyId,
+            LeaseStatus status,
+            LocalDate fromDate,
+            LocalDate toDate,
+            String leaseNumberKeyword,
+            List<UUID> matchingTenantProfileIds,
+            Pageable pageable
+    ) {
         Specification<LeaseEntity> spec = Specification.where(LeaseSpecification.hasTenant(tenantId));
         if (propertyId != null) spec = spec.and(LeaseSpecification.hasProperty(propertyId));
         if (status != null) spec = spec.and(LeaseSpecification.hasStatus(status.name()));
         if (fromDate != null) spec = spec.and(LeaseSpecification.startsAfter(fromDate));
         if (toDate != null) spec = spec.and(LeaseSpecification.endsBefore(toDate));
+        if (leaseNumberKeyword != null && !leaseNumberKeyword.isBlank()) {
+            spec = spec.and(
+                    LeaseSpecification.matchesLeaseNumber(leaseNumberKeyword)
+                            .or(LeaseSpecification.hasTenantProfileIdIn(matchingTenantProfileIds))
+            );
+        }
         return jpaRepository.findAll(spec, pageable).map(mapper::toDomain);
     }
 

@@ -15,6 +15,9 @@ public record LeaseSearchRequest(
 
         LeaseStatusDTO status,
 
+        /** Matches lease number, tenant full name, or tenant phone — see LeaseApplicationService#search. */
+        String keyword,
+
         LocalDate fromDate,
 
         LocalDate toDate,

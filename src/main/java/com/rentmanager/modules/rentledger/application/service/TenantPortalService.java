@@ -10,6 +10,8 @@ import com.rentmanager.modules.maintenance.domain.enums.MaintenancePriority;
 import com.rentmanager.modules.maintenance.domain.model.MaintenanceRequest;
 import com.rentmanager.modules.maintenance.domain.repository.MaintenanceRequestRepository;
 import com.rentmanager.modules.property.domain.model.Property;
+import com.rentmanager.modules.property.domain.model.PropertyMedia;
+import com.rentmanager.modules.property.domain.repository.PropertyMediaRepository;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.modules.rentledger.api.autopay.dto.AutoPaySettingsResponse;
 import com.rentmanager.modules.rentledger.api.dto.response.RentPaymentRequestResponse;
@@ -88,11 +90,22 @@ public class TenantPortalService {
             EnumSet.of(LeaseStatus.ACTIVE, LeaseStatus.RENEWED,
                     LeaseStatus.EXPIRED, LeaseStatus.TERMINATED, LeaseStatus.SUSPENDED);
 
+    /**
+     * A tenancy that is live right now: occupied and being billed. RENEWED is
+     * exactly as live as ACTIVE — RentChargeScheduler posts rent for both —
+     * so every "current lease" check here must accept both. Treating only
+     * ACTIVE as current meant a renter who renewed was still charged rent but
+     * could no longer pay it through the portal.
+     */
+    private static final EnumSet<LeaseStatus> CURRENT_LEASE_STATUSES =
+            EnumSet.of(LeaseStatus.ACTIVE, LeaseStatus.RENEWED);
+
     private final UserRepository userRepository;
     private final TenantProfileRepository tenantProfileRepository;
     private final LeaseRepository leaseRepository;
     private final UnitRepository unitRepository;
     private final PropertyRepository propertyRepository;
+    private final PropertyMediaRepository propertyMediaRepository;
     private final TenantRepository tenantRepository;
     private final RentLedgerEntryRepository rentLedgerEntryRepository;
     private final RentTransactionRepository rentTransactionRepository;
@@ -266,6 +279,14 @@ public class TenantPortalService {
             secondaryColor = landlord.getBrandingSettings().getSecondaryColor();
         }
 
+        String propertyThumbnailUrl = propertyMediaRepository
+                .findByTenantIdAndPropertyIdAndPrimaryMediaTrue(
+                        property.getTenantId(),
+                        property.getId()
+                )
+                .map(PropertyMedia::getFileUrl)
+                .orElse(null);
+
         return new TenantLeaseResponse(
                 lease.getId(),
                 lease.getLeaseNumber(),
@@ -304,7 +325,8 @@ public class TenantPortalService {
                 primaryColor,
                 secondaryColor,
                 landlord.getBillingMode() != null ? landlord.getBillingMode().name() : null,
-                landlord.getSubscriptionStatus() != null ? landlord.getSubscriptionStatus().name() : null
+                landlord.getSubscriptionStatus() != null ? landlord.getSubscriptionStatus().name() : null,
+                propertyThumbnailUrl
         );
     }
 
@@ -392,7 +414,7 @@ public class TenantPortalService {
                 .toList();
 
         return leases.stream()
-                .filter(l -> l.getStatus() == LeaseStatus.ACTIVE)
+                .filter(l -> CURRENT_LEASE_STATUSES.contains(l.getStatus()))
                 .findFirst()
                 .map(Lease::getId)
                 .or(() -> leases.stream()
@@ -539,12 +561,52 @@ public class TenantPortalService {
         );
     }
 
+    /**
+     * The renter profile the portal acts on.
+     *
+     * <p>One person can hold several profiles — one per landlord they have
+     * rented from. The portal serves their current home: the profile with a
+     * live lease (ACTIVE/RENEWED), else one about to start, else the most
+     * recent tenancy. The previous single-result lookup threw as soon as a
+     * renter moved between two RentManager landlords, taking the whole
+     * portal (balance, payments, repairs) down for exactly the people who had
+     * just moved in somewhere new.
+     */
     private TenantProfile resolveTenantProfile(UUID userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RentLedgerStateException("User not found", ErrorCode.RESOURCE_NOT_FOUND));
-        String clerkUserId = user.getClerkUserId();
-        return tenantProfileRepository.findByClerkUserId(clerkUserId)
-                .orElseThrow(() -> new RentLedgerStateException("Tenant profile not found", ErrorCode.RESOURCE_NOT_FOUND));
+        List<TenantProfile> profiles = tenantProfileRepository.findAllByClerkUserId(user.getClerkUserId());
+        if (profiles.isEmpty()) {
+            throw new RentLedgerStateException("Tenant profile not found", ErrorCode.RESOURCE_NOT_FOUND);
+        }
+        if (profiles.size() == 1) {
+            return profiles.get(0);
+        }
+        return profiles.stream()
+                .max(java.util.Comparator
+                        .comparingInt((TenantProfile p) -> tenancyRank(p))
+                        .thenComparing(this::latestLeaseStart, java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder())))
+                .orElseThrow();
+    }
+
+    private int tenancyRank(TenantProfile profile) {
+        List<Lease> leases = leaseRepository.findAllByTenantAndTenantProfile(profile.getTenantId(), profile.getId());
+        if (leases.stream().anyMatch(l -> CURRENT_LEASE_STATUSES.contains(l.getStatus()))) {
+            return 3;
+        }
+        if (leases.stream().anyMatch(l -> l.getStatus() == LeaseStatus.PENDING_ACTIVATION
+                || l.getStatus() == LeaseStatus.AWAITING_DEPOSIT)) {
+            return 2;
+        }
+        return leases.isEmpty() ? 0 : 1;
+    }
+
+    private LocalDate latestLeaseStart(TenantProfile profile) {
+        return leaseRepository.findAllByTenantAndTenantProfile(profile.getTenantId(), profile.getId()).stream()
+                .map(Lease::getStartDate)
+                .filter(java.util.Objects::nonNull)
+                .max(java.util.Comparator.naturalOrder())
+                .orElse(null);
     }
 
     // -------------------------------------------------------
@@ -659,7 +721,7 @@ public class TenantPortalService {
      * a lease whose next period would start after its own end date.
      */
     private LocalDate projectNextDueDate(Lease lease, List<RentLedgerEntry> entries) {
-        if (lease.getStatus() != LeaseStatus.ACTIVE) {
+        if (!CURRENT_LEASE_STATUSES.contains(lease.getStatus())) {
             return null;
         }
 
@@ -694,9 +756,9 @@ public class TenantPortalService {
     private Lease findActiveLease(UUID landlordTenantId, UUID tenantProfileId) {
         return leaseRepository.findAllByTenantAndTenantProfile(landlordTenantId, tenantProfileId)
                 .stream()
-                .filter(l -> l.getStatus() == LeaseStatus.ACTIVE)
+                .filter(l -> CURRENT_LEASE_STATUSES.contains(l.getStatus()))
                 .findFirst()
-                .orElseThrow(() -> new RentLedgerStateException("No active lease found", ErrorCode.RESOURCE_NOT_FOUND));
+                .orElseThrow(() -> new RentLedgerStateException("No current lease found", ErrorCode.RESOURCE_NOT_FOUND));
     }
 
     /**
@@ -723,7 +785,7 @@ public class TenantPortalService {
     private Lease findLeaseForReadAccess(UUID landlordTenantId, UUID tenantProfileId) {
         List<Lease> leases = leaseRepository.findAllByTenantAndTenantProfile(landlordTenantId, tenantProfileId);
         return leases.stream()
-                .filter(l -> l.getStatus() == LeaseStatus.ACTIVE)
+                .filter(l -> CURRENT_LEASE_STATUSES.contains(l.getStatus()))
                 .findFirst()
                 // findAllByTenantAndTenantProfile returns newest-first, so the
                 // head is the most recent tenancy when none is active.
@@ -791,12 +853,7 @@ public class TenantPortalService {
         if (!entry.getLeaseId().equals(activeLease.getId())) {
             throw new RentLedgerStateException("Entry does not belong to your active lease", ErrorCode.RESOURCE_NOT_FOUND);
         }
-        String normalisedPhone = mpesaPhone.strip();
-        if (normalisedPhone.startsWith("07")) {
-            normalisedPhone = "+254" + normalisedPhone.substring(1);
-        } else if (normalisedPhone.startsWith("254")) {
-            normalisedPhone = "+" + normalisedPhone;
-        }
+        String normalisedPhone = com.rentmanager.shared.phone.KenyanMsisdn.toE164(mpesaPhone);
         RentPaymentRequest request = rentPaymentInitiationService.initiate(tenantId, entryId, normalisedPhone);
         return RentPaymentRequestResponse.from(request);
     }
@@ -826,12 +883,7 @@ public class TenantPortalService {
             throw new RentLedgerStateException("No ledger entries found for your lease", ErrorCode.RESOURCE_NOT_FOUND);
         }
 
-        String normalisedPhone = mpesaPhone.strip();
-        if (normalisedPhone.startsWith("07")) {
-            normalisedPhone = "+254" + normalisedPhone.substring(1);
-        } else if (normalisedPhone.startsWith("254")) {
-            normalisedPhone = "+" + normalisedPhone;
-        }
+        String normalisedPhone = com.rentmanager.shared.phone.KenyanMsisdn.toE164(mpesaPhone);
         RentPaymentRequest request = rentPaymentInitiationService.initiateWithAmount(
                 tenantId, targetEntry.getId(), amount, normalisedPhone);
         return RentPaymentRequestResponse.from(request);

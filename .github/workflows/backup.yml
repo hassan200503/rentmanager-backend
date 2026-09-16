@@ -1,0 +1,64 @@
+name: Database backup
+
+# Off-site, encrypted backups without paying for storage: this runs on
+# GitHub's schedule, dumps the managed database, encrypts it with a passphrase
+# only you hold, and keeps it as a workflow artifact.
+#
+# Required repository secrets:
+#   BACKUP_DATABASE_URL  postgres://user:pass@host/db?sslmode=require  (Neon)
+#   BACKUP_PASSPHRASE    a long random passphrase — STORE IT IN YOUR PASSWORD
+#                        MANAGER. Without it the backups cannot be restored.
+#
+# Restore:
+#   gpg --decrypt --batch --passphrase "$BACKUP_PASSPHRASE" backup.dump.gpg > backup.dump
+#   pg_restore --clean --if-exists --no-owner -d "$TARGET_URL" backup.dump
+
+on:
+  schedule:
+    - cron: "30 1 * * *"   # 04:30 Nairobi
+  workflow_dispatch:
+
+concurrency:
+  group: database-backup
+  cancel-in-progress: false
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Install PostgreSQL 16 client
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-16
+
+      - name: Dump, encrypt and verify
+        env:
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          test -n "$DATABASE_URL" && test -n "$PASSPHRASE"
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          pg_dump --format=custom --compress=6 --no-owner --file="rentmanager-$stamp.dump" "$DATABASE_URL"
+          # An unreadable backup is worse than none: prove the dump lists its
+          # own contents, and that the encrypted copy decrypts, before keeping it.
+          pg_restore --list "rentmanager-$stamp.dump" | head -5
+          gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase "$PASSPHRASE" \
+              --output "rentmanager-$stamp.dump.gpg" "rentmanager-$stamp.dump"
+          gpg --batch --yes --decrypt --passphrase "$PASSPHRASE" \
+              --output /tmp/roundtrip.dump "rentmanager-$stamp.dump.gpg"
+          cmp "rentmanager-$stamp.dump" /tmp/roundtrip.dump
+          rm -f "rentmanager-$stamp.dump" /tmp/roundtrip.dump
+          ls -lh "rentmanager-$stamp.dump.gpg"
+          echo "name=rentmanager-$stamp" >> "$GITHUB_OUTPUT"
+        id: dump
+
+      - name: Keep it for 90 days
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.dump.outputs.name }}
+          path: "*.dump.gpg"
+          retention-days: 90
+          if-no-files-found: error

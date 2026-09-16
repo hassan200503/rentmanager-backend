@@ -104,13 +104,18 @@ public class LeaseWorkflowEngine {
             TerminationType type,
             String reason
     ) {
+        terminate(lease, type, reason, "SYSTEM");
+    }
+
+    /** Records who ended the lease; the API passes the authenticated user, never a client value. */
+    public void terminate(Lease lease, TerminationType type, String reason, String actor) {
 
         validator.validateTermination(lease);
 
         lease.terminate(
                 type,
                 reason,
-                "SYSTEM",
+                actor == null || actor.isBlank() ? "SYSTEM" : actor,
                 lease.getTenantId()
         );
     }
@@ -147,9 +152,14 @@ public class LeaseWorkflowEngine {
             LocalDate newEnd
     ) {
 
+        renew(lease, newStart, newEnd, "SYSTEM");
+    }
+
+    public void renew(Lease lease, LocalDate newStart, LocalDate newEnd, String actor) {
+
         validator.validateRenewal(lease);
 
-        lease.renew(newStart, newEnd, lease.getTenantId(), "SYSTEM");
+        lease.renew(newStart, newEnd, lease.getTenantId(), actor == null || actor.isBlank() ? "SYSTEM" : actor);
     }
 
 

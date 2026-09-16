@@ -60,8 +60,9 @@ public class LeaseWorkflowValidator {
     // NEW: mirrors Lease.cancel()'s own guard.
     public void validateCancellation(Lease lease) {
 
-        if (lease.getStatus() == LeaseStatus.ACTIVE) {
-            throw new IllegalStateException("Cannot cancel an active lease");
+        if (!lease.getStatus().isCancellable()) {
+            throw new IllegalStateException(
+                    "Only a lease that has not started can be cancelled. End an active or renewed lease by terminating it.");
         }
     }
 

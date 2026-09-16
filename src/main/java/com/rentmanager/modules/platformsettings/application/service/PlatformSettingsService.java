@@ -38,6 +38,8 @@ import java.time.Instant;
 @Service
 public class PlatformSettingsService {
 
+    private static final int MIN_TRIAL_DAYS = 7;
+    private static final int MAX_TRIAL_DAYS = 90;
     private static final int MIN_GRACE_DAYS = 1;
     private static final int MAX_GRACE_DAYS = 60;
     private static final int MIN_EXPIRY_MINUTES = 5;
@@ -92,6 +94,7 @@ public class PlatformSettingsService {
                 request.premiumGraceDays(),
                 request.subscriptionPaymentExpiryMinutes(),
                 request.disbursementMaxRetryAttempts(),
+                request.trialDurationDays(),
                 request.revenueBusinessShortcode(),
                 request.revenuePaybill(),
                 request.revenueTill(),
@@ -177,6 +180,11 @@ public class PlatformSettingsService {
     }
 
     private void validate(UpdatePlatformSettingsRequest request) {
+        if (request.trialDurationDays() < MIN_TRIAL_DAYS || request.trialDurationDays() > MAX_TRIAL_DAYS) {
+            throw new BusinessException(
+                    "trialDurationDays must be between " + MIN_TRIAL_DAYS + " and " + MAX_TRIAL_DAYS,
+                    com.rentmanager.shared.exception.ErrorCode.VALIDATION_ERROR);
+        }
         if (request.premiumGraceDays() < MIN_GRACE_DAYS || request.premiumGraceDays() > MAX_GRACE_DAYS) {
             throw new BusinessException(
                     "premiumGraceDays must be between " + MIN_GRACE_DAYS + " and " + MAX_GRACE_DAYS,
@@ -255,7 +263,8 @@ public class PlatformSettingsService {
         return new PlatformSettingsResponse(
                 new PlatformSettingsResponse.BillingSettings(
                         settings.getPremiumGraceDays(),
-                        settings.getSubscriptionPaymentExpiryMinutes()),
+                        settings.getSubscriptionPaymentExpiryMinutes(),
+                        settings.getTrialDurationDays()),
                 new PlatformSettingsResponse.DisbursementSettings(
                         settings.getDisbursementMaxRetryAttempts()),
                 new PlatformSettingsResponse.RevenueSettings(

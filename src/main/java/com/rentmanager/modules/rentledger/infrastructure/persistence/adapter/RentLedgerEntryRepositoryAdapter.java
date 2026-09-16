@@ -80,6 +80,11 @@ public class RentLedgerEntryRepositoryAdapter implements RentLedgerEntryReposito
     }
 
     @Override
+    public List<RentLedgerEntry> findByTenantAndStatusIn(UUID tenantId, List<RentLedgerStatus> statuses) {
+        return jpaRepository.findByTenantIdAndStatusIn(tenantId, statuses).stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
     public Optional<RentLedgerEntry> findLatestByLeaseId(UUID leaseId) {
         return jpaRepository.findFirstByLeaseIdOrderByBillingPeriodStartDesc(leaseId).map(mapper::toDomain);
     }

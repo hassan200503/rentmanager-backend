@@ -24,6 +24,9 @@ public interface RentTransactionRepository {
      */
     Optional<RentTransaction> findByExternalReference(UUID tenantId, String externalReference);
 
+    /** The transaction recorded under a client idempotency key in this organisation, if any (V98). */
+    Optional<RentTransaction> findByIdempotencyKey(UUID tenantId, String idempotencyKey);
+
     /**
      * Idempotency check before posting a REVERSAL — at most one reversal per
      * original transaction, backstopped by

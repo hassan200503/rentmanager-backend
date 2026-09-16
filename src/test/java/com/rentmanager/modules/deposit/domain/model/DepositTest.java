@@ -117,26 +117,40 @@ class DepositTest {
         }
 
         @Test
-        void fullRefundMovesToRefunded() {
-            deposit.refund(new BigDecimal("1000.00"), "corr-4");
+        void fullRefundMovesToRefundedAndRecordsReference() {
+            deposit.refund(BigDecimal.ZERO, null, "RA65TESTOK1", null, "corr-4");
 
             assertThat(deposit.getStatus()).isEqualTo(DepositStatus.REFUNDED);
             assertThat(deposit.getAmountRefunded()).isEqualByComparingTo("1000.00");
+            assertThat(deposit.getDeductionAmount()).isEqualByComparingTo("0.00");
+            assertThat(deposit.getRefundReference()).isEqualTo("RA65TESTOK1");
             assertThat(deposit.getRefundedAt()).isNotNull();
             assertThat(deposit.pullDomainEvents()).hasSize(1).first().isInstanceOf(DepositRefundedEvent.class);
         }
 
         @Test
-        void partialRefundMovesToPartiallyRefunded() {
-            deposit.refund(new BigDecimal("600.00"), "corr-4");
+        void partialRefundMovesToPartiallyRefundedAndRecordsDeduction() {
+            // Deduction of 400 → refund of 600
+            deposit.refund(new BigDecimal("400.00"), "Water heater damage", "RA65TESTOK2", null, "corr-4");
 
             assertThat(deposit.getStatus()).isEqualTo(DepositStatus.PARTIALLY_REFUNDED);
             assertThat(deposit.getAmountRefunded()).isEqualByComparingTo("600.00");
+            assertThat(deposit.getDeductionAmount()).isEqualByComparingTo("400.00");
+            assertThat(deposit.getDeductionReason()).isEqualTo("Water heater damage");
         }
 
         @Test
-        void rejectsRefundExceedingAmountPaid() {
-            assertThatThrownBy(() -> deposit.refund(new BigDecimal("1000.01"), "corr-4"))
+        void rejectsDeductionEqualToAmountPaid() {
+            // deductionAmount >= amountPaid → must use forfeit() instead
+            assertThatThrownBy(() -> deposit.refund(new BigDecimal("1000.00"), "all deducted", null, null, "corr-4"))
+                    .isInstanceOf(DepositStateException.class)
+                    .extracting(ex -> ((DepositStateException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.DEPOSIT_REFUND_EXCEEDS_PAID);
+        }
+
+        @Test
+        void rejectsDeductionExceedingAmountPaid() {
+            assertThatThrownBy(() -> deposit.refund(new BigDecimal("1000.01"), null, null, null, "corr-4"))
                     .isInstanceOf(DepositStateException.class)
                     .extracting(ex -> ((DepositStateException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.DEPOSIT_REFUND_EXCEEDS_PAID);
@@ -144,9 +158,9 @@ class DepositTest {
 
         @Test
         void rejectsRefundWhenNotHeld() {
-            deposit.refund(new BigDecimal("1000.00"), "corr-4"); // -> REFUNDED
+            deposit.refund(BigDecimal.ZERO, null, "RA65TESTOK3", null, "corr-4"); // -> REFUNDED
 
-            assertThatThrownBy(() -> deposit.refund(new BigDecimal("1.00"), "corr-5"))
+            assertThatThrownBy(() -> deposit.refund(BigDecimal.ZERO, null, "RA65TESTOK4", null, "corr-5"))
                     .isInstanceOf(DepositStateException.class)
                     .extracting(ex -> ((DepositStateException) ex).getErrorCode())
                     .isEqualTo(ErrorCode.DEPOSIT_NOT_HELD);
@@ -190,13 +204,16 @@ class DepositTest {
             Deposit rehydrated = Deposit.rehydrate(
                     id, tenantId, leaseId, unitId, tenantProfileId,
                     new BigDecimal("1000.00"), new BigDecimal("1000.00"), BigDecimal.ZERO,
-                    DepositStatus.HELD, null, null, "USD"
+                    DepositStatus.HELD, null, null, "USD",
+                    null, null, null, null,
+                    null, null, null, null, null, null
             );
 
             assertThat(rehydrated.getId()).isEqualTo(id);
             assertThat(rehydrated.getTenantId()).isEqualTo(tenantId);
             assertThat(rehydrated.getStatus()).isEqualTo(DepositStatus.HELD);
             assertThat(rehydrated.getCurrency()).isEqualTo("USD");
+            assertThat(rehydrated.getDeductionAmount()).isEqualByComparingTo("0.00");
         }
 
         @Test
@@ -204,7 +221,9 @@ class DepositTest {
             Deposit rehydrated = Deposit.rehydrate(
                     UUID.randomUUID(), tenantId, leaseId, unitId, tenantProfileId,
                     new BigDecimal("1000.00"), BigDecimal.ZERO, BigDecimal.ZERO,
-                    DepositStatus.UNPAID, null, null, null
+                    DepositStatus.UNPAID, null, null, null,
+                    null, null, null, null,
+                    null, null, null, null, null, null
             );
             assertThat(rehydrated.getCurrency()).isEqualTo("KES");
         }

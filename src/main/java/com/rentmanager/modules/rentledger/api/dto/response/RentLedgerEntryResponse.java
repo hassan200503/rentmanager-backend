@@ -20,7 +20,14 @@ public record RentLedgerEntryResponse(
         BigDecimal excessAmount,
         String status,
         boolean prorated,
-        Long version
+        Long version,
+        // Enriched display fields — null when loaded via the un-enriched
+        // from() factory (getById / getByLease). Populated by getByStatus()
+        // which batch-loads leases, units, properties and tenant profiles.
+        String tenantFullName,
+        String unitNumber,
+        String propertyName,
+        String leaseNumber
 ) {
     public static RentLedgerEntryResponse from(RentLedgerEntry entry) {
         return new RentLedgerEntryResponse(
@@ -37,7 +44,8 @@ public record RentLedgerEntryResponse(
                 entry.getExcessAmount(),
                 entry.getStatus().name(),
                 entry.isProrated(),
-                entry.getVersion()
+                entry.getVersion(),
+                null, null, null, null
         );
     }
 }

@@ -1,25 +1,16 @@
 package com.rentmanager.modules.rentledger.api.dto.request;
 
+import com.rentmanager.shared.phone.KenyanMsisdn;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
 public record InitiateRentPaymentRequest(
 
         @NotBlank
-        @Pattern(
-                regexp = "^(?:\\+2547\\d{8}|07\\d{8}|2547\\d{8})$",
-                message = "Enter a valid M-Pesa number: 0712345678, +254712345678, or 254712345678"
-        )
+        @Pattern(regexp = KenyanMsisdn.PATTERN, message = KenyanMsisdn.MESSAGE)
         String mpesaPhone
 ) {
     public String normalisedPhone() {
-        String raw = mpesaPhone.strip();
-        if (raw.startsWith("07")) {
-            return "+254" + raw.substring(1);
-        }
-        if (raw.startsWith("254")) {
-            return "+" + raw;
-        }
-        return raw;
+        return KenyanMsisdn.toE164(mpesaPhone);
     }
 }

@@ -52,6 +52,11 @@ public class RentTransactionRepositoryAdapter implements RentTransactionReposito
     }
 
     @Override
+    public Optional<RentTransaction> findByIdempotencyKey(UUID tenantId, String idempotencyKey) {
+        return jpaRepository.findByTenantIdAndIdempotencyKey(tenantId, idempotencyKey).map(mapper::toDomain);
+    }
+
+    @Override
     public Optional<RentTransaction> findByReversesTransactionId(UUID tenantId, UUID transactionId) {
         return jpaRepository.findByTenantIdAndReversesTransactionId(tenantId, transactionId).map(mapper::toDomain);
     }

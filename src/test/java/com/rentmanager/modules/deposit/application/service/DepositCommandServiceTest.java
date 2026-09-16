@@ -3,8 +3,11 @@ package com.rentmanager.modules.deposit.application.service;
 import com.rentmanager.modules.deposit.domain.enums.DepositStatus;
 import com.rentmanager.modules.deposit.domain.model.Deposit;
 import com.rentmanager.modules.deposit.domain.repository.DepositRepository;
+import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaProperties;
+import com.rentmanager.modules.reservation.infrastructure.daraja.DarajaService;
 import com.rentmanager.modules.tenant.domain.model.Tenant;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
+import com.rentmanager.modules.tenant.infrastructure.persistence.repository.TenantJpaRepository;
 import com.rentmanager.shared.events.DomainEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -23,7 +26,10 @@ class DepositCommandServiceTest {
 
     private DepositRepository depositRepository;
     private TenantRepository tenantRepository;
+    private TenantJpaRepository tenantJpaRepository;
     private DomainEventPublisher eventPublisher;
+    private DarajaService darajaService;
+    private DarajaProperties darajaProperties;
     private Tenant tenant;
     private DepositCommandService service;
 
@@ -36,9 +42,12 @@ class DepositCommandServiceTest {
     void setUp() {
         depositRepository = mock(DepositRepository.class);
         tenantRepository = mock(TenantRepository.class);
+        tenantJpaRepository = mock(TenantJpaRepository.class);
         eventPublisher = mock(DomainEventPublisher.class);
+        darajaService = mock(DarajaService.class);
+        darajaProperties = mock(DarajaProperties.class);
         tenant = mock(Tenant.class);
-        service = new DepositCommandService(depositRepository, tenantRepository, eventPublisher);
+        service = new DepositCommandService(depositRepository, tenantRepository, tenantJpaRepository, eventPublisher, darajaService, darajaProperties);
 
         when(depositRepository.save(any(Deposit.class))).thenAnswer(inv -> inv.getArgument(0));
     }
@@ -107,10 +116,36 @@ class DepositCommandServiceTest {
             Deposit deposit = heldDeposit();
             when(depositRepository.findByIdAndTenantId(deposit.getId(), tenantId)).thenReturn(Optional.of(deposit));
 
-            Deposit result = service.refundDeposit(tenantId, deposit.getId(), new BigDecimal("1000.00"));
+            // deductionAmount=0 (full refund) with a valid M-Pesa reference
+            Deposit result = service.refundDeposit(
+                    tenantId, deposit.getId(),
+                    BigDecimal.ZERO, null, "RA65SVCTEST", null
+            );
 
             assertThat(result.getStatus()).isEqualTo(DepositStatus.REFUNDED);
+            assertThat(result.getAmountRefunded()).isEqualByComparingTo("1000.00");
+            assertThat(result.getRefundReference()).isEqualTo("RA65SVCTEST");
             verify(eventPublisher).publishAll(anyList());
+        }
+
+        @Test
+        void partialRefundRequiresDeductionReason() {
+            Deposit deposit = heldDeposit();
+            when(depositRepository.findByIdAndTenantId(deposit.getId(), tenantId)).thenReturn(Optional.of(deposit));
+
+            org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                    service.refundDeposit(tenantId, deposit.getId(), new BigDecimal("200.00"), null, "RA65REF", null)
+            ).isInstanceOf(com.rentmanager.modules.deposit.domain.exception.DepositStateException.class);
+        }
+
+        @Test
+        void refundRequiresMpesaReferenceWhenMoneyIsSent() {
+            Deposit deposit = heldDeposit();
+            when(depositRepository.findByIdAndTenantId(deposit.getId(), tenantId)).thenReturn(Optional.of(deposit));
+
+            org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                    service.refundDeposit(tenantId, deposit.getId(), BigDecimal.ZERO, null, null, null)
+            ).isInstanceOf(com.rentmanager.modules.deposit.domain.exception.DepositStateException.class);
         }
 
         @Test

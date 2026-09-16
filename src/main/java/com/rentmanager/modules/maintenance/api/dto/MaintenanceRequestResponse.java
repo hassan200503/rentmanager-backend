@@ -7,7 +7,6 @@ import com.rentmanager.modules.maintenance.domain.model.MaintenanceRequest;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 public record MaintenanceRequestResponse(
@@ -22,9 +21,9 @@ public record MaintenanceRequestResponse(
         MaintenancePriority priority,
         MaintenanceRequestStatus status,
         LocalDate scheduledDate,
-        LocalDateTime completedAt,
-        LocalDateTime firstLandlordResponseAt,
-        LocalDateTime landlordViewedAt,
+        Instant completedAt,
+        Instant firstLandlordResponseAt,
+        Instant landlordViewedAt,
         String notes,
         String createdBy,
         String assignedTo,
@@ -33,7 +32,9 @@ public record MaintenanceRequestResponse(
         String renterName,
         Long version,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        /** Statuses this request may move to next (TD-132). Clients render options from this. */
+        java.util.List<MaintenanceRequestStatus> allowedNextStatuses
 ) {
     /**
      * Raw mapping (enrichment fields null). Used by the query service,
@@ -72,7 +73,9 @@ public record MaintenanceRequestResponse(
                 renterName,
                 request.getVersion(),
                 request.getCreatedAt(),
-                request.getUpdatedAt()
+                request.getUpdatedAt(),
+                request.getStatus() == null ? java.util.List.of()
+                        : request.getStatus().allowedNext().stream().sorted().toList()
         );
     }
 }

@@ -5,6 +5,7 @@ import com.rentmanager.modules.maintenance.domain.enums.MaintenancePriority;
 import com.rentmanager.modules.maintenance.domain.enums.MaintenanceRequestStatus;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -47,7 +48,7 @@ class MaintenanceRequestResponseTimeTest {
         MaintenanceRequest request = submitted();
 
         request.changeStatus(MaintenanceRequestStatus.IN_REVIEW, "corr-2");
-        java.time.LocalDateTime first = request.getFirstLandlordResponseAt();
+        Instant first = request.getFirstLandlordResponseAt();
 
         request.changeStatus(MaintenanceRequestStatus.IN_PROGRESS, "corr-3");
         request.changeStatus(MaintenanceRequestStatus.COMPLETED, "corr-4");
@@ -96,7 +97,7 @@ class MaintenanceRequestResponseTimeTest {
         MaintenanceRequest request = submitted();
 
         request.markViewed();
-        java.time.LocalDateTime first = request.getLandlordViewedAt();
+        Instant first = request.getLandlordViewedAt();
 
         request.markViewed();
 

@@ -57,6 +57,13 @@ public interface RentLedgerEntryRepository {
     List<RentLedgerEntry> findByTenantAndStatus(UUID tenantId, RentLedgerStatus status);
 
     /**
+     * Every currently unsettled (DUE/PARTIALLY_PAID/OVERDUE) or OVERPAID
+     * entry for the tenant, across every lease, in one query — backs the
+     * Tenants page's per-lease rent status without querying per lease.
+     */
+    List<RentLedgerEntry> findByTenantAndStatusIn(UUID tenantId, List<RentLedgerStatus> statuses);
+
+    /**
      * Tenant-agnostic: the most recently posted entry for a lease, ordered
      * by billing period. Used by {@code RentChargeScheduler} to resume
      * posting from wherever it last left off, rather than replaying every

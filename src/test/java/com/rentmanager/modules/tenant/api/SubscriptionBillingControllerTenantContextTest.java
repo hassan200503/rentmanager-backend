@@ -102,7 +102,7 @@ class SubscriptionBillingControllerTenantContextTest {
                             BillingMode.COMMISSION,
                             SubscriptionStatus.ACTIVE,
                             null, null, null, null, null, null, false,
-                            "174379", "T-001", false, null);
+                            "174379", "T-001", false, null, null);
             when(subscriptionBillingService.getStatus(TENANT_ID)).thenReturn(commission);
 
             mockMvc.perform(get("/api/v1/tenants/subscription")

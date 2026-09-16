@@ -3,6 +3,7 @@ package com.rentmanager.modules.notification.application;
 import com.rentmanager.modules.notification.domain.model.NotificationChannel;
 import com.rentmanager.modules.notification.domain.model.NotificationDelivery;
 import com.rentmanager.modules.notification.email.EmailService;
+import com.rentmanager.modules.notification.push.application.PushNotificationService;
 import com.rentmanager.modules.notification.sms.SmsService;
 import com.rentmanager.modules.notification.whatsapp.WhatsAppService;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ public class NotificationDispatchService {
     private final SmsService smsService;
     private final EmailService emailService;
     private final WhatsAppService whatsAppService;
+    private final PushNotificationService pushNotificationService;
 
     /**
      * @return true when the channel accepted the delivery, false when it
@@ -72,6 +74,9 @@ public class NotificationDispatchService {
                     whatsAppService.sendTemplate(recipient, metadata, message);
                 }
                 return true;
+            }
+            case PUSH -> {
+                return pushNotificationService.deliver(recipient, subject, message, metadata);
             }
             default -> throw new IllegalStateException("Unknown channel: " + channel);
         }

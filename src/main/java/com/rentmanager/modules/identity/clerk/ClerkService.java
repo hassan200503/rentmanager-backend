@@ -68,6 +68,14 @@ public interface ClerkService {
     void deleteUser(String clerkUserId);
 
     /**
+     * Deletes the Clerk user and THROWS if Clerk refuses. For self-service
+     * account deletion, where telling someone their account is gone when it
+     * is not would be worse than asking them to try again. Clerk returning
+     * 404 (already deleted) counts as success.
+     */
+    void deleteUserStrict(String clerkUserId);
+
+    /**
      * Writes public_metadata for the given Clerk user. The caller supplies
      * a flat map of keys to values — the backend is the AUTHORITATIVE writer
      * of personas (see {@link #USER_TYPE_KEY}), and this method is how it

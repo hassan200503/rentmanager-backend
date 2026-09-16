@@ -11,11 +11,18 @@ import java.util.UUID;
 
 public class TestDataFactory {
 
+    /**
+     * Passed null for propertyType, which Property.create rejects with
+     * "propertyType is required" — so every cross-module IT that builds a
+     * property has been failing at the first line of its fixture. Nobody saw
+     * it because those *IT classes never run: surefire's default includes do
+     * not match *IT.java and no failsafe plugin is configured (see TD-126).
+     */
     public Property createProperty(UUID tenantId) {
         return Property.create(
                 tenantId,
                 "Tower A",
-                null,
+                com.rentmanager.modules.property.domain.enums.PropertyType.APARTMENT,
                 null,
                 null,
                 null,

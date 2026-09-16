@@ -17,7 +17,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Instant;
 import java.util.UUID;
 
 @RestController
@@ -49,17 +48,17 @@ public class CommissionPolicyController {
 
     @PutMapping("/default")
     @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER')")
-    public ResponseEntity<ApiResponse<CommissionPolicyResponse>> setDefault(
+    @Deprecated(since = "2.0")
+    public ResponseEntity<ApiResponse<Void>> setDefault(
             @AuthenticationPrincipal AuthenticatedUser user,
             @Valid @RequestBody SetCommissionRateRequest request
     ) {
-        UUID tenantId = requireTenantId(user);
-        CommissionPolicy policy = commissionPolicyService.setDefaultRate(
-                request.ratePercent(),
-                Instant.now(),
-                tenantId.toString()
-        );
-        return ResponseEntity.ok(ApiResponse.ok("Default commission rate updated", CommissionPolicyResponse.from(policy)));
+        // Commission rates are not applied: rent settles directly to the landlord's
+        // own M-Pesa under DIRECT collection mode (V89). This endpoint is retired.
+        return ResponseEntity.status(410).body(ApiResponse.fail(
+                "Commission rate changes are no longer supported. "
+                + "RentManager uses subscription-only billing — no commission is deducted from rent payments.",
+                "COMMISSION_MODEL_RETIRED"));
     }
 
     @GetMapping("/landlords/{landlordOrgId}")
@@ -76,19 +75,18 @@ public class CommissionPolicyController {
 
     @PutMapping("/landlords/{landlordOrgId}")
     @PreAuthorize("hasAnyAuthority('ROLE_LANDLORD_OWNER')")
-    public ResponseEntity<ApiResponse<CommissionPolicyResponse>> setLandlordRate(
+    @Deprecated(since = "2.0")
+    public ResponseEntity<ApiResponse<Void>> setLandlordRate(
             @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable UUID landlordOrgId,
             @Valid @RequestBody SetCommissionRateRequest request
     ) {
-        UUID tenantId = requireTenantId(user);
-        CommissionPolicy policy = commissionPolicyService.setLandlordRate(
-                landlordOrgId,
-                request.ratePercent(),
-                Instant.now(),
-                tenantId.toString()
-        );
-        return ResponseEntity.ok(ApiResponse.ok("Landlord commission rate updated", CommissionPolicyResponse.from(policy)));
+        // Commission rates are not applied: rent settles directly to the landlord's
+        // own M-Pesa under DIRECT collection mode (V89). This endpoint is retired.
+        return ResponseEntity.status(410).body(ApiResponse.fail(
+                "Commission rate changes are no longer supported. "
+                + "RentManager uses subscription-only billing — no commission is deducted from rent payments.",
+                "COMMISSION_MODEL_RETIRED"));
     }
 
     @GetMapping("/effective-rate/{landlordOrgId}")

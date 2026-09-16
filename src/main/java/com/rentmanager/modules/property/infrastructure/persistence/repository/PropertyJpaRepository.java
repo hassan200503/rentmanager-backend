@@ -1,6 +1,7 @@
 package com.rentmanager.modules.property.infrastructure.persistence.repository;
 
 import com.rentmanager.modules.property.domain.enums.PropertyStatus;
+import com.rentmanager.modules.property.domain.enums.PropertyType;
 import com.rentmanager.modules.property.domain.model.Property;
 import com.rentmanager.modules.property.infrastructure.persistence.entity.PropertyJpaEntity;
 import org.springframework.data.domain.Page;
@@ -50,6 +51,14 @@ public interface PropertyJpaRepository
 
     // (optional legacy - keep if still used somewhere)
     List<PropertyJpaEntity> findAllByTenantId(UUID tenantId);
+
+    /**
+     * Bulk lookup for enriching a page of leases with their property — one
+     * query per page of leases rather than one per lease row. Unscoped by
+     * status (unlike findAllByIdInAndStatus below) since a lease can
+     * reference a property in any status.
+     */
+    List<PropertyJpaEntity> findAllByTenantIdAndIdIn(UUID tenantId, List<UUID> ids);
 
     // ✅ ADD THIS (CRITICAL FIX)
     void deleteByIdAndTenantId(UUID id, UUID tenantId);
@@ -146,6 +155,34 @@ public interface PropertyJpaRepository
             @Param("keyword") String keyword,
             @Param("location") String location,
             @Param("status") PropertyStatus status,
+            Pageable pageable
+    );
+
+    // =====================================================
+    // LANDLORD DASHBOARD FILTERED SEARCH (2026-09-05)
+    // Single query behind the dashboard Properties page: keyword, status and
+    // propertyType are all optional and independently combinable, always
+    // tenant-scoped. Replaces calling /properties/status/{status} (unpaginated
+    // List, cannot combine with a keyword) for that page.
+    //
+    // keyword must be "" not null for the same reason as searchPublic above
+    // (Hibernate 6.4 binds a null String as bytea, breaking LOWER()). status
+    // and propertyType are enum-typed params, which bind safely as null.
+    // =====================================================
+
+    @Query("""
+            SELECT p FROM PropertyJpaEntity p
+            WHERE p.tenantId = :tenantId
+              AND (:keyword = ''
+                   OR LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%')))
+              AND (:status IS NULL OR p.status = :status)
+              AND (:propertyType IS NULL OR p.propertyType = :propertyType)
+            """)
+    Page<PropertyJpaEntity> searchByTenantIdWithFilters(
+            @Param("tenantId") UUID tenantId,
+            @Param("keyword") String keyword,
+            @Param("status") PropertyStatus status,
+            @Param("propertyType") PropertyType propertyType,
             Pageable pageable
     );
 }

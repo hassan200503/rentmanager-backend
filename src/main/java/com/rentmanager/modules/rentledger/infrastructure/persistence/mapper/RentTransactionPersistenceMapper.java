@@ -19,6 +19,7 @@ public class RentTransactionPersistenceMapper {
         jpa.setType(transaction.getType());
         jpa.setAmount(transaction.getAmount());
         jpa.setExternalReference(transaction.getExternalReference());
+        jpa.setIdempotencyKey(transaction.getIdempotencyKey());
         jpa.setSource(transaction.getSource());
         jpa.setRecordedBy(transaction.getRecordedBy());
         jpa.setOccurredAt(transaction.getOccurredAt());
@@ -52,6 +53,6 @@ public class RentTransactionPersistenceMapper {
                 jpa.getVersion(),
                 jpa.getCreatedAt(),
                 jpa.getUpdatedAt()
-        );
+        ).withIdempotencyKey(jpa.getIdempotencyKey());
     }
 }

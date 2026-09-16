@@ -47,9 +47,10 @@ class TestDarajaCredentialsTest {
         tenantMapper = mock(TenantMapper.class);
         financialAuditService = mock(FinancialAuditService.class);
         darajaVerifier = mock(LandlordDarajaVerifier.class);
+        var platformSettingsRepository = mock(com.rentmanager.modules.platformsettings.domain.repository.PlatformSettingsRepository.class);
 
         service = new TenantCommandServiceImpl(
-                tenantRepository, tenantMapper, financialAuditService, darajaVerifier);
+                tenantRepository, tenantMapper, financialAuditService, darajaVerifier, platformSettingsRepository);
 
         tenantId = UUID.randomUUID();
     }

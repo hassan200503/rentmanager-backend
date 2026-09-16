@@ -2,6 +2,8 @@ package com.rentmanager.modules.property.application.query.service;
 
 import com.rentmanager.modules.property.application.dto.response.PropertyResponse;
 import com.rentmanager.modules.property.application.dto.response.PropertyTypeMetadataResponse;
+import com.rentmanager.modules.property.domain.enums.PropertyStatus;
+import com.rentmanager.modules.property.domain.enums.PropertyType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -14,7 +16,19 @@ public interface PropertyQueryService {
 
     Page<PropertyResponse> getAll(UUID tenantId, Pageable pageable);
 
-    Page<PropertyResponse> search(UUID tenantId, String keyword, Pageable pageable);
+    /**
+     * Keyword, status and propertyType are each optional (null/blank means
+     * no filter on that field) and independently combinable — backs the
+     * dashboard Properties page's search box, status filter and type filter
+     * as one paginated call instead of three incompatible endpoints.
+     */
+    Page<PropertyResponse> search(
+            UUID tenantId,
+            String keyword,
+            PropertyStatus status,
+            PropertyType propertyType,
+            Pageable pageable
+    );
 
     List<PropertyResponse> getByOwner(UUID tenantId, UUID ownerId);
 

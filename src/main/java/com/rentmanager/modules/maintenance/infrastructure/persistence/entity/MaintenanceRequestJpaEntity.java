@@ -10,8 +10,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 @Getter
 @Setter
@@ -55,13 +55,13 @@ public class MaintenanceRequestJpaEntity extends BaseTenantEntity {
     private LocalDate scheduledDate;
 
     @Column(name = "completed_at")
-    private LocalDateTime completedAt;
+    private Instant completedAt;
 
     @Column(name = "first_landlord_response_at")
-    private LocalDateTime firstLandlordResponseAt;
+    private Instant firstLandlordResponseAt;
 
     @Column(name = "landlord_viewed_at")
-    private LocalDateTime landlordViewedAt;
+    private Instant landlordViewedAt;
 
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;

@@ -4,12 +4,10 @@ import com.rentmanager.contract.common.ApiResponse;
 import com.rentmanager.modules.platformadmin.api.dto.request.SetLandlordCommissionRequest;
 import com.rentmanager.modules.platformadmin.api.dto.response.LandlordCommissionResponse;
 import com.rentmanager.modules.platformadmin.application.service.PlatformAdminCommissionService;
-import com.rentmanager.shared.security.principal.AuthenticatedUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,11 +19,13 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.UUID;
 
 /**
- * Super-admin commission override endpoints for a single landlord. These are
- * intentionally separate from {@code /api/v1/commission-policies/*} (which a
- * landlord OWNER may also touch): reads are open to any platform operator,
- * but setting/clearing an override is restricted to ROLE_PLATFORM_OWNER
- * (commission is platform money), and never mutates the platform default.
+ * Super-admin commission read endpoints for a single landlord.
+ *
+ * <p>Write (PUT/DELETE) operations are no longer supported: RentManager's
+ * revenue model is subscription-only as of V89. All rent payments settle
+ * directly into the landlord's own M-Pesa (DIRECT collection mode), so no
+ * commission is ever deducted from rent. GET is retained for audit/migration
+ * diagnostics only.
  */
 @RestController
 @RequestMapping("/api/v1/admin/landlords/{landlordId}/commission")
@@ -43,27 +43,30 @@ public class PlatformAdminCommissionController {
 
 @PutMapping
     @PreAuthorize("hasAuthority('ROLE_PLATFORM_OWNER')")
-    public ResponseEntity<ApiResponse<LandlordCommissionResponse>> setCommission(
+    @Deprecated(since = "2.0")
+    public ResponseEntity<ApiResponse<Void>> setCommission(
             @PathVariable UUID landlordId,
-            @Valid @RequestBody SetLandlordCommissionRequest request,
-            Authentication authentication
+            @Valid @RequestBody SetLandlordCommissionRequest request
     ) {
-        return ResponseEntity.ok(ApiResponse.ok(
-                "Commission override set",
-                commissionService.setCommission(landlordId, request.ratePercent(), resolveActor(authentication))));
+        // Commission rates are not applied under DIRECT collection mode (V89).
+        // Platform revenue is subscription-only. This endpoint is retired.
+        return ResponseEntity.status(410).body(ApiResponse.fail(
+                "Commission overrides are no longer supported. "
+                + "RentManager uses subscription-only billing. "
+                + "Use POST /api/v1/admin/landlords/{id}/subscription/activate to assign a plan.",
+                "COMMISSION_MODEL_RETIRED"));
     }
 
 @DeleteMapping
     @PreAuthorize("hasAuthority('ROLE_PLATFORM_OWNER')")
+    @Deprecated(since = "2.0")
     public ResponseEntity<ApiResponse<Void>> clearCommission(@PathVariable UUID landlordId) {
-        commissionService.clearCommission(landlordId);
-        return ResponseEntity.ok(ApiResponse.ok("Commission override cleared", null));
+        // Commission rates are not applied under DIRECT collection mode (V89).
+        // This endpoint is retired.
+        return ResponseEntity.status(410).body(ApiResponse.fail(
+                "Commission overrides are no longer supported. "
+                + "RentManager uses subscription-only billing.",
+                "COMMISSION_MODEL_RETIRED"));
     }
 
-    private String resolveActor(Authentication authentication) {
-        if (authentication != null && authentication.getPrincipal() instanceof AuthenticatedUser user) {
-            return user.getUserId() != null ? user.getUserId().toString() : user.getEmail();
-        }
-        return "platform-admin";
-    }
 }

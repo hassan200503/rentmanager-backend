@@ -8,7 +8,7 @@ import com.rentmanager.modules.lease.domain.workflow.LeaseWorkflowEngine;
 import com.rentmanager.shared.events.DomainEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import com.rentmanager.modules.support.AbstractPostgresIntegrationTest;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,9 +19,11 @@ import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest
+// Real Postgres from the shared Testcontainers bridge. It used to be a bare
+// @SpringBootTest that reached whatever database listened on localhost:5432 —
+// present on a developer machine, absent in CI.
 @Transactional
-class LeaseEventApplicationTest {
+class LeaseEventApplicationTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
     private LeaseWorkflowEngine workflowEngine;

@@ -7,6 +7,7 @@ import com.rentmanager.modules.platformadmin.infrastructure.persistence.projecti
 import com.rentmanager.modules.platformadmin.infrastructure.persistence.projection.TenantIdCount;
 import com.rentmanager.modules.platformadmin.infrastructure.persistence.projection.TenantIdLastActivity;
 import com.rentmanager.modules.platformadmin.infrastructure.persistence.projection.TenantIdMoney;
+import com.rentmanager.modules.platformadmin.infrastructure.persistence.projection.SubscriptionStatusCount;
 import com.rentmanager.modules.platformadmin.infrastructure.persistence.projection.TenantStatusCount;
 import com.rentmanager.modules.property.infrastructure.persistence.entity.PropertyJpaEntity;
 import com.rentmanager.modules.rentledger.domain.enums.DisbursementStatus;
@@ -45,6 +46,26 @@ public interface AdminReadModelRepository extends JpaRepository<TenantEntity, UU
     @Query("select new com.rentmanager.modules.platformadmin.infrastructure.persistence.projection.TenantStatusCount(t.status, count(t.id)) "
             + "from TenantEntity t group by t.status")
     List<TenantStatusCount> countTenantsByStatus();
+
+    @Query("select new com.rentmanager.modules.platformadmin.infrastructure.persistence.projection.SubscriptionStatusCount(t.subscriptionStatus, count(t.id)) "
+            + "from TenantEntity t where t.subscriptionStatus is not null group by t.subscriptionStatus")
+    List<SubscriptionStatusCount> countTenantsBySubscriptionStatus();
+
+    /**
+     * Monthly Recurring Revenue: sum of monthly_price across all tenants that
+     * are currently on an active premium subscription with a known plan price.
+     * Enterprise plans (monthly_price IS NULL) are excluded — they are priced
+     * offline and are not counted here.
+     */
+    @Query(value =
+            "SELECT COALESCE(SUM(sp.monthly_price), 0) " +
+            "FROM tenants t " +
+            "JOIN subscription_plans sp ON t.subscription_plan_id = sp.id " +
+            "WHERE t.billing_mode = 'PREMIUM_MONTHLY' " +
+            "  AND t.subscription_status = 'ACTIVE' " +
+            "  AND sp.monthly_price IS NOT NULL",
+            nativeQuery = true)
+    java.math.BigDecimal sumActiveSubscriptionMonthlyRevenue();
 
     @Query("select count(p.id) from PropertyJpaEntity p")
     long countProperties();

@@ -17,7 +17,9 @@ import jakarta.persistence.PersistenceContext;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.rentmanager.crossmodule.support.PostgresSpringBridge;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ContextConfiguration;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -25,7 +27,11 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+// Real Postgres from the shared Testcontainers bridge — not CrossModuleBaseIT,
+// whose class-level @Transactional would wrap the very rollback under test.
+// Bare @SpringBootTest reached localhost:5432: present locally, absent in CI.
 @SpringBootTest
+@ContextConfiguration(initializers = PostgresSpringBridge.class)
 class CrossModuleRollbackIT {
 
     @Autowired
@@ -129,24 +135,23 @@ class CrossModuleRollbackIT {
         // =====================================
         // VERIFY DATABASE STATE
         // =====================================
+        // Counted in SQL against the tables: the domain classes are not JPA
+        // entities, so a JPQL "from Property" never resolved.
 
-        Long propertyCount = entityManager.createQuery(
-                        "select count(p) from Property p where p.tenantId = :tenantId",
-                        Long.class)
+        Long propertyCount = ((Number) entityManager.createNativeQuery(
+                        "select count(*) from properties where tenant_id = :tenantId")
                 .setParameter("tenantId", tenantId)
-                .getSingleResult();
+                .getSingleResult()).longValue();
 
-        Long unitCount = entityManager.createQuery(
-                        "select count(u) from Unit u where u.tenantId = :tenantId",
-                        Long.class)
+        Long unitCount = ((Number) entityManager.createNativeQuery(
+                        "select count(*) from units where tenant_id = :tenantId")
                 .setParameter("tenantId", tenantId)
-                .getSingleResult();
+                .getSingleResult()).longValue();
 
-        Long leaseCount = entityManager.createQuery(
-                        "select count(l) from Lease l where l.tenantId = :tenantId",
-                        Long.class)
+        Long leaseCount = ((Number) entityManager.createNativeQuery(
+                        "select count(*) from leases where tenant_id = :tenantId")
                 .setParameter("tenantId", tenantId)
-                .getSingleResult();
+                .getSingleResult()).longValue();
 
         // =====================================
         // ASSERT FULL ROLLBACK

@@ -115,6 +115,23 @@ public class User extends BaseEntity {
         return user;
     }
 
+    /**
+     * Erases this account's identity after self-service deletion. The row is
+     * kept (other records reference users.id) but can no longer be tied to a
+     * person: the Clerk id and email are replaced with unique tombstones
+     * (both columns are NOT NULL and unique) and the name is removed.
+     */
+    public void anonymiseForDeletion(String tombstone) {
+        if (tombstone == null || tombstone.isBlank()) {
+            throw new IllegalArgumentException("Tombstone is required");
+        }
+        this.clerkUserId = tombstone;
+        this.email = tombstone + "@deleted.invalid";
+        this.firstName = null;
+        this.lastName = null;
+        this.active = false;
+    }
+
     public void assignTenant(UUID tenantId) {
         if (tenantId == null) {
             throw new IllegalArgumentException("Tenant ID cannot be null");
@@ -148,6 +165,26 @@ public class User extends BaseEntity {
      *
      * @return true when the stored address actually changed
      */
+    /**
+     * Syncs first and last name received from a Clerk webhook or JWT claim.
+     * Returns true when at least one field actually changed.
+     */
+    public boolean updateNameIfChanged(String firstName, String lastName) {
+        String incomingFirst  = (firstName  != null) ? firstName.trim()  : "";
+        String incomingLast   = (lastName   != null) ? lastName.trim()   : "";
+        String existingFirst  = (this.firstName  != null) ? this.firstName.trim()  : "";
+        String existingLast   = (this.lastName   != null) ? this.lastName.trim()   : "";
+
+        boolean changed = !incomingFirst.equalsIgnoreCase(existingFirst)
+                || !incomingLast.equalsIgnoreCase(existingLast);
+
+        if (changed) {
+            if (!incomingFirst.isEmpty()) this.firstName = incomingFirst;
+            if (!incomingLast.isEmpty())  this.lastName  = incomingLast;
+        }
+        return changed;
+    }
+
     public boolean updateEmailIfChanged(String email) {
         if (email == null || email.isBlank()) {
             return false;

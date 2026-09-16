@@ -7,6 +7,7 @@ import com.rentmanager.modules.lease.domain.repository.LeaseRepository;
 import com.rentmanager.modules.maintenance.application.service.MaintenanceRequestCommandService;
 import com.rentmanager.modules.maintenance.domain.repository.MaintenanceRequestRepository;
 import com.rentmanager.modules.property.domain.model.Property;
+import com.rentmanager.modules.property.domain.repository.PropertyMediaRepository;
 import com.rentmanager.modules.property.domain.repository.PropertyRepository;
 import com.rentmanager.modules.rentledger.api.dto.response.TenantLeaseResponse;
 import com.rentmanager.modules.rentledger.application.autopay.AutoPayService;
@@ -41,6 +42,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
@@ -59,6 +61,7 @@ class TenantPortalPremiumGateTest {
     private LeaseRepository leaseRepository;
     private UnitRepository unitRepository;
     private PropertyRepository propertyRepository;
+    private PropertyMediaRepository propertyMediaRepository;
     private TenantRepository tenantRepository;
     private RentLedgerEntryRepository rentLedgerEntryRepository;
     private RentTransactionRepository rentTransactionRepository;
@@ -84,6 +87,7 @@ class TenantPortalPremiumGateTest {
         leaseRepository = mock(LeaseRepository.class);
         unitRepository = mock(UnitRepository.class);
         propertyRepository = mock(PropertyRepository.class);
+        propertyMediaRepository = mock(PropertyMediaRepository.class);
         tenantRepository = mock(TenantRepository.class);
         rentLedgerEntryRepository = mock(RentLedgerEntryRepository.class);
         rentTransactionRepository = mock(RentTransactionRepository.class);
@@ -93,9 +97,9 @@ class TenantPortalPremiumGateTest {
 
         service = new TenantPortalService(
                 userRepository, tenantProfileRepository, leaseRepository, unitRepository,
-                propertyRepository, tenantRepository, rentLedgerEntryRepository,
-                rentTransactionRepository, rentPaymentInitiationService,
-                rentPaymentRequestRepository, autoPayService,
+                propertyRepository, propertyMediaRepository, tenantRepository,
+                rentLedgerEntryRepository, rentTransactionRepository,
+                rentPaymentInitiationService, rentPaymentRequestRepository, autoPayService,
                 mock(ReviewCommandService.class), mock(ReviewQueryService.class),
                 mock(RenterReviewQueryService.class),
                 mock(MaintenanceRequestCommandService.class), mock(MaintenanceRequestRepository.class),
@@ -109,8 +113,8 @@ class TenantPortalPremiumGateTest {
 
         User renterUser = buildUser();
         when(userRepository.findById(userId)).thenReturn(Optional.of(renterUser));
-        when(tenantProfileRepository.findByClerkUserId(clerkUserId))
-                .thenReturn(Optional.of(tenantProfile));
+        when(tenantProfileRepository.findAllByClerkUserId(clerkUserId))
+                .thenReturn(List.of(tenantProfile));
         when(leaseRepository.findAllByTenant(landlordTenantId)).thenReturn(List.of(activeLease));
         when(leaseRepository.findAllByTenantAndTenantProfile(landlordTenantId, tenantProfile.getId()))
                 .thenReturn(List.of(activeLease));
@@ -118,6 +122,8 @@ class TenantPortalPremiumGateTest {
                 .thenReturn(Optional.of(unit));
         when(propertyRepository.findByIdAndTenantId(unit.getPropertyId(), landlordTenantId))
                 .thenReturn(Optional.of(property));
+        when(propertyMediaRepository.findByTenantIdAndPropertyIdAndPrimaryMediaTrue(any(), any()))
+                .thenReturn(Optional.empty());
     }
 
     @Test
