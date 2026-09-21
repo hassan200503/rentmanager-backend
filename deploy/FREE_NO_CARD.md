@@ -53,9 +53,26 @@ Domains are the ones the platforms give you: `*.onrender.com` and
 4. The first deploy takes 10–20 minutes: it builds the image and runs the
    database migrations. If the app refuses to start, the logs name every unsafe
    setting, one per line.
+5. **Check which branch the service deploys from** (Settings → Build & Deploy →
+   Branch) and set it to `main`. Render records the branch it was created from
+   and never changes it. This cost us five days once: the service was created
+   from a feature branch, that branch was merged into `main` and abandoned, and
+   Render went on watching it — so eight commits' worth of work, two
+   migrations included, sat undeployed while the API answered happily on the
+   old build. Nothing warns you, because the service is healthy; it is just
+   serving something older than you think.
 
 **Check:** `https://<your-api>.onrender.com/api/v1/public/mobile/config` returns
 JSON, and `/api/v1/users/me/access` returns 401.
+
+**How to tell what is actually deployed**, without the dashboard:
+
+```bash
+gh api repos/<owner>/<repo>/deployments --jq '.[0:3] | .[] | "\(.created_at)  \(.environment)  \(.sha[0:8])"'
+```
+
+Render records a GitHub deployment per deploy, and the environment name
+includes the branch it deployed. Compare that sha with `git log -1 main`.
 
 ### Real client IPs on Render
 
@@ -138,6 +155,14 @@ In `rentmanager-backend` → Settings → Secrets and variables → Actions, add
 - `BACKUP_DATABASE_URL` — the Neon connection string from step 1
 - `BACKUP_PASSPHRASE` — from `./deploy/gen-secrets.sh`, **kept in your password
   manager**
+
+Or from a terminal, which keeps both values out of your shell history because
+`gh` prompts for them:
+
+```bash
+gh secret set BACKUP_DATABASE_URL --repo <owner>/rentmanager-backend
+gh secret set BACKUP_PASSPHRASE   --repo <owner>/rentmanager-backend
+```
 
 Then run **Actions → Database backup → Run workflow** once by hand. It dumps the
 database, encrypts it, decrypts the copy again to prove it is readable, and
