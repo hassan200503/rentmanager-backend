@@ -51,6 +51,7 @@ import com.rentmanager.modules.tenant.domain.enums.SubscriptionStatus;
 import com.rentmanager.modules.tenant.domain.enums.TenantStatus;
 import com.rentmanager.modules.tenant.domain.model.Tenant;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
+import com.rentmanager.modules.tenant.renter.application.RenterIdentityLinker;
 import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
 import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
 import com.rentmanager.modules.unit.domain.model.Unit;
@@ -102,6 +103,7 @@ public class TenantPortalService {
 
     private final UserRepository userRepository;
     private final TenantProfileRepository tenantProfileRepository;
+    private final RenterIdentityLinker renterIdentityLinker;
     private final LeaseRepository leaseRepository;
     private final UnitRepository unitRepository;
     private final PropertyRepository propertyRepository;
@@ -576,6 +578,14 @@ public class TenantPortalService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RentLedgerStateException("User not found", ErrorCode.RESOURCE_NOT_FOUND));
         List<TenantProfile> profiles = tenantProfileRepository.findAllByClerkUserId(user.getClerkUserId());
+        if (profiles.isEmpty()) {
+            // A renter whose landlord entered their tenancy before they had an
+            // account: the record exists but holds no identity yet. Claim it
+            // here, on their verified email, the first time they open the
+            // portal — otherwise they would be told "no tenancy found" beside
+            // a tenancy their landlord is already managing.
+            profiles = renterIdentityLinker.linkByVerifiedEmail(user.getClerkUserId(), user.getEmail());
+        }
         if (profiles.isEmpty()) {
             throw new RentLedgerStateException("Tenant profile not found", ErrorCode.RESOURCE_NOT_FOUND);
         }

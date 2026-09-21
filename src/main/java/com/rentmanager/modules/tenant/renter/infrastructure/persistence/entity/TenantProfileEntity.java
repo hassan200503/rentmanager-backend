@@ -23,13 +23,16 @@ public class TenantProfileEntity {
     @Column(name = "tenant_id", nullable = false)
     private UUID tenantId; // landlord's SaaS account id
 
-    @Column(name = "clerk_user_id", nullable = false)
+    // Nullable since V103: a renter entered by their landlord has no Clerk
+    // account until they first sign in (RenterIdentityLinker).
+    @Column(name = "clerk_user_id")
     private String clerkUserId;
 
     @Column(name = "full_name", nullable = false)
     private String fullName;
 
-    @Column(name = "email", nullable = false)
+    // Nullable since V103: many renters give only a phone number.
+    @Column(name = "email")
     private String email;
 
     @Column(name = "phone", nullable = false)

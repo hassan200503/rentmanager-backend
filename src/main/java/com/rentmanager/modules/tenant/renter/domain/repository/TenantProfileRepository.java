@@ -5,6 +5,9 @@ import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
 import java.util.*;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 public interface TenantProfileRepository {
 
     TenantProfile save(TenantProfile profile);
@@ -40,4 +43,20 @@ public interface TenantProfileRepository {
      * keyword. Backs the Tenants page's search box.
      */
     List<TenantProfile> searchByNameOrPhone(UUID tenantId, String keyword);
+
+    /** One landlord's renters, newest first, for the Renters page. */
+    Page<TenantProfile> findAllByTenantId(UUID tenantId, Pageable pageable);
+
+    /**
+     * An unlinked renter under this landlord with this phone. Guards against
+     * entering the same tenancy twice, which would split a rent history.
+     */
+    Optional<TenantProfile> findUnlinkedByTenantIdAndPhone(UUID tenantId, String phone);
+
+    /**
+     * Every unlinked renter with this email, across landlords — one person may
+     * rent from several. Linking only ever considers unlinked rows, so a
+     * profile already claimed by an identity can never be re-pointed.
+     */
+    List<TenantProfile> findUnlinkedByEmail(String email);
 }

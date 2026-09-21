@@ -26,6 +26,7 @@ import com.rentmanager.modules.tenant.domain.model.Tenant;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import com.rentmanager.modules.tenant.domain.valueobject.BrandingSettings;
 import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
+import com.rentmanager.modules.tenant.renter.application.RenterIdentityLinker;
 import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
 import com.rentmanager.modules.unit.domain.model.Unit;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
@@ -96,7 +97,8 @@ class TenantPortalPremiumGateTest {
         autoPayService = mock(AutoPayService.class);
 
         service = new TenantPortalService(
-                userRepository, tenantProfileRepository, leaseRepository, unitRepository,
+                userRepository, tenantProfileRepository, mock(RenterIdentityLinker.class),
+                leaseRepository, unitRepository,
                 propertyRepository, propertyMediaRepository, tenantRepository,
                 rentLedgerEntryRepository, rentTransactionRepository,
                 rentPaymentInitiationService, rentPaymentRequestRepository, autoPayService,

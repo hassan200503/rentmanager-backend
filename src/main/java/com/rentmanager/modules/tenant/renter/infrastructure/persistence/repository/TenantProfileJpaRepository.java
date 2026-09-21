@@ -1,6 +1,8 @@
 package com.rentmanager.modules.tenant.renter.infrastructure.persistence.repository;
 
 import com.rentmanager.modules.tenant.renter.infrastructure.persistence.entity.TenantProfileEntity;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -42,6 +44,23 @@ public interface TenantProfileJpaRepository extends JpaRepository<TenantProfileE
               AND (LOWER(t.fullName) LIKE LOWER(CONCAT('%', :keyword, '%'))
                    OR t.phone LIKE CONCAT('%', :keyword, '%'))
             """)
+    Page<TenantProfileEntity> findAllByTenantIdOrderByFullNameAsc(UUID tenantId, Pageable pageable);
+
+    @Query("""
+            SELECT t FROM TenantProfileEntity t
+            WHERE t.tenantId = :tenantId AND t.phone = :phone AND t.clerkUserId IS NULL
+            """)
+    Optional<TenantProfileEntity> findUnlinkedByTenantIdAndPhone(
+            @Param("tenantId") UUID tenantId,
+            @Param("phone") String phone
+    );
+
+    @Query("""
+            SELECT t FROM TenantProfileEntity t
+            WHERE t.clerkUserId IS NULL AND LOWER(t.email) = LOWER(:email)
+            """)
+    List<TenantProfileEntity> findUnlinkedByEmail(@Param("email") String email);
+
     List<TenantProfileEntity> searchByNameOrPhone(
             @Param("tenantId") UUID tenantId,
             @Param("keyword") String keyword

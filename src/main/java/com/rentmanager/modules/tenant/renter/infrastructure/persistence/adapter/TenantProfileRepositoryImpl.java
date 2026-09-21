@@ -5,6 +5,8 @@ import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepo
 import com.rentmanager.modules.tenant.renter.infrastructure.persistence.entity.TenantProfileEntity;
 import com.rentmanager.modules.tenant.renter.infrastructure.persistence.repository.TenantProfileJpaRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -51,6 +53,21 @@ public class TenantProfileRepositoryImpl implements TenantProfileRepository {
     @Override
     public boolean existsByTenantIdAndEmail(UUID tenantId, String email) {
         return jpaRepository.existsByTenantIdAndEmail(tenantId, email);
+    }
+
+    @Override
+    public Page<TenantProfile> findAllByTenantId(UUID tenantId, Pageable pageable) {
+        return jpaRepository.findAllByTenantIdOrderByFullNameAsc(tenantId, pageable).map(this::toDomain);
+    }
+
+    @Override
+    public Optional<TenantProfile> findUnlinkedByTenantIdAndPhone(UUID tenantId, String phone) {
+        return jpaRepository.findUnlinkedByTenantIdAndPhone(tenantId, phone).map(this::toDomain);
+    }
+
+    @Override
+    public List<TenantProfile> findUnlinkedByEmail(String email) {
+        return jpaRepository.findUnlinkedByEmail(email).stream().map(this::toDomain).toList();
     }
 
     private TenantProfileEntity toEntity(TenantProfile p) {

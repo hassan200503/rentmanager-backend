@@ -36,6 +36,7 @@ import com.rentmanager.modules.review.application.ReviewQueryService;
 import com.rentmanager.modules.review.application.dto.response.LandlordReviewResponse;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
+import com.rentmanager.modules.tenant.renter.application.RenterIdentityLinker;
 import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
 import com.rentmanager.modules.unit.domain.model.Unit;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
@@ -141,6 +142,7 @@ class TenantPortalServiceTest {
         service = new TenantPortalService(
                 userRepository,
                 tenantProfileRepository,
+                mock(RenterIdentityLinker.class),
                 leaseRepository,
                 unitRepository,
                 propertyRepository,

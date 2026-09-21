@@ -186,6 +186,77 @@ public class TenantProfile extends AggregateRoot {
      * it simply no longer belongs to any sign-in. Marketing consent is
      * withdrawn with the account.
      */
+    /**
+     * A renter entered by their landlord, who has no Clerk account yet.
+     *
+     * The reservation saga's {@link #create} requires a Clerk user id and an
+     * email because the account exists before the profile there. A landlord
+     * recording an existing tenancy has neither: the tenant may only have a
+     * phone number, and may never sign in at all (a caretaker collects the
+     * cash). Phone is therefore the required identifier; email is optional and
+     * is what later links this record to a Clerk identity.
+     *
+     * @param phone E.164 already normalised by the caller (KenyanMsisdn)
+     */
+    public static TenantProfile createForLandlord(
+            UUID landlordTenantId,
+            String fullName,
+            String phone,
+            String email,
+            String nationalId,
+            String correlationId
+    ) {
+        if (landlordTenantId == null) {
+            throw new IllegalArgumentException("landlordTenantId is required");
+        }
+        if (fullName == null || fullName.isBlank()) {
+            throw new IllegalArgumentException("fullName is required");
+        }
+        if (phone == null || phone.isBlank()) {
+            throw new IllegalArgumentException("phone is required");
+        }
+
+        TenantProfile profile = new TenantProfile();
+        profile.setId(UUID.randomUUID());
+        profile.assignTenant(landlordTenantId);
+        profile.clerkUserId = null;
+        profile.fullName = fullName.trim();
+        profile.phone = phone.trim();
+        profile.email = (email == null || email.isBlank()) ? null : email.trim();
+        profile.nationalId = (nationalId == null || nationalId.isBlank()) ? null : nationalId.trim();
+
+        profile.registerEvent(new TenantProfileCreatedEvent(
+                landlordTenantId,
+                profile.getId(),
+                correlationId,
+                profile.getId()
+        ));
+
+        return profile;
+    }
+
+    /** True while no Clerk identity has claimed this tenancy record. */
+    public boolean isUnlinked() {
+        return clerkUserId == null || clerkUserId.isBlank();
+    }
+
+    /**
+     * Claims this landlord-entered tenancy for a signed-in Clerk identity.
+     *
+     * Refuses when a different identity already holds it: re-pointing a
+     * profile would hand one person another's rent history and portal.
+     */
+    public void linkIdentity(String newClerkUserId) {
+        if (newClerkUserId == null || newClerkUserId.isBlank()) {
+            throw new IllegalArgumentException("clerkUserId is required");
+        }
+        if (!isUnlinked() && !newClerkUserId.equals(clerkUserId)) {
+            throw new IllegalStateException(
+                    "Tenant profile " + getId() + " is already linked to another identity");
+        }
+        this.clerkUserId = newClerkUserId;
+    }
+
     public void unlinkIdentity(String tombstone) {
         if (tombstone == null || tombstone.isBlank()) {
             throw new IllegalArgumentException("Tombstone is required");

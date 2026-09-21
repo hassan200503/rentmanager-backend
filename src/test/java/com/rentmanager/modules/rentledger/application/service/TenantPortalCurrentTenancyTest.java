@@ -23,6 +23,7 @@ import com.rentmanager.modules.review.application.ReviewCommandService;
 import com.rentmanager.modules.review.application.ReviewQueryService;
 import com.rentmanager.modules.tenant.domain.repository.TenantRepository;
 import com.rentmanager.modules.tenant.renter.domain.model.TenantProfile;
+import com.rentmanager.modules.tenant.renter.application.RenterIdentityLinker;
 import com.rentmanager.modules.tenant.renter.domain.repository.TenantProfileRepository;
 import com.rentmanager.modules.unit.domain.repository.UnitRepository;
 import com.rentmanager.modules.user.domain.model.User;
@@ -69,7 +70,8 @@ class TenantPortalCurrentTenancyTest {
         entries = mock(RentLedgerEntryRepository.class);
         initiation = mock(RentPaymentInitiationService.class);
         service = new TenantPortalService(
-                users, profiles, leases, mock(UnitRepository.class), mock(PropertyRepository.class),
+                users, profiles, mock(RenterIdentityLinker.class),
+                leases, mock(UnitRepository.class), mock(PropertyRepository.class),
                 mock(PropertyMediaRepository.class), mock(TenantRepository.class), entries,
                 mock(RentTransactionRepository.class), initiation, mock(RentPaymentRequestRepository.class),
                 mock(AutoPayService.class), mock(ReviewCommandService.class), mock(ReviewQueryService.class),
