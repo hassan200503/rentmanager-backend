@@ -44,6 +44,16 @@ public interface TenantProfileJpaRepository extends JpaRepository<TenantProfileE
               AND (LOWER(t.fullName) LIKE LOWER(CONCAT('%', :keyword, '%'))
                    OR t.phone LIKE CONCAT('%', :keyword, '%'))
             """)
+    List<TenantProfileEntity> searchByNameOrPhone(
+            @Param("tenantId") UUID tenantId,
+            @Param("keyword") String keyword
+    );
+
+    /**
+     * One landlord's renters for the Renters page. Derived from the method
+     * name on purpose — no @Query, so it cannot drift from the ordering the
+     * name promises.
+     */
     Page<TenantProfileEntity> findAllByTenantIdOrderByFullNameAsc(UUID tenantId, Pageable pageable);
 
     @Query("""
@@ -60,10 +70,5 @@ public interface TenantProfileJpaRepository extends JpaRepository<TenantProfileE
             WHERE t.clerkUserId IS NULL AND LOWER(t.email) = LOWER(:email)
             """)
     List<TenantProfileEntity> findUnlinkedByEmail(@Param("email") String email);
-
-    List<TenantProfileEntity> searchByNameOrPhone(
-            @Param("tenantId") UUID tenantId,
-            @Param("keyword") String keyword
-    );
 
 }
