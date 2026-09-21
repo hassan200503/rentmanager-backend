@@ -67,15 +67,23 @@ class PlatformBrandIconPersistenceIntegrationTest extends AbstractPostgresIntegr
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    // One constraint per test: after a violation Postgres aborts the
+    // transaction, so a second statement in the same test fails for that
+    // reason instead of its own constraint — which is what made this test
+    // fail the first time it ran.
+
     @Test
-    void theDatabaseRefusesAnSvgAndAnOversizedFileEvenIfTheServiceRegressed() {
+    void theDatabaseRefusesAnSvgEvenIfTheServiceRegressed() {
         // SVG can carry script and this file is served from our own origin.
         assertThatThrownBy(() -> jdbc.update("""
                 INSERT INTO platform_brand_icon (id, content_type, bytes, byte_size, updated_by)
                 VALUES (1, 'image/svg+xml', ?, 3, 'someone')
                 """, (Object) PNG))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
 
+    @Test
+    void theDatabaseRefusesAnOversizedIconEvenIfTheServiceRegressed() {
         assertThatThrownBy(() -> jdbc.update("""
                 INSERT INTO platform_brand_icon (id, content_type, bytes, byte_size, updated_by)
                 VALUES (1, 'image/png', ?, 524289, 'someone')
