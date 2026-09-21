@@ -6,6 +6,7 @@ import com.rentmanager.modules.property.application.query.service.PublicProperty
 import com.rentmanager.modules.property.domain.enums.PropertyType;
 import com.rentmanager.modules.review.application.ReviewPublicQueryService;
 import com.rentmanager.modules.review.application.dto.response.PublicLandlordReviewsResponse;
+import com.rentmanager.shared.web.PublicCacheControl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -15,6 +16,13 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+/**
+ * Property listings as a visitor sees them, with no sign-in.
+ *
+ * <p>Each answer is identical for every visitor, so each carries
+ * {@link PublicCacheControl#catalogue()} — see that class for why the header
+ * belongs on the response here rather than in a filter.
+ */
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/public/properties")
@@ -32,25 +40,25 @@ public class PublicPropertyQueryController {
             @RequestParam(required = false) PropertyType propertyType,
             Pageable pageable
     ) {
-        return ResponseEntity.ok(
-                ApiResponse.ok(
+        return ResponseEntity.ok()
+                .cacheControl(PublicCacheControl.catalogue())
+                .body(ApiResponse.ok(
                         "Properties retrieved successfully",
                         publicPropertyQueryService.getProperties(
                                 keyword, location, minRent, maxRent, propertyType, pageable)
-                )
-        );
+                ));
     }
 
     @GetMapping("/{propertyId}")
     public ResponseEntity<ApiResponse<PublicPropertyResponse>> getProperty(
             @PathVariable UUID propertyId
     ) {
-        return ResponseEntity.ok(
-                ApiResponse.ok(
+        return ResponseEntity.ok()
+                .cacheControl(PublicCacheControl.catalogue())
+                .body(ApiResponse.ok(
                         "Property retrieved successfully",
                         publicPropertyQueryService.getProperty(propertyId)
-                )
-        );
+                ));
     }
 
     /**
@@ -63,11 +71,11 @@ public class PublicPropertyQueryController {
     public ResponseEntity<ApiResponse<PublicLandlordReviewsResponse>> getPropertyReviews(
             @PathVariable UUID propertyId
     ) {
-        return ResponseEntity.ok(
-                ApiResponse.ok(
+        return ResponseEntity.ok()
+                .cacheControl(PublicCacheControl.catalogue())
+                .body(ApiResponse.ok(
                         "Reviews retrieved successfully",
                         reviewPublicQueryService.getForProperty(propertyId)
-                )
-        );
+                ));
     }
 }
