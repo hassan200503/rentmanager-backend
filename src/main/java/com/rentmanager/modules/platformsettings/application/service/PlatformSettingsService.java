@@ -50,6 +50,7 @@ public class PlatformSettingsService {
     private final PlatformSettingsRepository repository;
     private final AuditService auditService;
     private final MediaUploadService mediaUploadService;
+    private final PlatformBrandIconService brandIconService;
     private final String darajaBaseUrl;
     private final String brandingName;
     private final IntegrationRegistry integrationRegistry;
@@ -58,6 +59,7 @@ public class PlatformSettingsService {
             PlatformSettingsRepository repository,
             AuditService auditService,
             MediaUploadService mediaUploadService,
+            PlatformBrandIconService brandIconService,
             @Value("${daraja.base-url:https://api.safaricom.co.ke}") String darajaBaseUrl,
             @Value("${platform.branding-name:RentManager}") String brandingName,
             IntegrationRegistry integrationRegistry
@@ -65,6 +67,7 @@ public class PlatformSettingsService {
         this.repository = repository;
         this.auditService = auditService;
         this.mediaUploadService = mediaUploadService;
+        this.brandIconService = brandIconService;
         this.darajaBaseUrl = darajaBaseUrl;
         this.brandingName = brandingName;
         this.integrationRegistry = integrationRegistry;
@@ -116,22 +119,28 @@ public class PlatformSettingsService {
         return toResponse(saved);
     }
 
+    /**
+     * Replaces the platform icon. The bytes go into our own database
+     * (V104), not Cloudinary: on a deployment with no Cloudinary credentials
+     * — the free-tier default — the old Cloudinary upload failed, so the owner
+     * could not change the icon at all. One upload now drives every surface
+     * that reads GET /public/platform/branding.
+     */
     @Transactional
     public PlatformSettingsResponse uploadLogo(MultipartFile file, String actor) {
         String resolvedActor = resolveActor(actor);
 
-        // Upload first — if Cloudinary rejects the asset we never touch the row.
-        String newUrl = mediaUploadService.uploadPlatformBrandAsset(file);
+        brandIconService.upload(file, resolvedActor);
 
         PlatformSettings current = getEffectiveSettings();
-        String previousUrl = current.getLogoUrl();
+        String legacyCloudinaryUrl = current.getLogoUrl();
 
-        PlatformSettings updated = current.withLogo(newUrl, resolvedActor);
-        PlatformSettings saved = repository.save(updated);
-
-        // Purge the replaced asset best-effort (never fails the write).
-        if (hasLogo(previousUrl)) {
-            mediaUploadService.deletePlatformBrandAsset(previousUrl);
+        // Clear the legacy URL so there is one answer to "which icon is
+        // current?", and purge the old asset best-effort.
+        PlatformSettings saved = current;
+        if (hasLogo(legacyCloudinaryUrl)) {
+            saved = repository.save(current.withLogo(null, resolvedActor));
+            mediaUploadService.deletePlatformBrandAsset(legacyCloudinaryUrl);
         }
 
         recordAudit("PLATFORM_BRANDING_UPDATE", "{\"action\":\"logo_uploaded\"}", resolvedActor);
@@ -145,8 +154,12 @@ public class PlatformSettingsService {
         String resolvedActor = resolveActor(actor);
         PlatformSettings current = getEffectiveSettings();
 
+        brandIconService.remove(resolvedActor);
+
         if (!hasLogo(current.getLogoUrl())) {
-            // Idempotent — nothing configured, nothing to purge.
+            // Idempotent — no legacy asset to purge; every surface falls back
+            // to the built-in mark now the stored icon is gone.
+            recordAudit("PLATFORM_BRANDING_UPDATE", "{\"action\":\"logo_removed\"}", resolvedActor);
             return toResponse(current);
         }
 
@@ -170,9 +183,15 @@ public class PlatformSettingsService {
     @Transactional(readOnly = true)
     public PlatformBrandingResponse getBranding() {
         PlatformSettings settings = getEffectiveSettings();
+        // A stored icon wins over a legacy Cloudinary URL. The path is
+        // relative so it works through the web app's same-origin proxy and
+        // straight against the API alike.
+        String logoUrl = brandIconService.exists()
+                ? "/api/v1/public/platform/branding/logo"
+                : settings.getLogoUrl();
         return new PlatformBrandingResponse(
                 brandingName,
-                settings.getLogoUrl(),
+                logoUrl,
                 isSandbox() ? "SANDBOX" : "PRODUCTION",
                 settings.getSupportEmail(),
                 settings.getSupportPhone(),
