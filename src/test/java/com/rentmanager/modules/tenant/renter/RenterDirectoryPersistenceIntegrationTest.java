@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.data.domain.PageRequest;
 
 import java.util.UUID;
@@ -39,6 +40,7 @@ class RenterDirectoryPersistenceIntegrationTest extends AbstractPostgresIntegrat
     @Autowired private RenterIdentityLinker linker;
     @Autowired private TenantProfileRepository profiles;
     @Autowired private TenantRepository tenants;
+    @Autowired private JdbcTemplate jdbc;
 
     private UUID landlord;
 
@@ -86,8 +88,13 @@ class RenterDirectoryPersistenceIntegrationTest extends AbstractPostgresIntegrat
         assertThat(renters.list(landlord, PageRequest.of(0, 20)).getTotalElements()).isEqualTo(1);
 
         // Bypassing the service: the partial unique index is the real guarantee.
-        assertThatThrownBy(() -> profiles.save(TenantProfile.createForLandlord(
-                landlord, "Impostor", "+254722123456", null, null, "test")))
+        // Inserted with SQL rather than through JPA, because inside a
+        // transactional test a JPA save is not flushed until commit, so the
+        // constraint would not fire where the assertion can see it.
+        assertThatThrownBy(() -> jdbc.update("""
+                INSERT INTO tenant_profile (id, tenant_id, clerk_user_id, full_name, phone, whatsapp_opt_in)
+                VALUES (?, ?, NULL, 'Impostor', '+254722123456', FALSE)
+                """, UUID.randomUUID(), landlord))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
