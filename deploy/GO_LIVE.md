@@ -12,8 +12,19 @@ you own"* and *"be able to add DNS records on your domain."* A hosting
 provider's subdomain — `rentmanager-ke.netlify.app` — will not work, because
 nobody but Netlify can add records under `netlify.app`.
 
-So this is a purchase decision, not an engineering task. It is the single
-unavoidable cost in a stack that is otherwise entirely free.
+So this is a registration decision, not an engineering task.
+
+**And it is probably not urgent.** It is easy — this document did it — to
+present the development instance as the thing standing between here and real
+users. Check the numbers before believing that. The platform currently has 2
+landlord organisations, 0 renters and 0 active leases. The 100-user cap is not
+close to binding, and will not be for a long time. What the development
+instance actually costs today is one thing: a **"Development mode" badge on the
+sign-in form**, which every prospective landlord sees.
+
+So the honest order of work is: get the first real landlord and renter through
+the reserve → pay → lease → rent flow, which has never completed once. Sort the
+domain when it is affordable or when the badge starts costing sign-ups.
 
 ## What the development instance costs you today
 
@@ -31,17 +42,31 @@ twice.
 
 ## The domain
 
-**You do not need a card.** `.co.ke` costs **KSh 999–1,200 a year** and Kenyan
-registrars — Truehost, Sasahost, Kenya Website Experts, Buy Domain Kenya — take
-**M-Pesa**. That is about KSh 85 a month, and it is the only thing standing
-between this deployment and real users at scale. The "no card" constraint that
-rules out Oracle, AWS and Fly does not apply here.
+### If there is no money at all
 
-For a Kenyan rental platform a `.co.ke` is also the right answer on its own
-merits: renters are being asked to send a deposit to someone they have not met,
-and the domain is part of why they believe the site is real.
+`eu.org` is the only free route that survives scrutiny. Apply at
+[nic.eu.org](https://nic.eu.org/) and **say plainly what the project is**. The
+registry's stated purpose is free registration "to users or non-profit
+organizations who cannot afford the fees demanded by some NICs", which is a
+description of this situation — but it is their call, not ours, so the
+application should be honest rather than carefully worded. Approval is manual
+and can take weeks. It costs nothing but the wait, so it is worth starting
+early even if the switch happens much later.
 
-**The free routes, assessed honestly, because they were considered:**
+One technical note: `eu.org` only lets you set **NS** records, so you point it
+at nameservers you control — Cloudflare's DNS is free and does this — and add
+Clerk's CNAMEs there.
+
+### When there is money, this is cheap
+
+`.co.ke` costs **KSh 999–1,200 a year** and Kenyan registrars — Truehost,
+Sasahost, Kenya Website Experts, Buy Domain Kenya — take **M-Pesa**, so no card
+is needed. About KSh 85 a month. For a Kenyan rental platform it is also the
+right answer on its own merits: renters are being asked to send a deposit to
+someone they have not met, and the domain is part of why they believe the site
+is real.
+
+**Why the other free route is not an option:**
 
 - **`is-a.dev` is not available to this project.** Its Terms of Service state a
   subdomain "may not be ... monetised, whether directly or indirectly" and that
@@ -49,14 +74,7 @@ and the domain is part of why they believe the site is real.
   sells landlord subscriptions. Using it would breach those terms, and a
   revoked subdomain does not just break a link — Clerk's Frontend API would be
   served from it, so **sign-in would stop working for everyone at once**.
-- **`eu.org` is legitimate but slow and awkward.** Approval is manual: the
-  registry says "a few days", and users routinely report weeks. It also only
-  lets you set NS records, so you need your own nameservers (Cloudflare's free
-  DNS works) before anything resolves. Workable, but not something to plan a
-  launch around.
 
-Recommendation: buy the `.co.ke` with M-Pesa. It is the cheapest trust you will
-ever purchase, and at KSh 999 it is not really a budget decision.
 
 ## The switch, once you have a domain
 
