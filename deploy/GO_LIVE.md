@@ -31,16 +31,32 @@ twice.
 
 ## The domain
 
-- **A `.co.ke` or `.com`** is roughly USD 10–15 a year. For a Kenyan rental
-  platform this is the right answer: renters are being asked to send money to
-  strangers, and the domain is part of why they believe the site is real.
-- **Free alternatives that still give you DNS control** exist — `eu.org` grants
-  free domains and `is-a.dev` gives free subdomains via a pull request. Both
-  would technically satisfy Clerk. Neither reads as a company: `rentmanager.is-a.dev`
-  on a page asking for a deposit works against the trust the rest of this
-  system was built to earn.
+**You do not need a card.** `.co.ke` costs **KSh 999–1,200 a year** and Kenyan
+registrars — Truehost, Sasahost, Kenya Website Experts, Buy Domain Kenya — take
+**M-Pesa**. That is about KSh 85 a month, and it is the only thing standing
+between this deployment and real users at scale. The "no card" constraint that
+rules out Oracle, AWS and Fly does not apply here.
 
-Recommendation: buy the domain. It is the cheapest trust you will ever purchase.
+For a Kenyan rental platform a `.co.ke` is also the right answer on its own
+merits: renters are being asked to send a deposit to someone they have not met,
+and the domain is part of why they believe the site is real.
+
+**The free routes, assessed honestly, because they were considered:**
+
+- **`is-a.dev` is not available to this project.** Its Terms of Service state a
+  subdomain "may not be ... monetised, whether directly or indirectly" and that
+  the holder "must be an individual person, not an organisation". RentManager
+  sells landlord subscriptions. Using it would breach those terms, and a
+  revoked subdomain does not just break a link — Clerk's Frontend API would be
+  served from it, so **sign-in would stop working for everyone at once**.
+- **`eu.org` is legitimate but slow and awkward.** Approval is manual: the
+  registry says "a few days", and users routinely report weeks. It also only
+  lets you set NS records, so you need your own nameservers (Cloudflare's free
+  DNS works) before anything resolves. Workable, but not something to plan a
+  launch around.
+
+Recommendation: buy the `.co.ke` with M-Pesa. It is the cheapest trust you will
+ever purchase, and at KSh 999 it is not really a budget decision.
 
 ## The switch, once you have a domain
 
