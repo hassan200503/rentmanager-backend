@@ -72,13 +72,29 @@ jobs:
           pg_dump --format=custom --compress=6 --no-owner --file="rentmanager-$stamp.dump" "$DATABASE_URL"
           # An unreadable backup is worse than none: prove the dump lists its
           # own contents, and that the encrypted copy decrypts, before keeping it.
-          pg_restore --list "rentmanager-$stamp.dump" | head -5
+          #
+          # Written to a file rather than piped to head. `pg_restore --list |
+          # head -5` fails under `set -o pipefail`: head closes the pipe after
+          # five lines, pg_restore dies of a broken pipe, and the whole step
+          # reports failure even though the dump was perfect. That is exactly
+          # how this step failed on its first real run -- a green dump reported
+          # as a red backup, which is the worst direction for that error to go.
+          pg_restore --list "rentmanager-$stamp.dump" > /tmp/toc.txt
+          head -5 /tmp/toc.txt
+          # A dump of an empty or wrong database would also "succeed", so
+          # require a plausible table of contents.
+          toc_entries="$(grep -c ';' /tmp/toc.txt || true)"
+          echo "table-of-contents entries: $toc_entries"
+          if [ "$toc_entries" -lt 20 ]; then
+            echo "::error::Only $toc_entries TOC entries -- this does not look like the RentManager database."
+            exit 1
+          fi
           gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase "$PASSPHRASE" \
               --output "rentmanager-$stamp.dump.gpg" "rentmanager-$stamp.dump"
           gpg --batch --yes --decrypt --passphrase "$PASSPHRASE" \
               --output /tmp/roundtrip.dump "rentmanager-$stamp.dump.gpg"
           cmp "rentmanager-$stamp.dump" /tmp/roundtrip.dump
-          rm -f "rentmanager-$stamp.dump" /tmp/roundtrip.dump
+          rm -f "rentmanager-$stamp.dump" /tmp/roundtrip.dump /tmp/toc.txt
           ls -lh "rentmanager-$stamp.dump.gpg"
           echo "name=rentmanager-$stamp" >> "$GITHUB_OUTPUT"
         id: dump
