@@ -54,3 +54,15 @@ services:
         sync: false           # https://<your-netlify-site>
       - key: TRUSTED_PROXIES
         sync: false           # Render's proxy range; see the runbook
+      # Media storage. Without all three, every property and unit photo
+      # upload fails with a 500 and the UI reports "the server could not
+      # process this request" — the upload path itself is fine, it simply
+      # has no provider to talk to. Cloudinary's free tier is enough.
+      # Alternatively, set these per-tenant in the platform admin
+      # Integrations console, where they are encrypted at rest.
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
