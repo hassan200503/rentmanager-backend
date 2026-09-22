@@ -160,7 +160,32 @@ Render, so the security policy stays same-origin and there is no CORS.
 **Check:** the site loads over HTTPS, `/api/v1/public/mobile/config` on the
 Netlify domain returns JSON, and `/dashboard` sends you to sign-in.
 
-## 6. Backups (10 min — do not skip)
+## 6. Photo uploads — Cloudinary (10 min)
+
+Skip this and the platform still runs, but **every property and unit photo
+upload fails**. The server returns a 500 and the dashboard says "the server
+could not process this request", which reads like a bug in the upload code.
+It is not: `application.yml` resolves the three keys below to empty strings
+when they are unset, so the storage client has no provider to talk to, and a
+listing goes out with "no image available" on it.
+
+Cloudinary's free tier is ample here and needs no card.
+
+1. Create a free account at cloudinary.com.
+2. From the dashboard's **Account Details**, copy the Cloud Name, API Key and
+   API Secret.
+3. In Render, set `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` and
+   `CLOUDINARY_API_SECRET`. All three, or none of it works.
+
+The alternative is the platform admin **Integrations** console, which stores
+the same three fields per tenant and encrypts them at rest — the direction
+this project is moving. It needs a platform-administrator role on your Clerk
+account, which a landlord-owner account does not have by default.
+
+**Check:** open a property, upload an image, and confirm it renders on the
+public listing rather than showing the placeholder.
+
+## 7. Backups (10 min — do not skip)
 
 The one thing that will bite you here: **the workflow's PostgreSQL client must
 be at least the server's major version.** `pg_dump` refuses to dump a server
@@ -188,7 +213,7 @@ keeps it for 90 days. Restore instructions are at the top of the workflow file.
 
 Neon's free plan also keeps its own 6-hour restore window.
 
-## 7. The first real limit: 100 users
+## 8. The first real limit: 100 users
 
 A Clerk development instance stops at **100 users**, and renters count too:
 three landlords with 30 renters each will reach it. A Clerk production instance
