@@ -49,7 +49,13 @@ public record AdminOverviewResponse(
             long pending,
             long success,
             long failed,
-            long requiresManualAttention
+            long requiresManualAttention,
+            /**
+             * Reservations where the renter paid but the tenancy could not be
+             * created. Not a disbursement, but it belongs on the same panel:
+             * both mean money moved and a human has to finish the job.
+             */
+            long reservationsWithFailedFulfilment
     ) {}
 
     public record EnvironmentInfo(String environment, boolean sandbox) {}

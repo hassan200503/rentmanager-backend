@@ -277,6 +277,7 @@ public class PlatformAdminQueryService {
         Map<RentPaymentRequestStatus, Long> paymentRequests = paymentsByStatus();
         Map<DisbursementStatus, Long> disbursements = disbursementsByStatus();
         long requiresManualAttention = adminReadModelRepository.countDisbursementsRequiringManualAttention();
+        long failedFulfilments = adminReadModelRepository.countReservationsWithFailedFulfilment();
 
         YearMonth thisMonth = YearMonth.now();
         LocalDateTime currentMonthStart = thisMonth.atDay(1).atStartOfDay();
@@ -317,7 +318,8 @@ public class PlatformAdminQueryService {
                         disbursements.getOrDefault(DisbursementStatus.PENDING, 0L),
                         disbursements.getOrDefault(DisbursementStatus.SUCCESS, 0L),
                         disbursements.getOrDefault(DisbursementStatus.FAILED, 0L),
-                        requiresManualAttention),
+                        requiresManualAttention,
+                        failedFulfilments),
                 new AdminOverviewResponse.EnvironmentInfo(sandbox ? "SANDBOX" : "PRODUCTION", sandbox)
         );
     }

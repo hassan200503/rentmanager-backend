@@ -90,6 +90,22 @@ public interface AdminReadModelRepository extends JpaRepository<TenantEntity, UU
     @Query("select count(d.id) from DisbursementJpaEntity d where d.requiresManualAttention = true")
     long countDisbursementsRequiringManualAttention();
 
+    /**
+     * Reservations where the renter paid and the tenancy could not be created.
+     *
+     * <p>This is the most expensive thing that can go wrong in the product, and
+     * until now nothing read it. The saga marks the reservation
+     * FULFILLMENT_FAILED and compensates -- releasing the unit, cancelling the
+     * lease, deleting the profile -- but the deposit was paid by STK push
+     * straight into the landlord's own M-Pesa, so there is nothing to undo on
+     * the money side. Its own log says "PAYMENT WAS RECEIVED, manual follow-up
+     * required (refund or retry)", and the exception is then swallowed by
+     * Spring's transaction synchronisation, so nobody with the power to act
+     * ever found out.
+     */
+    @Query("select count(r.id) from ReservationJpaEntity r where r.status = com.rentmanager.modules.reservation.domain.enums.ReservationStatus.FULFILLMENT_FAILED")
+    long countReservationsWithFailedFulfilment();
+
     @Query("select coalesce(sum(rt.amount), 0) from RentTransactionJpaEntity rt where rt.occurredAt >= :start and rt.occurredAt < :end")
     BigDecimal sumAmountBetween(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
