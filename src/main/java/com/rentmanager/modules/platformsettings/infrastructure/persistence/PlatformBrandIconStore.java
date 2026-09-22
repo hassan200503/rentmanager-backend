@@ -41,6 +41,22 @@ public class PlatformBrandIconStore {
         return count != null && count > 0;
     }
 
+    /**
+     * When the current icon was stored, without reading the bytes.
+     *
+     * <p>This is what makes the public logo URL change when the owner uploads a
+     * new icon. Serving it from a fixed path meant a replacement was invisible
+     * to every cache between here and the browser: same URL, so nothing had any
+     * reason to ask again.
+     */
+    public Optional<Instant> updatedAt() {
+        return jdbc.query(
+                "SELECT updated_at FROM platform_brand_icon WHERE id = 1",
+                rs -> rs.next()
+                        ? Optional.of(rs.getTimestamp("updated_at").toInstant())
+                        : Optional.empty());
+    }
+
     /** Replaces the icon. Upsert, because there is exactly one. */
     public void save(byte[] bytes, String contentType, String actor) {
         jdbc.update("""

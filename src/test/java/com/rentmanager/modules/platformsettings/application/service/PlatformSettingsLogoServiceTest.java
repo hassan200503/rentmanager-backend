@@ -37,6 +37,7 @@ class PlatformSettingsLogoServiceTest {
     private static final String OLD_URL =
             "https://res.cloudinary.com/rentmanager/image/upload/rentmanager/platform/branding/old_x7p2k9.png";
     private static final String STORED_ICON_PATH = "/api/v1/public/platform/branding/logo";
+    private static final java.time.Instant ICON_STORED_AT = java.time.Instant.ofEpochMilli(1_758_000_000_000L);
 
     private PlatformSettingsRepository repository;
     private AuditService auditService;
@@ -159,18 +160,39 @@ class PlatformSettingsLogoServiceTest {
     @Test
     void branding_pointsEverySurfaceAtTheStoredIconWhenThereIsOne() {
         when(repository.findSingleton()).thenReturn(Optional.of(settingsWithLogo(OLD_URL)));
-        when(brandIconService.exists()).thenReturn(true);
+        when(brandIconService.currentVersion()).thenReturn(Optional.of(ICON_STORED_AT));
 
         // The stored icon wins over a legacy Cloudinary URL, so one upload
         // changes the tab icon, the installed app icon, the page chrome and the
         // sign-in pages together.
-        assertThat(service.getBranding().logoUrl()).isEqualTo(STORED_ICON_PATH);
+        assertThat(service.getBranding().logoUrl())
+                .isEqualTo(STORED_ICON_PATH + "?v=" + ICON_STORED_AT.toEpochMilli());
+    }
+
+    @Test
+    void branding_urlChangesWhenTheOwnerUploadsAReplacement() {
+        // The whole point of the version stamp. A fixed path meant the bytes
+        // changed while the address did not, so every cache between the
+        // database and the browser tab kept serving the old icon -- and a
+        // favicon is held far longer than its headers suggest.
+        when(repository.findSingleton()).thenReturn(Optional.of(settingsWithLogo(null)));
+
+        when(brandIconService.currentVersion()).thenReturn(Optional.of(ICON_STORED_AT));
+        String before = service.getBranding().logoUrl();
+
+        when(brandIconService.currentVersion())
+                .thenReturn(Optional.of(ICON_STORED_AT.plusSeconds(30)));
+        String after = service.getBranding().logoUrl();
+
+        assertThat(after).isNotEqualTo(before);
+        assertThat(before).startsWith(STORED_ICON_PATH);
+        assertThat(after).startsWith(STORED_ICON_PATH);
     }
 
     @Test
     void branding_fallsBackToALegacyCloudinaryUrl_thenToNothing() {
         when(repository.findSingleton()).thenReturn(Optional.of(settingsWithLogo(OLD_URL)));
-        when(brandIconService.exists()).thenReturn(false);
+        when(brandIconService.currentVersion()).thenReturn(Optional.empty());
         assertThat(service.getBranding().logoUrl()).isEqualTo(OLD_URL);
 
         when(repository.findSingleton()).thenReturn(Optional.of(settingsWithLogo(null)));

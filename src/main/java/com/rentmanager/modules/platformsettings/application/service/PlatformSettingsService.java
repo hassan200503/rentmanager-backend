@@ -186,9 +186,17 @@ public class PlatformSettingsService {
         // A stored icon wins over a legacy Cloudinary URL. The path is
         // relative so it works through the web app's same-origin proxy and
         // straight against the API alike.
-        String logoUrl = brandIconService.exists()
-                ? "/api/v1/public/platform/branding/logo"
-                : settings.getLogoUrl();
+        //
+        // The ?v= stamp is what makes an upload visible. This used to be a
+        // fixed path, so replacing the icon changed the bytes but not the
+        // address -- and no cache between this database and the browser tab
+        // had any reason to ask for it again. Favicons in particular are held
+        // far longer than any header suggests. Stamping the stored timestamp
+        // onto the URL turns each upload into a new resource, which every
+        // cache already knows how to handle correctly.
+        String logoUrl = brandIconService.currentVersion()
+                .map(v -> "/api/v1/public/platform/branding/logo?v=" + v.toEpochMilli())
+                .orElseGet(settings::getLogoUrl);
         return new PlatformBrandingResponse(
                 brandingName,
                 logoUrl,

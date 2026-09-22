@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.Optional;
 
 /**
@@ -43,6 +44,18 @@ public class PlatformBrandIconService {
     @Transactional(readOnly = true)
     public boolean exists() {
         return store.exists();
+    }
+
+    /**
+     * When the current icon was stored, or empty when there is none.
+     *
+     * <p>Used to stamp a version onto the public logo URL so that replacing the
+     * icon replaces the URL. Without it the address never changed, and no cache
+     * between the database and the tab had any reason to fetch the new image.
+     */
+    @Transactional(readOnly = true)
+    public Optional<Instant> currentVersion() {
+        return store.updatedAt();
     }
 
     @Transactional
