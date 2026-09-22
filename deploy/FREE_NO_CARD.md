@@ -74,18 +74,29 @@ gh api repos/<owner>/<repo>/deployments --jq '.[0:3] | .[] | "\(.created_at)  \(
 Render records a GitHub deployment per deploy, and the environment name
 includes the branch it deployed. Compare that sha with `git log -1 main`.
 
-### Real client IPs on Render
+### Real client IPs on Render — nothing to do
 
 The public "reserve a unit" endpoint limits M-Pesa prompts per phone **and per
 IP**. Behind Render's proxy, every request looks like it comes from the proxy
-unless the app is told which addresses to trust. After the first deploy:
+unless the app is told which addresses to trust.
 
-1. Open the logs and note the address requests arrive from (`X-Forwarded-For`).
-2. Set `TRUSTED_PROXIES` to a regex matching that range, for example
-   `10\.\d{1,3}\.\d{1,3}\.\d{1,3}|100\.2[0-9]\.\d{1,3}\.\d{1,3}`.
+**`TRUSTED_PROXIES` does not need setting on Render.** Render forwards from
+internal addresses in `10.207.x.x`, and the default in `application.yml`
+already trusts every RFC1918 private range plus loopback, so Tomcat's
+`RemoteIpValve` resolves the real client address on its own. An earlier version
+of this runbook told you to read the address out of the logs and write a regex;
+that was guesswork, and the app does not log `X-Forwarded-For` anyway, so the
+step could not have been followed as written.
 
-Never set it to `.*`: a caller could then forge the header and get a fresh
-limit bucket per request. Until you set it, the per-phone limit still holds.
+Two things worth keeping in mind if this is ever revisited:
+
+- **Never set it to `.*`.** A caller could then forge the header and get a
+  fresh rate-limit bucket per request. The default list is deliberately
+  specific.
+- **The app reads `request.getRemoteAddr()`, not the header directly.** That is
+  what makes this safe: the valve walks `X-Forwarded-For` from the right and
+  skips trusted proxies, so a forged prefix cannot win. Reading the left-most
+  header value — which this code used to do — is spoofable by anyone.
 
 ## 3. Keep it awake — cron-job.org (5 min)
 
