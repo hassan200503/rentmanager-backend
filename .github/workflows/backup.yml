@@ -27,11 +27,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Install PostgreSQL 16 client
+      # Must be >= the server's major version. Neon runs PostgreSQL 18 on this
+      # project, and pg_dump refuses outright to dump a server newer than
+      # itself ("aborting because of server version mismatch") -- so a client
+      # pinned to 16 would have failed every night no matter how correct the
+      # two secrets were. Check the server version before bumping Neon, not
+      # after.
+      - name: Install PostgreSQL 18 client
         run: |
           sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
           curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
-          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-16
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-18
+          pg_dump --version
 
       - name: Dump, encrypt and verify
         env:

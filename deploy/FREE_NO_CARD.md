@@ -162,6 +162,13 @@ Netlify domain returns JSON, and `/dashboard` sends you to sign-in.
 
 ## 6. Backups (10 min — do not skip)
 
+The one thing that will bite you here: **the workflow's PostgreSQL client must
+be at least the server's major version.** `pg_dump` refuses to dump a server
+newer than itself. This project's Neon runs PostgreSQL 18, so the workflow
+installs client 18 — if you ever upgrade Neon, bump
+`.github/workflows/backup.yml` in the same change or the next night's backup
+fails with "aborting because of server version mismatch".
+
 In `rentmanager-backend` → Settings → Secrets and variables → Actions, add:
 - `BACKUP_DATABASE_URL` — the Neon connection string from step 1
 - `BACKUP_PASSPHRASE` — from `./deploy/gen-secrets.sh`, **kept in your password
