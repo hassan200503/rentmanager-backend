@@ -7,7 +7,7 @@ companies in production. Nothing in this path expires into a bill.
 |---|---|---|
 | API (Spring Boot) | **Render** web service, Docker | 512 MB RAM, 0.1 CPU, 750 instance-hours/month (enough for one always-on service), sleeps after 15 min idle unless pinged |
 | Database | **Neon** Postgres | 0.5 GB storage, wakes from idle in under a second, no expiry |
-| Web app (Next.js) | **Netlify** | 100 GB bandwidth, 300 build minutes/month, commercial use allowed |
+| Web app (Next.js) | **Netlify** | 300 credits/month — 15 per deploy, 20 per GB, so ~20 deploys OR ~15 GB. Commercial use allowed. Read §5b: running out **suspends the site** |
 | Keep-awake ping | **cron-job.org** | every 10 minutes, free |
 | Encrypted off-site backups | **GitHub Actions** (`.github/workflows/backup.yml`) | nightly, kept 90 days |
 | Sign-in | **Clerk** development instance | **100 users total** — read §7 before you grow |
