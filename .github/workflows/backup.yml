@@ -38,7 +38,28 @@ jobs:
           sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
           curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
           sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-18
+          # Installing the package is not enough. /usr/bin/pg_dump belongs to
+          # postgresql-client-common and is a wrapper that dispatches to a
+          # versioned binary; on the runner, which already ships client 16, it
+          # kept choosing 16 even with 18 installed -- so the dump still died
+          # with "server version mismatch". Put the versioned directory first
+          # on PATH for every later step. GITHUB_PATH does not affect the step
+          # that writes it, which is why the check below is its own step.
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+
+      - name: Prove the client can dump this server
+        env:
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          set -euo pipefail
           pg_dump --version
+          client_major="$(pg_dump --version | grep -oE '[0-9]+' | head -1)"
+          server_major="$(psql "$DATABASE_URL" -tAc 'SHOW server_version_num' | cut -c1-2)"
+          echo "client major: $client_major, server major: $server_major"
+          if [ "$client_major" -lt "$server_major" ]; then
+            echo "::error::pg_dump $client_major cannot dump a PostgreSQL $server_major server. Install a client >= the server's major version."
+            exit 1
+          fi
 
       - name: Dump, encrypt and verify
         env:
