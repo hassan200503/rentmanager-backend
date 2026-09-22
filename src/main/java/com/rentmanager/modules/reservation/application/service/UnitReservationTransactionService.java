@@ -85,9 +85,16 @@ public class UnitReservationTransactionService {
 
         DarajaCredentials darajaCredentials = tenant.getDarajaCredentials();
         if (darajaCredentials == null || !darajaCredentials.isConfigured()) {
+            // The internal id stays in the log, not in the response.
+            // GlobalExceptionHandler returns ex.getMessage() verbatim to the
+            // caller, and this endpoint is public and unauthenticated -- so
+            // appending tenantId here handed a stranger the landlord's
+            // organisation id and told them nothing they could act on.
+            log.warn("Reservation refused: landlord has no M-Pesa credentials configured. "
+                    + "tenantId={} unitId={}", tenant.getId(), unit.getId());
             throw new IllegalStateException(
-                    "This property is not yet accepting payments: landlord has not " +
-                            "configured M-Pesa credentials. tenantId=" + tenant.getId()
+                    "This home is not accepting payments yet. The landlord still has to "
+                            + "finish setting up M-Pesa, so please contact them directly."
             );
         }
 
