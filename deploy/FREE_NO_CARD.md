@@ -160,6 +160,44 @@ Render, so the security policy stays same-origin and there is no CORS.
 **Check:** the site loads over HTTPS, `/api/v1/public/mobile/config` on the
 Netlify domain returns JSON, and `/dashboard` sends you to sign-in.
 
+## 5b. Netlify credits — deploys are the expensive thing
+
+Netlify's free plan (accounts created after 4 September 2025) is metered in
+**credits, not build minutes**: 300 a month, and from Netlify's own pricing
+page a **production deploy costs 15 credits** while **bandwidth costs 20
+credits per GB**.
+
+So the free plan is roughly **20 deploys or 15 GB a month**, whichever runs out
+first — and deploys are usually what runs out. Fifteen commits pushed over two
+days is 225 credits, three quarters of the month, before a single visitor loads
+anything.
+
+**When the credits are gone the site is suspended for the rest of the calendar
+month** and visitors get a Netlify-branded error page. It is not "deploys stop
+working" — the site goes down. Credits reset on the 1st.
+
+What follows from that:
+
+- **Batch commits before pushing.** Ten small pushes cost the same as ten
+  deploys. This is the single biggest saver and costs nothing but patience.
+- **Page weight is now cheap, deliberately.** The landing page is ~60 KB and
+  the hero video only downloads on a connection that can carry it (see
+  TD-159). Before that work a few hundred visitors pulling an 18.9 MB video
+  would have spent the entire 15 GB on their own.
+- **A custom domain is included on the free plan**, with SSL. That matters
+  because it means moving to a Clerk production instance does **not** require
+  leaving Netlify — see `GO_LIVE.md`.
+
+If the deploy budget ever becomes the binding constraint, Cloudflare Pages is
+the alternative worth looking at: unlimited bandwidth, 500 builds a month, no
+card, commercial use allowed, and edge presence in Nairobi. The catch is real
+though — dynamic routes there run as Workers, and Cloudflare's own limits page
+says server-side rendering with authentication typically needs 10–20 ms of CPU
+against a **10 ms free-plan ceiling**. This app would have to become fully
+static first, which means giving up the server-side auth checks in the three
+`(app)` layouts. Those are defence in depth behind the proxy and the backend,
+so it is defensible — but it is a security-posture decision, not a free win.
+
 ## 6. Photo uploads — Cloudinary (10 min)
 
 Skip this and the platform still runs, but **every property and unit photo
