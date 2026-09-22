@@ -110,6 +110,18 @@ public class LeaseApiTest {
     }
 
     private void seedTenant(UUID id) {
+        // Tolerate a row that is already there. This test pins its landlords to
+        // fixed UUIDs, and UnitConcurrencyTest/UnitIntegrationTest pin their
+        // fixtures to the same 11111111-.../22222222-... constants. Those two
+        // cannot be @Transactional -- their worker threads each need an
+        // independently committing transaction -- so the rows they seed are
+        // committed to the shared reusable Postgres container and outlive them.
+        // Whether this test then hit "duplicate key ... tenants_pkey" came down
+        // to class execution order, which is exactly the kind of failure that
+        // teaches people to re-run CI instead of reading it.
+        if (tenantRepository.findById(id).isPresent()) {
+            return;
+        }
         Tenant tenant = Tenant.create(
                 "TC-" + id,
                 "Test Landlord " + id,

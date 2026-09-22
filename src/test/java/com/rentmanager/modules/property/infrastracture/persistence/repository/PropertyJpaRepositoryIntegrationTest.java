@@ -17,6 +17,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -81,12 +82,27 @@ class PropertyJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTe
         persistProperty(PropertyStatus.UNDER_MAINTENANCE, "Maintenance One");
         persistProperty(PropertyStatus.INACTIVE, "Inactive One");
 
+        // findByStatus spans every tenant, so this asserts the filter's
+        // behaviour rather than a global row count. It used to assert exactly
+        // one ACTIVE property existed in the whole database, which made it fail
+        // whenever a non-transactional test elsewhere had committed one -- the
+        // suite shares a single reusable Postgres container. The page is large
+        // for the same reason: this test's rows must be on it.
         Page<PropertyJpaEntity> result = propertyJpaRepository.findByStatus(
-                PropertyStatus.ACTIVE, PageRequest.of(0, 10)
+                PropertyStatus.ACTIVE, PageRequest.of(0, 1000)
         );
 
-        assertEquals(1, result.getTotalElements());
-        assertEquals("Active One", result.getContent().get(0).getName());
+        List<String> names = result.getContent().stream()
+                .map(PropertyJpaEntity::getName)
+                .toList();
+        assertTrue(names.contains("Active One"), "the ACTIVE property must be returned");
+        assertFalse(names.contains("Draft One"), "DRAFT must be excluded");
+        assertFalse(names.contains("Archived One"), "ARCHIVED must be excluded");
+        assertFalse(names.contains("Maintenance One"), "UNDER_MAINTENANCE must be excluded");
+        assertFalse(names.contains("Inactive One"), "INACTIVE must be excluded");
+        assertTrue(
+                result.getContent().stream().allMatch(p -> p.getStatus() == PropertyStatus.ACTIVE),
+                "findByStatus(ACTIVE) must never return a non-ACTIVE property");
     }
 
     // =====================================================
@@ -236,10 +252,20 @@ class PropertyJpaRepositoryIntegrationTest extends AbstractPostgresIntegrationTe
         persistProperty(PropertyStatus.DRAFT, "Hidden Draft", "Nairobi");
 
         Page<PropertyJpaEntity> result = propertyJpaRepository.searchPublic(
-                "", "", PropertyStatus.ACTIVE, PageRequest.of(0, 10)
+                "", "", PropertyStatus.ACTIVE, PageRequest.of(0, 1000)
         );
 
-        assertEquals(2, result.getTotalElements(),
+        // The claim under test is that empty filters are no-ops rather than
+        // an empty result set -- so it asserts both ACTIVE rows come back and
+        // the DRAFT one does not, instead of a global total that any other
+        // test's committed data would change.
+        List<String> names = result.getContent().stream()
+                .map(PropertyJpaEntity::getName)
+                .toList();
+        assertTrue(names.contains("Green Heights"),
                 "NULL filters must behave as no-ops, not empty result sets");
+        assertTrue(names.contains("Sunset Residences"),
+                "NULL filters must behave as no-ops, not empty result sets");
+        assertFalse(names.contains("Hidden Draft"), "DRAFT must still be excluded");
     }
 }
