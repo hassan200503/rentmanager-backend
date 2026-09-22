@@ -63,7 +63,17 @@ class IntegrationEncryptionServiceTest {
         IntegrationEncryptionService service = new IntegrationEncryptionService(KEY, "");
 
         String encrypted = service.encrypt("value");
-        String tampered = "A" + encrypted.substring(1);
+        // Replace the first Base64 character with one it is NOT already.
+        // Hardcoding 'A' made this test fail roughly once in 64 runs: the
+        // ciphertext begins with a random GCM nonce, so its first Base64
+        // character is 'A' whenever the top six bits of the first byte are
+        // zero. In that case "tampered" was byte-identical to the original,
+        // decryption rightly succeeded, and the test failed for a reason
+        // that had nothing to do with the code under test. It did exactly
+        // that on CI for a documentation-only commit.
+        char firstChar = encrypted.charAt(0);
+        String tampered = (firstChar == 'A' ? 'B' : 'A') + encrypted.substring(1);
+        assertThat(tampered).isNotEqualTo(encrypted);
 
         assertThatThrownBy(() -> service.decrypt(tampered))
                 .isInstanceOf(IllegalStateException.class)
