@@ -51,6 +51,19 @@ class UnitConcurrencyTest extends AbstractPostgresIntegrationTest {
                 com.rentmanager.modules.support.MinimalTenantChainFixture.ensureTenantAndProperty(entityManager, tenantId, propertyId));
     }
 
+    @org.junit.jupiter.api.AfterEach
+    void removeCommittedFixtures() {
+        // This test cannot be @Transactional -- its twenty worker threads each
+        // need an independently committing transaction -- so nothing rolls its
+        // rows back. Without this, the units and property it commits stay in the
+        // shared container and break whichever unrelated test happens to run
+        // next: that is what turned CI red on one run and green on the very next
+        // with the same code.
+        transactionTemplate.executeWithoutResult(status ->
+                com.rentmanager.modules.support.MinimalTenantChainFixture
+                        .removeCommittedUnitsAndProperty(entityManager, propertyId));
+    }
+
     @Test
     void should_handle_concurrent_unit_creation_without_unique_constraint_breaks() throws Exception {
 

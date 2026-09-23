@@ -51,6 +51,40 @@ public final class MinimalTenantChainFixture {
                 .executeUpdate();
     }
 
+    /**
+     * Removes the units and property a non-transactional test committed.
+     *
+     * <h2>Why this has to exist</h2>
+     * The suite shares one reusable Postgres container. Most tests are
+     * {@code @Transactional} and roll back, but a test whose worker threads each
+     * need their own committing transaction cannot be — and everything it seeds
+     * then outlives it. Two of those exist, both pinned to the same fixed
+     * UUIDs, and the rows they left behind broke unrelated tests depending on
+     * which class ran first: a duplicate {@code tenants_pkey}, and a property
+     * count that was correct only against an empty database.
+     *
+     * <h2>Delete order</h2>
+     * Derived from the foreign keys rather than guessed: {@code units} is
+     * referenced by leases, rent ledger entries, deposits and unmatched
+     * payments, so units go before the property they belong to. These tests
+     * create none of those children, so scoping the delete to this property is
+     * enough and avoids touching rows another test may own.
+     *
+     * <p>The tenant row is deliberately left in place. Removing it would mean
+     * chasing every table that references {@code tenants}, for no benefit:
+     * {@code LeaseApiTest} tolerates a pre-existing tenant, and a stray tenant
+     * with no properties changes no other test's result.
+     */
+    public static void removeCommittedUnitsAndProperty(
+            EntityManager entityManager, UUID propertyId) {
+        entityManager.createNativeQuery("DELETE FROM units WHERE property_id = :propertyId")
+                .setParameter("propertyId", propertyId)
+                .executeUpdate();
+        entityManager.createNativeQuery("DELETE FROM properties WHERE id = :propertyId")
+                .setParameter("propertyId", propertyId)
+                .executeUpdate();
+    }
+
     public static UUID persistProperty(EntityManager entityManager, UUID tenantId) {
         UUID propertyId = UUID.randomUUID();
         entityManager.createNativeQuery("""
