@@ -225,31 +225,64 @@ public class ReservationFulfillmentOrchestrator {
             UUID tenantProfileId = tenantProfile.getId();
 
             // ---- Step 4: Lease ----
-            String leaseNumber = generateLeaseNumber(unit);
+            // Reuse a lease this unit already has awaiting activation instead of
+            // creating a second one.
+            //
+            // Until now this step created unconditionally, and the only thing
+            // stopping a duplicate was the Step 0 claim: markFulfilling() refuses
+            // a reservation that is not DEPOSIT_PAID, so a repeated event could
+            // not get this far. That is a single point of protection for the most
+            // expensive mistake available here -- two leases on one unit means two
+            // rent ledgers and a renter billed twice -- and it is also precisely
+            // what makes retrying a failed fulfilment unsafe today (TD-163).
+            // Making the step idempotent in its own right removes both problems.
+            java.util.Optional<Lease> awaitingActivation =
+                    leaseRepository.findByUnitIdAndStatus(event.getUnitId(), LeaseStatus.PENDING_ACTIVATION);
 
-            LocalDate startDate = event.getMoveInDate();
-            LocalDate endDate = startDate.plusMonths(DEFAULT_LEASE_TERM_MONTHS);
+            Lease lease;
+            if (awaitingActivation.isPresent()) {
+                lease = awaitingActivation.get();
+                if (!tenantProfileId.equals(lease.getTenantProfileId())) {
+                    // Someone else's lease is already pending on this unit. Not a
+                    // duplicate of ours to reuse -- fail loudly rather than create
+                    // a second lease or silently attach this renter to somebody
+                    // else's tenancy.
+                    throw new IllegalStateException(
+                            "Unit already has a lease pending activation for a different renter. unitId="
+                                    + event.getUnitId());
+                }
+                log.warn("Fulfilment re-entered with a lease already pending activation; reusing it. "
+                        + "reservationId={} leaseId={}", reservationId, lease.getId());
+                saga.leaseId = lease.getId();
+                // Not created by THIS run, so compensation must not cancel it.
+                saga.leaseCreated = false;
+            } else {
+                String leaseNumber = generateLeaseNumber(unit);
 
-            Lease lease = Lease.createPendingActivation(
-                    landlordTenantId,
-                    event.getPropertyId(),
-                    event.getUnitId(),
-                    tenantProfileId,
-                    leaseNumber,
-                    LeaseType.FIXED_TERM,
-                    BillingCycle.MONTHLY,
-                    startDate,
-                    endDate,
-                    unit.getRentAmount(),
-                    event.getDepositAmount(),
-                    null, // lateFeeAmount — TODO: confirm default policy
-                    null, // gracePeriodDays — TODO: confirm default policy
-                    false // autoRenew — TODO: confirm default
-            );
-            leaseRepository.save(lease);
-            eventPublisher.publishAll(lease.pullDomainEvents());
-            saga.leaseId = lease.getId();
-            saga.leaseCreated = true;
+                LocalDate startDate = event.getMoveInDate();
+                LocalDate endDate = startDate.plusMonths(DEFAULT_LEASE_TERM_MONTHS);
+
+                lease = Lease.createPendingActivation(
+                        landlordTenantId,
+                        event.getPropertyId(),
+                        event.getUnitId(),
+                        tenantProfileId,
+                        leaseNumber,
+                        LeaseType.FIXED_TERM,
+                        BillingCycle.MONTHLY,
+                        startDate,
+                        endDate,
+                        unit.getRentAmount(),
+                        event.getDepositAmount(),
+                        null, // lateFeeAmount — TODO: confirm default policy
+                        null, // gracePeriodDays — TODO: confirm default policy
+                        false // autoRenew — TODO: confirm default
+                );
+                leaseRepository.save(lease);
+                eventPublisher.publishAll(lease.pullDomainEvents());
+                saga.leaseId = lease.getId();
+                saga.leaseCreated = true;
+            }
 
             // Record the deposit transaction in the rent ledger immediately,
             // so it appears live in the transactions dashboard. The deposit
@@ -295,7 +328,7 @@ public class ReservationFulfillmentOrchestrator {
             eventPublisher.publishAll(reservationEvents);
 
             log.info("Reservation fulfilled. reservationId={} leaseId={} clerkUserId={}",
-                    reservation.getId(), lease.getId(), clerkUserId);
+                    reservation.getId(), saga.leaseId, clerkUserId);
 
         } catch (ObjectOptimisticLockingFailureException ex) {
             throw ex;
