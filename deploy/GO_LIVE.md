@@ -1,8 +1,29 @@
 # Going live: switching Clerk (and everything else) to production
 
-Everything in this repository is production-shaped already. One thing is not,
-and it is the only thing standing between this deployment and real users at
-scale: **Clerk is running a development instance.**
+Two things are not production, and the payments one is the bigger of the pair.
+
+## 0. M-Pesa is pointed at the Safaricom sandbox — nothing else matters first
+
+`application.yml` defaults `daraja.base-url` to
+`https://sandbox.safaricom.co.ke`, and `render.yaml` never sets
+`DARAJA_BASE_URL`. So the live API uses the sandbox, which is why the public
+branding endpoint reports `environment: SANDBOX`.
+
+**No real M-Pesa payment can succeed today, for any landlord.** The STK push URL
+comes from the platform-wide resolver, not from each landlord's configuration,
+so a landlord holding genuine production credentials would still have their
+payment sent to the sandbox host.
+
+Switching it is one environment variable — `DARAJA_BASE_URL=https://api.safaricom.co.ke`
+on Render — but **do not set it until Safaricom has approved a Go Live request**
+and the landlords hold production credentials. Flipping the URL while everyone
+still has sandbox keys breaks every payment instead of enabling them.
+
+Until it is switched, the reservation page shows renters a "test environment —
+do not pay" warning, and the admin settings page says the same to the owner.
+Both disappear on their own when the environment reports `PRODUCTION`.
+
+## 1. Clerk is running a development instance
 
 ## Why this cannot be done in code
 
