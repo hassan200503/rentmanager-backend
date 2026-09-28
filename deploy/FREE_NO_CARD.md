@@ -127,6 +127,20 @@ free service in the same Render account.
 
 **Check:** the job history shows 200s and Render's metrics show no spin-downs.
 
+**There is now a backstop in the repository**, because this step was found not
+to be working on 2026-09-28: the API had spun down twice that morning, and the
+first request after a spin-down took 38.7 s while the web app's own `/api/v1`
+rewrite answered "Internal Server Error" in the meantime. So the visitor who
+wakes the service does not get a slow page, they get a broken one.
+
+`.github/workflows/keep-awake.yml` pings the same endpoint every 10 minutes.
+It costs nothing on a public repository and needs no account anywhere, but
+GitHub's scheduler is best-effort and often runs several minutes late, so it
+is a second line rather than a replacement for cron-job.org. Keep both. Note
+also that GitHub disables scheduled workflows in a repository with no activity
+for 60 days — if the API starts sleeping again after a quiet period, check the
+workflow is still enabled before looking anywhere else.
+
 **Deploying costs ~10 minutes of downtime** on the free plan (no rolling
 restart, plus that cold start). Deploy late at night, and expect the same after
 any Render-side restart.

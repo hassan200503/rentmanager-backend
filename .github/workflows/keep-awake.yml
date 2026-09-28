@@ -1,0 +1,62 @@
+# Keeps the Render free-tier API from spinning down.
+#
+# Render's free plan stops a web service after 15 minutes without a request.
+# Waking it again is not free in the way it sounds: measured on 2026-09-28 the
+# first request after a spin-down took 38.7 s, and the request the web app made
+# through its own /api/v1 rewrite in the meantime came back as a plain
+# "Internal Server Error" — so the visitor who wakes the service does not get a
+# slow page, they get a broken one. An M-Pesa callback arriving in that window
+# is worse: Safaricom gives up in seconds, and the payment is then recorded
+# nowhere.
+#
+# deploy/FREE_NO_CARD.md names cron-job.org as the primary ping and explains
+# why the step is not optional. This workflow is a **backstop**, not a
+# replacement: it costs nothing on a public repository and needs no account
+# anywhere, but GitHub's scheduler is best-effort and routinely runs several
+# minutes late under load, so on its own it will let the service sleep
+# sometimes. Keep both. If the two ever disagree about whether the API is up,
+# believe Render's own metrics.
+#
+# GitHub disables scheduled workflows in a repository with no activity for 60
+# days. If the API starts sleeping again after a quiet period, check that this
+# workflow is still enabled before looking anywhere else.
+
+name: Keep the API awake
+
+on:
+    schedule:
+        # Every 10 minutes: comfortably inside Render's 15-minute idle timeout
+        # even when GitHub runs the job a few minutes late.
+        - cron: "*/10 * * * *"
+    workflow_dispatch:
+
+# A ping that is still running when the next one starts is a ping that is
+# waking a cold service; let it finish rather than piling them up.
+concurrency:
+    group: keep-awake
+    cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+    ping:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            # A public, unauthenticated, read-only endpoint that touches no
+            # database row: enough to keep the instance resident, and safe to
+            # call from a public workflow log.
+            - name: Ping the public mobile config endpoint
+              run: |
+                  URL="https://rentmanager-api-2reb.onrender.com/api/v1/public/mobile/config"
+                  # --max-time is generous on purpose. A cold start is the case
+                  # this job exists to avoid, and giving up early would leave
+                  # the service half-woken for the next visitor to finish.
+                  code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 300 --retry 2 --retry-delay 30 "$URL")
+                  echo "HTTP $code from $URL"
+                  # Anything the origin answers means the instance is running.
+                  # Only a connection failure (000) is a real miss.
+                  if [ "$code" = "000" ]; then
+                      echo "::error::No response from the API — it may be down, not merely asleep."
+                      exit 1
+                  fi
