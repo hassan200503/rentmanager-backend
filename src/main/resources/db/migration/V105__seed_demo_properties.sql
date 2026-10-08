@@ -14,9 +14,7 @@ INSERT INTO tenants (
     status, type, subscription_status, 
     onboarding_completed,
     -- Branding
-    primary_color, secondary_color,
-    -- Location
-    country, city, postal_code
+    primary_color, secondary_color
 )
 VALUES (
     'demo-tenant-001',
@@ -31,13 +29,9 @@ VALUES (
     'ACTIVE',
     'LANDLORD',
     'ACTIVE',
-    'COMMISSION',
-    CURRENT_TIMESTAMP,
+    true,
     '#10B981', -- Brand green
-    '#059669',
-    'Kenya',
-    'Nairobi',
-    '00100'
+    '#059669'
 ) ON CONFLICT (id) DO NOTHING;
 
 -- ─────────────────────────────────────────────────────────────────────────────
