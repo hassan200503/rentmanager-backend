@@ -11,8 +11,8 @@
 INSERT INTO tenants (
     id, version, created_at, updated_at,
     tenant_code, name, slug, email, phone_number,
-    status, type, subscription_status, 
-    onboarding_completed,
+    status, tenant_type, subscription_status, billing_mode,
+    onboarding_completed_at,
     -- Branding
     primary_color, secondary_color,
     -- Location
